@@ -1,0 +1,13 @@
+#Utilizando os métodos "is"
+algo = input("Digite algo: ")
+print("Você escreveu ", algo)
+print(type(algo))
+print("É do alfabeto?", algo.isalpha())
+print("É um número?", algo.isnumeric())
+print("É alfanumérico?", algo.isalnum())
+print("É decimal?", algo.isdecimal())
+print("É apenas letras maiúsculas?", algo.isupper())
+print("É apenas letras minúsculas?", algo.islower())
+print("É algo que pode ser impresso em tela?", algo.isprintable())
+print("Contém espaço?", algo.isspace())
+print("Pode ser usada como variável?", algo.isidentifier())
