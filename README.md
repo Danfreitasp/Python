@@ -12,3 +12,12 @@ Os conteúdos estão organizados em pastas de acordo com os módulos estudados.
 
 - **Python Estruturado**  
   Exercícios focados em funções, laços de repetição, listas, tuplas, dicionários e manipulação de dados.
+
+---
+
+## 🔧 Como executar
+
+1. Instale o [Python](https://www.python.org/downloads/) (versão **3.10+** recomendada).
+2. Clone este repositório:
+   ```bash
+   git clone https://github.com/SEU_USUARIO/Python.git
