@@ -13,6 +13,9 @@ Os conteúdos estão organizados em pastas de acordo com os módulos estudados.
 - **Python Estruturado**  
   Exercícios focados em funções, laços de repetição, listas, tuplas, dicionários e manipulação de dados.
 
+- **Estruturas Aninhadas**  
+  Exercícios para treinamento utilizando estruturas condicionais aninhadas.
+
 ---
 
 ## 🔧 Como executar
