@@ -1,8 +1,8 @@
-# Desafio 056 - Dasenvolva um programa qua leia o nome, idada a sexo da 4 passoas.
-# No final do programa mostra:  
-# A média da idada do grupo.
-# Qual e o noma do homem mais velho. 
-# Quantas mulheres têm manos da 20 anos.
+# Desafio 056 - Dasenvolva um programa qua leia o nome, idade e sexo da 4 pessoas.
+# No final do programa mostre:
+# A média da idade do grupo.
+# Qual e o noma do homem mais velho.
+# Quantas mulheres têm menos de 20 anos.
 
 id = 0
 mulher = 0
@@ -33,3 +33,4 @@ print("A média de idade é {} anos.".format(int(id/4)))
 print("A quantiade de mulheres com menos de 20 anos é {}.".format(mulher))
 
 print("O homem mais velho é {} e ele tem {} anos.".format(homem, idhomem))
+
