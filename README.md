@@ -16,6 +16,9 @@ Os conteúdos estão organizados em pastas de acordo com os módulos estudados.
 - **Estruturas Aninhadas**  
   Exercícios para treinamento utilizando estruturas condicionais aninhadas.
 
+- **Estruturas de Repetição**  
+Exercícios para treinamento utilizando estruturas de repetição (Loop).
+
 ---
 
 ## 🔧 Como executar
