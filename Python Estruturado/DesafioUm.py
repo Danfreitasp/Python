@@ -10,3 +10,4 @@ if 0 <= n2 <= 5:
         print("Voce errou! O número era {}".format(n1))
 else:
     print("O número deve ser entre 0 e 5")
+    print("Fim")
