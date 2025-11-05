@@ -14,6 +14,7 @@ while True:
     if parar == 'S':
         break
 
+
 print(f'A lista completa é {lista}')
 print(f'A lista ímpar é {impar}')
 print(f'A lista par é {par}')
