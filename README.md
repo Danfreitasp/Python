@@ -19,6 +19,8 @@ Os conteúdos estão organizados em pastas de acordo com os módulos estudados.
 - **Estruturas de Repetição**  
 Exercícios para treinamento utilizando estruturas de repetição (Loop).
 
+- **Variáveis Compostas e Listas**  
+Exercícios para praticar o uso de listas, matrizes e estruturas compostas, incluindo acesso, modificação e manipulação de dados em múltiplas dimensões.
 ---
 
 ## 🔧 Como executar
