@@ -1,5 +1,41 @@
-import tkinter as tk
+import customtkinter as ctk
 from tkinter import messagebox
+import os
+
+
+ctk.set_appearance_mode("System")
+ctk.set_default_color_theme("blue")
+
+
+MENSAGEM_PADRAO_INICIAL = """Olá, {nome},
+
+Meu nome é {atendente} e entrei em contato para falar sobre a portabilidade do seu contrato, com redução da taxa de juros e liberação de troco.
+
+Além disso, atualmente o INSS está permitindo uma carência de até 90 dias para o início do desconto da parcela após a realização da portabilidade.
+
+Tenho uma proposta para o seu contrato do Banco {banco}:
+
+✅ Parcela reduzida de {parcela_antiga} para {parcela_nova}
+✅ Liberação de troco no valor de {troco}
+✅ Carência de 90 dias, ficando até 3 meses sem o desconto dessa parcela
+✅ Sua conta de recebimento permanece a mesma, pois somos conveniados ao INSS
+
+Podemos dar prosseguimento e garantir essa redução na sua parcela?"""
+
+
+ARQUIVO_MENSAGEM = "mensagem_padrao.txt"
+
+
+def carregar_mensagem_padrao():
+    if not os.path.exists(ARQUIVO_MENSAGEM):
+        with open(ARQUIVO_MENSAGEM, "w", encoding="utf-8") as arquivo:
+            arquivo.write(MENSAGEM_PADRAO_INICIAL)
+
+    with open(ARQUIVO_MENSAGEM, "r", encoding="utf-8") as arquivo:
+        return arquivo.read()
+
+
+mensagem_padrao = carregar_mensagem_padrao()
 
 
 def formatar_moeda(valor):
@@ -19,131 +55,203 @@ def gerar_mensagem():
     atendente = entrada_atendente.get().strip()
 
     if not nome or not banco or not parcela_antiga or not parcela_nova or not troco or not atendente:
+        messagebox.showerror("Erro", "Preencha todos os campos corretamente.")
+        return
+
+    try:
+        mensagem = mensagem_padrao.format(
+            nome=nome,
+            banco=banco,
+            parcela_antiga=parcela_antiga,
+            parcela_nova=parcela_nova,
+            troco=troco,
+            atendente=atendente
+        )
+    except KeyError as erro:
         messagebox.showerror(
-            "Erro",
-            "Preencha todos os campos corretamente."
+            "Erro na mensagem padrão",
+            f"A variável {erro} não existe.\n\nUse apenas:\n"
+            "{nome}\n{banco}\n{parcela_antiga}\n{parcela_nova}\n{troco}\n{atendente}"
         )
         return
 
-    mensagem = f"""Olá, {nome},
-
-Meu nome é {atendente} e entrei em contato para falar sobre a portabilidade do seu contrato, com redução da taxa de juros e liberação de troco.
-
-Além disso, atualmente o INSS está permitindo uma carência de até 90 dias para o início do desconto da parcela após a realização da portabilidade.
-
-Tenho uma proposta para o seu contrato do Banco {banco}:
-
-✅ Parcela reduzida de {parcela_antiga} para {parcela_nova}
-✅ Liberação de troco no valor de {troco}
-✅ Carência de 90 dias, ficando até 3 meses sem o desconto dessa parcela
-✅ Sua conta de recebimento permanece a mesma, pois somos conveniados ao INSS
-
-Podemos dar prosseguimento e garantir essa redução na sua parcela?"""
-
-    caixa_mensagem.delete("1.0", tk.END)
-    caixa_mensagem.insert(tk.END, mensagem)
+    caixa_mensagem.delete("1.0", "end")
+    caixa_mensagem.insert("end", mensagem)
 
 
 def copiar_mensagem():
-    mensagem = caixa_mensagem.get("1.0", tk.END).strip()
+    mensagem = caixa_mensagem.get("1.0", "end").strip()
 
     if not mensagem:
-        messagebox.showwarning(
-            "Aviso",
-            "Gere uma mensagem antes de copiar."
-        )
+        messagebox.showwarning("Aviso", "Gere uma mensagem antes de copiar.")
         return
 
     janela.clipboard_clear()
     janela.clipboard_append(mensagem)
-
-    messagebox.showinfo(
-        "Copiado",
-        "Mensagem copiada para a área de transferência."
-    )
+    messagebox.showinfo("Copiado", "Mensagem copiada para a área de transferência.")
 
 
 def limpar_campos():
-    entrada_nome.delete(0, tk.END)
-    entrada_banco.delete(0, tk.END)
-    entrada_parcela_antiga.delete(0, tk.END)
-    entrada_parcela_nova.delete(0, tk.END)
-    entrada_troco.delete(0, tk.END)
+    entrada_nome.delete(0, "end")
+    entrada_banco.delete(0, "end")
+    entrada_parcela_antiga.delete(0, "end")
+    entrada_parcela_nova.delete(0, "end")
+    entrada_troco.delete(0, "end")
 
-    entrada_atendente.delete(0, tk.END)
+    entrada_atendente.delete(0, "end")
     entrada_atendente.insert(0, "Poliana")
 
-    caixa_mensagem.delete("1.0", tk.END)
+    caixa_mensagem.delete("1.0", "end")
 
 
-# Janela principal
-janela = tk.Tk()
+def alterar_mensagem_padrao():
+    global mensagem_padrao
+
+    janela_edicao = ctk.CTkToplevel(janela)
+    janela_edicao.title("Alterar Mensagem Padrão")
+    janela_edicao.geometry("850x650")
+    janela_edicao.grab_set()
+
+    titulo_edicao = ctk.CTkLabel(
+        janela_edicao,
+        text="Alterar Mensagem Padrão",
+        font=("Arial", 20, "bold")
+    )
+    titulo_edicao.pack(pady=15)
+
+    instrucoes = ctk.CTkLabel(
+        janela_edicao,
+        text=(
+            "Variáveis disponíveis:\n"
+            "{nome} | {banco} | {parcela_antiga} | {parcela_nova} | {troco} | {atendente}"
+        ),
+        font=("Arial", 14)
+    )
+    instrucoes.pack(pady=5)
+
+    caixa_edicao = ctk.CTkTextbox(
+        janela_edicao,
+        width=780,
+        height=450
+    )
+    caixa_edicao.pack(pady=10)
+    caixa_edicao.insert("end", mensagem_padrao)
+
+    def salvar_mensagem_padrao():
+        global mensagem_padrao
+
+        novo_modelo = caixa_edicao.get("1.0", "end").strip()
+
+        if not novo_modelo:
+            messagebox.showwarning("Aviso", "A mensagem padrão não pode ficar vazia.")
+            return
+
+        mensagem_padrao = novo_modelo
+
+        with open(ARQUIVO_MENSAGEM, "w", encoding="utf-8") as arquivo:
+            arquivo.write(novo_modelo)
+
+        messagebox.showinfo("Salvo", "Mensagem padrão salva com sucesso.")
+        janela_edicao.destroy()
+
+    frame_edicao_botoes = ctk.CTkFrame(janela_edicao)
+    frame_edicao_botoes.pack(pady=10)
+
+    botao_salvar = ctk.CTkButton(
+        frame_edicao_botoes,
+        text="Salvar Mensagem",
+        width=180,
+        command=salvar_mensagem_padrao
+    )
+    botao_salvar.pack(side="left", padx=10, pady=10)
+
+    botao_cancelar = ctk.CTkButton(
+        frame_edicao_botoes,
+        text="Cancelar",
+        width=180,
+        command=janela_edicao.destroy
+    )
+    botao_cancelar.pack(side="left", padx=10, pady=10)
+
+
+janela = ctk.CTk()
 janela.title("Gerador de Mensagens - Portabilidade INSS")
-janela.geometry("750x700")
+janela.geometry("980x780")
 
 
-# Campos
-tk.Label(janela, text="Nome do Cliente").pack(pady=(10, 0))
-entrada_nome = tk.Entry(janela, width=60)
-entrada_nome.pack()
+titulo = ctk.CTkLabel(
+    janela,
+    text="Gerador de Mensagens - Portabilidade INSS",
+    font=("Arial", 22, "bold")
+)
+titulo.pack(pady=20)
 
-tk.Label(janela, text="Banco").pack(pady=(10, 0))
-entrada_banco = tk.Entry(janela, width=60)
-entrada_banco.pack()
 
-tk.Label(janela, text="Parcela Antiga").pack(pady=(10, 0))
-entrada_parcela_antiga = tk.Entry(janela, width=60)
-entrada_parcela_antiga.pack()
+def criar_campo(texto):
+    label = ctk.CTkLabel(janela, text=texto)
+    label.pack(pady=(8, 0))
 
-tk.Label(janela, text="Nova Parcela").pack(pady=(10, 0))
-entrada_parcela_nova = tk.Entry(janela, width=60)
-entrada_parcela_nova.pack()
+    entrada = ctk.CTkEntry(janela, width=450)
+    entrada.pack(pady=3)
 
-tk.Label(janela, text="Valor do Troco").pack(pady=(10, 0))
-entrada_troco = tk.Entry(janela, width=60)
-entrada_troco.pack()
+    return entrada
 
-tk.Label(janela, text="Nome do Atendente").pack(pady=(10, 0))
-entrada_atendente = tk.Entry(janela, width=60)
+
+entrada_nome = criar_campo("Nome do Cliente")
+entrada_banco = criar_campo("Banco")
+entrada_parcela_antiga = criar_campo("Parcela Antiga")
+entrada_parcela_nova = criar_campo("Nova Parcela")
+entrada_troco = criar_campo("Valor do Troco")
+entrada_atendente = criar_campo("Nome do Atendente")
 entrada_atendente.insert(0, "Poliana")
-entrada_atendente.pack()
 
 
-# Frame dos botões superiores
-frame_botoes = tk.Frame(janela)
+frame_botoes = ctk.CTkFrame(janela)
 frame_botoes.pack(pady=15)
 
-tk.Button(
+
+botao_gerar = ctk.CTkButton(
     frame_botoes,
     text="Gerar Mensagem",
-    width=20,
+    width=160,
     command=gerar_mensagem
-).pack(side=tk.LEFT, padx=5)
+)
+botao_gerar.pack(side="left", padx=8, pady=10)
 
-tk.Button(
+
+botao_limpar = ctk.CTkButton(
     frame_botoes,
     text="Limpar Campos",
-    width=20,
+    width=160,
     command=limpar_campos
-).pack(side=tk.LEFT, padx=5)
-
-
-# Caixa de mensagem
-caixa_mensagem = tk.Text(
-    janela,
-    width=85,
-    height=18
 )
-caixa_mensagem.pack()
+botao_limpar.pack(side="left", padx=8, pady=10)
 
 
-# Botão copiar
-tk.Button(
-    janela,
+botao_copiar = ctk.CTkButton(
+    frame_botoes,
     text="Copiar Mensagem",
-    width=20,
+    width=160,
     command=copiar_mensagem
-).pack(pady=10)
+)
+botao_copiar.pack(side="left", padx=8, pady=10)
+
+
+botao_alterar = ctk.CTkButton(
+    frame_botoes,
+    text="Alterar Mensagem Padrão",
+    width=210,
+    command=alterar_mensagem_padrao
+)
+botao_alterar.pack(side="left", padx=8, pady=10)
+
+
+caixa_mensagem = ctk.CTkTextbox(
+    janela,
+    width=850,
+    height=240
+)
+caixa_mensagem.pack(pady=10)
 
 
 janela.mainloop()
