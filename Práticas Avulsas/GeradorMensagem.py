@@ -19,7 +19,10 @@ def gerar_mensagem():
     atendente = entrada_atendente.get().strip()
 
     if not nome or not banco or not parcela_antiga or not parcela_nova or not troco or not atendente:
-        messagebox.showerror("Erro", "Preencha todos os campos corretamente.")
+        messagebox.showerror(
+            "Erro",
+            "Preencha todos os campos corretamente."
+        )
         return
 
     mensagem = f"""Olá, {nome},
@@ -45,7 +48,10 @@ def copiar_mensagem():
     mensagem = caixa_mensagem.get("1.0", tk.END).strip()
 
     if not mensagem:
-        messagebox.showwarning("Aviso", "Gere uma mensagem antes de copiar.")
+        messagebox.showwarning(
+            "Aviso",
+            "Gere uma mensagem antes de copiar."
+        )
         return
 
     janela.clipboard_clear()
@@ -70,10 +76,13 @@ def limpar_campos():
     caixa_mensagem.delete("1.0", tk.END)
 
 
+# Janela principal
 janela = tk.Tk()
 janela.title("Gerador de Mensagens - Portabilidade INSS")
 janela.geometry("750x700")
 
+
+# Campos
 tk.Label(janela, text="Nome do Cliente").pack(pady=(10, 0))
 entrada_nome = tk.Entry(janela, width=60)
 entrada_nome.pack()
@@ -99,12 +108,27 @@ entrada_atendente = tk.Entry(janela, width=60)
 entrada_atendente.insert(0, "Poliana")
 entrada_atendente.pack()
 
-tk.Button(
-    janela,
-    text="Gerar Mensagem",
-    command=gerar_mensagem
-).pack(pady=15)
 
+# Frame dos botões superiores
+frame_botoes = tk.Frame(janela)
+frame_botoes.pack(pady=15)
+
+tk.Button(
+    frame_botoes,
+    text="Gerar Mensagem",
+    width=20,
+    command=gerar_mensagem
+).pack(side=tk.LEFT, padx=5)
+
+tk.Button(
+    frame_botoes,
+    text="Limpar Campos",
+    width=20,
+    command=limpar_campos
+).pack(side=tk.LEFT, padx=5)
+
+
+# Caixa de mensagem
 caixa_mensagem = tk.Text(
     janela,
     width=85,
@@ -112,16 +136,14 @@ caixa_mensagem = tk.Text(
 )
 caixa_mensagem.pack()
 
+
+# Botão copiar
 tk.Button(
     janela,
     text="Copiar Mensagem",
+    width=20,
     command=copiar_mensagem
-).pack(pady=5)
+).pack(pady=10)
 
-tk.Button(
-    janela,
-    text="Limpar Campos",
-    command=limpar_campos
-).pack(pady=5)
 
 janela.mainloop()
