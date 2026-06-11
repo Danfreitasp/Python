@@ -16,7 +16,7 @@ Além disso, atualmente o INSS está permitindo uma carência de até 90 dias pa
 Tenho uma proposta para o seu contrato do Banco {banco}:
 
 ✅ Parcela reduzida de {parcela_antiga} para {parcela_nova}
-✅ Economia mensal de {economia}
+✅ Regularizar sua margem negativa de {economia}
 ✅ Liberação de troco no valor de {troco}
 ✅ Carência de 90 dias, ficando até 3 meses sem o desconto dessa parcela
 ✅ Sua conta de recebimento permanece a mesma, pois somos conveniados ao INSS
