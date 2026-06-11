@@ -1,0 +1,15 @@
+Olá, {nome},
+
+Meu nome é {atendente} e entrei em contato para falar sobre a portabilidade do seu contrato, com redução da taxa de juros e liberação de troco.
+
+Além disso, atualmente o INSS está permitindo uma carência de até 90 dias para o início do desconto da parcela após a realização da portabilidade.
+
+Tenho uma proposta para o seu contrato do Banco {banco}:
+
+✅ Parcela reduzida de {parcela_antiga} para {parcela_nova}
+✅ Economia mensal de {economia}
+✅ Liberação de troco no valor de {troco}
+✅ Carência de 90 dias, ficando até 3 meses sem o desconto dessa parcela
+✅ Sua conta de recebimento permanece a mesma, pois somos conveniados ao INSS
+
+Podemos dar prosseguimento e garantir essa redução na sua parcela?

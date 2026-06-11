@@ -16,6 +16,7 @@ Além disso, atualmente o INSS está permitindo uma carência de até 90 dias pa
 Tenho uma proposta para o seu contrato do Banco {banco}:
 
 ✅ Parcela reduzida de {parcela_antiga} para {parcela_nova}
+✅ Economia mensal de {economia}
 ✅ Liberação de troco no valor de {troco}
 ✅ Carência de 90 dias, ficando até 3 meses sem o desconto dessa parcela
 ✅ Sua conta de recebimento permanece a mesma, pois somos conveniados ao INSS
@@ -38,25 +39,60 @@ def carregar_mensagem_padrao():
 mensagem_padrao = carregar_mensagem_padrao()
 
 
-def formatar_moeda(valor):
+def converter_para_float(valor):
     try:
-        valor = float(valor.replace(".", "").replace(",", "."))
-        return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return float(valor.replace(".", "").replace(",", "."))
     except ValueError:
         return None
+
+
+def formatar_moeda_numero(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def formatar_moeda(valor):
+    numero = converter_para_float(valor)
+
+    if numero is None:
+        return None
+
+    return formatar_moeda_numero(numero)
 
 
 def gerar_mensagem():
     nome = entrada_nome.get().strip()
     banco = entrada_banco.get().strip()
-    parcela_antiga = formatar_moeda(entrada_parcela_antiga.get().strip())
-    parcela_nova = formatar_moeda(entrada_parcela_nova.get().strip())
-    troco = formatar_moeda(entrada_troco.get().strip())
+
+    valor_parcela_antiga = converter_para_float(entrada_parcela_antiga.get().strip())
+    valor_parcela_nova = converter_para_float(entrada_parcela_nova.get().strip())
+    valor_troco = converter_para_float(entrada_troco.get().strip())
+
     atendente = entrada_atendente.get().strip()
 
-    if not nome or not banco or not parcela_antiga or not parcela_nova or not troco or not atendente:
+    if (
+        not nome
+        or not banco
+        or valor_parcela_antiga is None
+        or valor_parcela_nova is None
+        or valor_troco is None
+        or not atendente
+    ):
         messagebox.showerror("Erro", "Preencha todos os campos corretamente.")
         return
+
+    economia = valor_parcela_antiga - valor_parcela_nova
+
+    if economia <= 0:
+        messagebox.showwarning(
+            "Aviso",
+            "A nova parcela não é menor que a parcela antiga. Verifique os valores informados."
+        )
+        return
+
+    parcela_antiga = formatar_moeda_numero(valor_parcela_antiga)
+    parcela_nova = formatar_moeda_numero(valor_parcela_nova)
+    troco = formatar_moeda_numero(valor_troco)
+    economia_formatada = formatar_moeda_numero(economia)
 
     try:
         mensagem = mensagem_padrao.format(
@@ -65,13 +101,20 @@ def gerar_mensagem():
             parcela_antiga=parcela_antiga,
             parcela_nova=parcela_nova,
             troco=troco,
+            economia=economia_formatada,
             atendente=atendente
         )
     except KeyError as erro:
         messagebox.showerror(
             "Erro na mensagem padrão",
             f"A variável {erro} não existe.\n\nUse apenas:\n"
-            "{nome}\n{banco}\n{parcela_antiga}\n{parcela_nova}\n{troco}\n{atendente}"
+            "{nome}\n"
+            "{banco}\n"
+            "{parcela_antiga}\n"
+            "{parcela_nova}\n"
+            "{troco}\n"
+            "{economia}\n"
+            "{atendente}"
         )
         return
 
@@ -123,7 +166,8 @@ def alterar_mensagem_padrao():
         janela_edicao,
         text=(
             "Variáveis disponíveis:\n"
-            "{nome} | {banco} | {parcela_antiga} | {parcela_nova} | {troco} | {atendente}"
+            "{nome} | {banco} | {parcela_antiga} | {parcela_nova} | "
+            "{troco} | {economia} | {atendente}"
         ),
         font=("Arial", 14)
     )
