@@ -1,22 +1,24 @@
 """
 Consulta de Regras de Portabilidade
 
-Programa simples para consultar bancos destino disponíveis com base em uma planilha Excel editável.
-
-Dependências:
-    pip install -r requirements.txt
+Programa para consultar regras de portabilidade usando Excel editável.
 
 Executar:
     python main.py
+
+Dependências:
+    pip install -r requirements.txt
 """
 
 import os
 import re
 import sys
-import unicodedata
+import shutil
 import subprocess
+import unicodedata
 from pathlib import Path
 from datetime import datetime
+from io import StringIO
 
 import pandas as pd
 import customtkinter as ctk
@@ -38,7 +40,9 @@ REQUIRED_COLUMNS = [
     "Observacao",
 ]
 
-CATEGORIAS = [
+OPTIONAL_COLUMNS = ["Fonte_Pagina", "Fonte_Arquivo"]
+
+CATEGORIAS_TELA = [
     "BANCO_DE_REDE",
     "BANCO_ORIGEM_CORBAN",
 ]
@@ -308,8 +312,8 @@ SAFRA;ALFA;BANCO_ESPECIFICO;;NAO;Não porta: ALFA.;;24;REGRA DE PMT PAGA (6) (1)
 
 def resource_path(relative_path: str) -> Path:
     """
-    Retorna o caminho correto do arquivo tanto rodando em Python normal
-    quanto empacotado pelo PyInstaller.
+    Quando roda em Python normal: usa a pasta do main.py.
+    Quando vira .exe: usa a pasta do executável.
     """
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent / relative_path
@@ -317,30 +321,23 @@ def resource_path(relative_path: str) -> Path:
 
 
 def normalizar_texto(texto) -> str:
-    """
-    Padroniza textos para comparação:
-    - remove acentos
-    - deixa maiúsculo
-    - remove espaços duplicados
-    - trata barras e hífens
-    """
     if texto is None or pd.isna(texto):
         return ""
 
     texto = str(texto).strip().upper()
     texto = unicodedata.normalize("NFKD", texto)
     texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+
     texto = texto.replace("/", " ")
     texto = texto.replace("-", " ")
     texto = texto.replace(".", " ")
     texto = texto.replace(",", " ")
     texto = " ".join(texto.split())
 
-    # Remove códigos bancários usados antes do nome.
-    # Ex.: "121 AGIBANK" vira "AGIBANK"; "169 OLE" vira "OLE".
+    # Remove códigos bancários no início.
+    # Ex.: 121 AGIBANK -> AGIBANK
     texto = re.sub(r"^\d{2,4}\s+", "", texto)
 
-    # Variações comuns
     substituicoes = {
         "OLE": "OLE",
         "OLÉ": "OLE",
@@ -361,14 +358,45 @@ def normalizar_texto(texto) -> str:
     return substituicoes.get(texto, texto)
 
 
-def criar_excel_modelo(caminho: Path):
-    """
-    Cria um Excel inicial caso o arquivo não exista.
-    O arquivo é criado a partir do CSV interno para facilitar manutenção.
-    """
-    from io import StringIO
+def normalizar_coluna(coluna: str) -> str:
+    coluna = str(coluna).strip()
+    coluna = coluna.replace("\n", " ")
+    coluna = coluna.replace("-", "_")
+    coluna = coluna.replace(" ", "_")
+    coluna = "_".join(parte for parte in coluna.split("_") if parte)
+    return coluna
 
+
+def criar_dataframe_modelo() -> pd.DataFrame:
     df = pd.read_csv(StringIO(INITIAL_CSV), sep=";")
+
+    # Limpeza adicional de nomes de bancos.
+    mapa_limpeza = {
+        "250 BCV": "BCV",
+        "233 CIFRA": "CIFRA",
+        "121 AGIBANK": "AGIBANK",
+        "184 ITAÚ BBA": "ITAÚ BBA",
+        "184 ITAU BBA": "ITAÚ BBA",
+        "169 OLÉ": "OLÉ",
+        "169 OLE": "OLÉ",
+        "C6 BANK": "C6",
+    }
+
+    for coluna in ["Banco_Destino", "Banco_Origem", "Regra_Descricao", "Observacao"]:
+        if coluna in df.columns:
+            df[coluna] = df[coluna].astype(str)
+            for antigo, novo in mapa_limpeza.items():
+                df[coluna] = df[coluna].str.replace(antigo, novo, regex=False)
+
+    # Corrige "nan" textual gerado por astype(str)
+    df = df.replace("nan", "")
+
+    return df
+
+
+def criar_excel_modelo(caminho: Path):
+    df = criar_dataframe_modelo()
+
     with pd.ExcelWriter(caminho, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name=SHEET_NAME)
 
@@ -381,18 +409,154 @@ def criar_excel_modelo(caminho: Path):
                 "Status",
                 "Regra_Descricao",
                 "Observacao",
+                "Fonte_Pagina",
+                "Fonte_Arquivo",
             ],
             "Descrição": [
                 "Banco onde a proposta será digitada.",
-                "Banco de onde o contrato está vindo.",
-                "Categoria para regras genéricas.",
+                "Banco de onde o contrato está vindo. Não use código na frente do banco.",
+                "Categoria interna da regra. Na tela use Banco de Rede ou Origem Corban.",
                 "Quantidade mínima de parcelas pagas.",
                 "SIM, NAO ou CONDICIONAL.",
                 "Descrição completa da regra.",
-                "Observações adicionais.",
+                "Observação adicional.",
+                "Página do PDF usada como referência.",
+                "Arquivo de referência.",
             ],
         })
         ajuda.to_excel(writer, index=False, sheet_name="Como editar")
+
+    try:
+        from openpyxl import load_workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.worksheet.table import Table, TableStyleInfo
+        from openpyxl.utils import get_column_letter
+
+        wb = load_workbook(caminho)
+        ws = wb[SHEET_NAME]
+
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="B91C1C")
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        widths = [26, 30, 24, 20, 14, 50, 44, 12, 34]
+        for i, width in enumerate(widths, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = width
+
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+        ws.freeze_panes = "A2"
+        table_ref = f"A1:I{ws.max_row}"
+        table = Table(displayName="TabelaRegrasPortabilidade", ref=table_ref)
+        style = TableStyleInfo(
+            name="TableStyleMedium2",
+            showFirstColumn=False,
+            showLastColumn=False,
+            showRowStripes=True,
+            showColumnStripes=False,
+        )
+        table.tableStyleInfo = style
+        ws.add_table(table)
+
+        wa = wb["Como editar"]
+        for cell in wa[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="1D4ED8")
+        wa.column_dimensions["A"].width = 28
+        wa.column_dimensions["B"].width = 90
+        for row in wa.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+        wb.save(caminho)
+    except Exception:
+        # Formatação não é essencial para o programa funcionar.
+        pass
+
+
+def fazer_backup_excel_invalido(caminho: Path) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup = caminho.with_name(f"regras_portabilidade_BACKUP_INVALIDO_{timestamp}.xlsx")
+    shutil.copy2(caminho, backup)
+    return backup
+
+
+def ler_excel_regras(caminho: Path) -> pd.DataFrame:
+    """
+    Lê e valida o Excel.
+    Se estiver inválido, faz backup e recria o modelo correto.
+    """
+    if not caminho.exists():
+        criar_excel_modelo(caminho)
+
+    def tentar_ler():
+        try:
+            df_lido = pd.read_excel(caminho, sheet_name=SHEET_NAME, dtype=object)
+        except ValueError:
+            df_lido = pd.read_excel(caminho, dtype=object)
+
+        df_lido.columns = [normalizar_coluna(col) for col in df_lido.columns]
+
+        aliases = {
+            "BancoDestino": "Banco_Destino",
+            "Destino": "Banco_Destino",
+            "BancoOrigem": "Banco_Origem",
+            "Origem": "Banco_Origem",
+            "Categoria": "Categoria_Origem",
+            "CategoriaOrigem": "Categoria_Origem",
+            "Tipo": "Categoria_Origem",
+            "Tipo_Origem": "Categoria_Origem",
+            "MinimoParcelasPagas": "Minimo_Parcelas_Pagas",
+            "Minimo_Parcelas": "Minimo_Parcelas_Pagas",
+            "Parcelas_Minimas": "Minimo_Parcelas_Pagas",
+            "Parcelas": "Minimo_Parcelas_Pagas",
+            "Regra": "Regra_Descricao",
+            "Descricao": "Regra_Descricao",
+            "Regra_Descrição": "Regra_Descricao",
+            "Observação": "Observacao",
+            "Obs": "Observacao",
+        }
+        df_lido = df_lido.rename(columns=aliases)
+        return df_lido
+
+    df = tentar_ler()
+    faltando = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+
+    # Caso clássico do erro: Banco_Destino, Banco_Destino.1, Banco_Destino.2...
+    colunas = [str(c) for c in df.columns.tolist()]
+    parece_quebrado = (
+        len(colunas) > 3
+        and colunas[0].startswith("Banco_Destino")
+        and all(c.startswith("Banco_Destino") for c in colunas[: min(5, len(colunas))])
+    )
+
+    if faltando or parece_quebrado:
+        backup = fazer_backup_excel_invalido(caminho)
+        criar_excel_modelo(caminho)
+        df = tentar_ler()
+
+        faltando_depois = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+        if faltando_depois:
+            raise ValueError(
+                "Não foi possível recriar o Excel modelo corretamente. "
+                f"Colunas ainda ausentes: {', '.join(faltando_depois)}"
+            )
+
+        messagebox.showinfo(
+            "Excel corrigido automaticamente",
+            "O arquivo regras_portabilidade.xlsx estava em formato inválido.\n\n"
+            f"Fiz um backup em:\n{backup}\n\n"
+            "Depois recriei um Excel modelo correto automaticamente."
+        )
+
+    for coluna in OPTIONAL_COLUMNS:
+        if coluna not in df.columns:
+            df[coluna] = ""
+
+    return df
 
 
 def abrir_arquivo(caminho: Path):
@@ -424,6 +588,7 @@ class ConsultaPortabilidadeApp(ctk.CTk):
 
         self.excel_path = resource_path(EXCEL_FILE)
         self.df = pd.DataFrame()
+        self.bancos_origem_lista = []
 
         self._criar_layout()
         self.carregar_regras(inicial=True)
@@ -452,37 +617,42 @@ class ConsultaPortabilidadeApp(ctk.CTk):
         painel.grid_columnconfigure(1, weight=1)
         painel.grid_rowconfigure(0, weight=1)
 
-        filtros = ctk.CTkFrame(painel, width=310)
+        filtros = ctk.CTkFrame(painel, width=315)
         filtros.grid(row=0, column=0, padx=14, pady=14, sticky="nsw")
         filtros.grid_propagate(False)
 
-        ctk.CTkLabel(filtros, text="Filtros", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", padx=16, pady=(18, 12))
+        ctk.CTkLabel(filtros, text="Filtros", font=ctk.CTkFont(size=18, weight="bold")).pack(
+            anchor="w", padx=16, pady=(18, 12)
+        )
 
         ctk.CTkLabel(filtros, text="Banco de origem").pack(anchor="w", padx=16, pady=(8, 4))
         self.banco_origem_var = ctk.StringVar()
-        self.bancos_origem_lista = []
-
         self.banco_origem = ctk.CTkEntry(
             filtros,
             textvariable=self.banco_origem_var,
             placeholder_text="Digite para pesquisar. Ex.: Agibank",
-            width=270,
+            width=280,
         )
         self.banco_origem.pack(anchor="w", padx=16, pady=(0, 6))
         self.banco_origem.bind("<KeyRelease>", self.atualizar_sugestoes_bancos)
         self.banco_origem.bind("<FocusIn>", self.atualizar_sugestoes_bancos)
 
-        self.sugestoes_frame = ctk.CTkScrollableFrame(filtros, width=270, height=110)
+        self.sugestoes_frame = ctk.CTkScrollableFrame(filtros, width=280, height=110)
         self.sugestoes_frame.pack(anchor="w", padx=16, pady=(0, 10))
         self.sugestoes_frame.pack_forget()
 
         ctk.CTkLabel(filtros, text="Parcelas pagas").pack(anchor="w", padx=16, pady=(8, 4))
-        self.parcelas_entry = ctk.CTkEntry(filtros, placeholder_text="Ex.: 12", width=270)
+        self.parcelas_entry = ctk.CTkEntry(filtros, placeholder_text="Ex.: 12", width=280)
         self.parcelas_entry.pack(anchor="w", padx=16, pady=(0, 10))
 
         ctk.CTkLabel(filtros, text="Tipo da origem").pack(anchor="w", padx=16, pady=(8, 4))
         self.categoria_var = ctk.StringVar(value="BANCO_ORIGEM_CORBAN")
-        self.categoria = ctk.CTkComboBox(filtros, variable=self.categoria_var, values=CATEGORIAS, width=270)
+        self.categoria = ctk.CTkComboBox(
+            filtros,
+            variable=self.categoria_var,
+            values=CATEGORIAS_TELA,
+            width=280,
+        )
         self.categoria.pack(anchor="w", padx=16, pady=(0, 10))
 
         self.mostrar_recusados_var = ctk.BooleanVar(value=False)
@@ -493,19 +663,33 @@ class ConsultaPortabilidadeApp(ctk.CTk):
         )
         self.mostrar_recusados.pack(anchor="w", padx=16, pady=(10, 10))
 
-        consultar_btn = ctk.CTkButton(filtros, text="Consultar Bancos Disponíveis", command=self.consultar)
-        consultar_btn.pack(anchor="w", padx=16, pady=(12, 8), fill="x")
+        ctk.CTkButton(
+            filtros,
+            text="Consultar Bancos Disponíveis",
+            command=self.consultar,
+        ).pack(anchor="w", padx=16, pady=(12, 8), fill="x")
 
-        limpar_btn = ctk.CTkButton(filtros, text="Limpar", fg_color="gray", hover_color="#555555", command=self.limpar)
-        limpar_btn.pack(anchor="w", padx=16, pady=(0, 8), fill="x")
+        ctk.CTkButton(
+            filtros,
+            text="Limpar",
+            fg_color="gray",
+            hover_color="#555555",
+            command=self.limpar,
+        ).pack(anchor="w", padx=16, pady=(0, 8), fill="x")
 
-        abrir_btn = ctk.CTkButton(filtros, text="Abrir Excel de Regras", command=lambda: abrir_arquivo(self.excel_path))
-        abrir_btn.pack(anchor="w", padx=16, pady=(18, 8), fill="x")
+        ctk.CTkButton(
+            filtros,
+            text="Abrir Excel de Regras",
+            command=lambda: abrir_arquivo(self.excel_path),
+        ).pack(anchor="w", padx=16, pady=(18, 8), fill="x")
 
-        recarregar_btn = ctk.CTkButton(filtros, text="Recarregar Regras", command=self.carregar_regras)
-        recarregar_btn.pack(anchor="w", padx=16, pady=(0, 8), fill="x")
+        ctk.CTkButton(
+            filtros,
+            text="Recarregar Regras",
+            command=self.carregar_regras,
+        ).pack(anchor="w", padx=16, pady=(0, 8), fill="x")
 
-        self.status_label = ctk.CTkLabel(filtros, text="", text_color="gray", wraplength=260, justify="left")
+        self.status_label = ctk.CTkLabel(filtros, text="", text_color="gray", wraplength=270, justify="left")
         self.status_label.pack(anchor="w", padx=16, pady=(20, 8))
 
         resultado_frame = ctk.CTkFrame(painel)
@@ -551,8 +735,7 @@ class ConsultaPortabilidadeApp(ctk.CTk):
 
         resultados = []
         for banco in self.bancos_origem_lista:
-            banco_norm = normalizar_texto(banco)
-            if termo in banco_norm:
+            if termo in normalizar_texto(banco):
                 resultados.append(banco)
 
         resultados = resultados[:8]
@@ -582,67 +765,7 @@ class ConsultaPortabilidadeApp(ctk.CTk):
 
     def carregar_regras(self, inicial=False):
         try:
-            if not self.excel_path.exists():
-                criar_excel_modelo(self.excel_path)
-                if not inicial:
-                    messagebox.showinfo("Excel criado", f"Arquivo modelo criado em:\n{self.excel_path}")
-
-            try:
-                self.df = pd.read_excel(self.excel_path, sheet_name=SHEET_NAME)
-            except ValueError:
-                # Se a aba Regras não existir, tenta ler a primeira aba.
-                self.df = pd.read_excel(self.excel_path)
-
-            # Limpa e padroniza nomes de colunas vindos do Excel.
-            self.df.columns = [
-                str(col).strip().replace(" ", "_").replace("-", "_")
-                for col in self.df.columns
-            ]
-
-            # Aceita variações comuns de nomes de colunas.
-            column_aliases = {
-                "BancoDestino": "Banco_Destino",
-                "Banco_Destino_": "Banco_Destino",
-                "Destino": "Banco_Destino",
-                "BancoOrigem": "Banco_Origem",
-                "Banco_Origem_": "Banco_Origem",
-                "Origem": "Banco_Origem",
-                "Categoria": "Categoria_Origem",
-                "CategoriaOrigem": "Categoria_Origem",
-                "Tipo_Origem": "Categoria_Origem",
-                "Tipo": "Categoria_Origem",
-                "MinimoParcelasPagas": "Minimo_Parcelas_Pagas",
-                "Minimo_Parcelas": "Minimo_Parcelas_Pagas",
-                "Parcelas_Minimas": "Minimo_Parcelas_Pagas",
-                "Parcelas": "Minimo_Parcelas_Pagas",
-                "Regra": "Regra_Descricao",
-                "Descricao": "Regra_Descricao",
-                "Regra_Descrição": "Regra_Descricao",
-                "Observação": "Observacao",
-                "Obs": "Observacao",
-            }
-
-            self.df = self.df.rename(columns=column_aliases)
-
-            # Se o Excel estiver muito quebrado, mostra um erro mais claro.
-            faltando = [col for col in REQUIRED_COLUMNS if col not in self.df.columns]
-            if faltando:
-                colunas_encontradas = ", ".join(map(str, self.df.columns.tolist()))
-                raise ValueError(
-                    "O Excel foi encontrado, mas a aba de regras não está no formato esperado.\n\n"
-                    f"Colunas ausentes: {', '.join(faltando)}\n\n"
-                    f"Colunas encontradas: {colunas_encontradas}\n\n"
-                    "Solução rápida:\n"
-                    "1. Feche o programa.\n"
-                    "2. Apague ou renomeie o arquivo regras_portabilidade.xlsx da pasta do programa.\n"
-                    "3. Abra o programa novamente para ele criar um Excel modelo correto.\n\n"
-                    "Ou use o arquivo regras_portabilidade.xlsx que veio no ZIP atualizado."
-                )
-
-            # Garante colunas extras opcionais para evitar erro.
-            for coluna in ["Fonte_Pagina", "Fonte_Arquivo"]:
-                if coluna not in self.df.columns:
-                    self.df[coluna] = ""
+            self.df = ler_excel_regras(self.excel_path)
 
             self.df["Banco_Origem_Norm"] = self.df["Banco_Origem"].apply(normalizar_texto)
             self.df["Banco_Destino_Norm"] = self.df["Banco_Destino"].apply(normalizar_texto)
@@ -658,6 +781,7 @@ class ConsultaPortabilidadeApp(ctk.CTk):
 
             destinos = self.df["Banco_Destino"].nunique()
             regras = len(self.df)
+
             self.status_label.configure(
                 text=f"Regras carregadas: {regras}\nBancos destino: {destinos}\nArquivo: {self.excel_path.name}"
             )
@@ -691,11 +815,10 @@ class ConsultaPortabilidadeApp(ctk.CTk):
     def _regra_aplicavel_para_destino(self, grupo, banco_origem_norm, categoria):
         """
         Prioridade:
-        1. Regra específica do banco de origem digitado.
-        2. Tipo da origem selecionado:
+        1. Regra específica do banco digitado.
+        2. Tipo de origem selecionado:
            - BANCO_DE_REDE
            - BANCO_ORIGEM_CORBAN
-        3. Regras genéricas equivalentes, quando existirem.
         """
         regras_especificas = grupo[grupo["Banco_Origem_Norm"] == banco_origem_norm]
         if not regras_especificas.empty:
@@ -715,8 +838,8 @@ class ConsultaPortabilidadeApp(ctk.CTk):
         }
 
         categorias_busca = equivalencias.get(categoria, [categoria])
-
         regras_categoria = grupo[grupo["Categoria_Origem"].isin(categorias_busca)]
+
         if not regras_categoria.empty:
             return regras_categoria
 
@@ -747,8 +870,8 @@ class ConsultaPortabilidadeApp(ctk.CTk):
         resultados = []
 
         for banco_destino, grupo in self.df.groupby("Banco_Destino", sort=True):
-            # Segurança: nunca mostra o mesmo banco como destino.
-            # Ex.: C6, C6 BANK e BANCO C6 são tratados como o mesmo banco.
+            # Nunca exibe o mesmo banco como destino.
+            # Ex.: C6, C6 BANK e BANCO C6 são tratados como a mesma instituição.
             if normalizar_texto(banco_destino) == banco_origem_norm:
                 continue
 
@@ -757,7 +880,6 @@ class ConsultaPortabilidadeApp(ctk.CTk):
             if regras.empty:
                 continue
 
-            # Se existir mais de uma regra aplicável no mesmo destino, mostra todas.
             for _, regra in regras.iterrows():
                 status = str(regra.get("Status", "")).upper().strip()
                 minimo = regra.get("Minimo_Parcelas_Pagas", "")
@@ -792,7 +914,7 @@ class ConsultaPortabilidadeApp(ctk.CTk):
                 "-",
                 "-",
                 "Não há regra compatível para os dados informados.",
-                "Tente alterar a categoria ou marque 'mostrar recusados'.",
+                "Tente alterar o tipo da origem ou marque 'mostrar recusados'.",
             ))
             return
 
