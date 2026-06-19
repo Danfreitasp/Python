@@ -1,402 +1,194 @@
-\# CRM Consignado Local
+# Práticas Avulsas em Python
 
+Este repositório reúne projetos práticos, estudos e ferramentas desenvolvidas em Python.
 
+A proposta é centralizar aplicações criadas para aprendizado, automação de tarefas e apoio em rotinas administrativas, comerciais e pessoais. Os projetos variam desde ferramentas simples de produtividade até sistemas locais mais completos.
 
-CRM local desenvolvido em \*\*Python + Flask + SQLite\*\* para controle de propostas de crédito consignado.
+## Projetos
 
+### Consultor de Regras
 
+Ferramenta para consulta e organização de regras comerciais.
 
-O sistema foi criado para auxiliar no acompanhamento de propostas, funil de atendimento, controle de comissões, anexos de clientes e histórico de alterações, funcionando localmente no computador ou em rede local.
+Objetivo principal:
 
+* Centralizar regras de bancos e produtos;
+* Facilitar consultas rápidas;
+* Evitar duplicidade e confusão entre bancos;
+* Apoiar decisões durante atendimento ou análise de propostas.
 
+---
 
-\## Funcionalidades
+### Controle de Clientes
 
+Projeto voltado para controle de clientes, propostas e produção.
 
+Objetivo principal:
 
-\* Cadastro de propostas de consignado;
+* Organizar informações de clientes;
+* Controlar propostas;
+* Trabalhar com planilhas;
+* Filtrar dados por mês, banco, produto ou status;
+* Apoiar análises comerciais e acompanhamento de produção.
 
-\* Controle de clientes, CPF, telefone, banco, promotora e produto;
+---
 
-\* Funil visual com cards arrastáveis;
+### CRM Consignado
 
-\* Etapas editáveis;
+Sistema local em Flask + SQLite para controle de propostas de crédito consignado.
 
-\* Separação entre propostas em andamento e encerradas;
+Principais recursos:
 
-\* Controle de propostas pagas, perdidas e canceladas;
+* Cadastro de propostas;
+* Funil visual;
+* Controle de comissões;
+* Anexos;
+* Histórico de status;
+* Anotações por proposta;
+* Dashboard;
+* Mensagens padrão;
+* Backup automático;
+* Modo escuro.
 
-\* Controle financeiro de comissão;
+> Este projeto possui README próprio dentro da pasta `CRM Consignado`.
 
-\* Campos para:
+---
 
+### Gerador de Mensagem
 
+Ferramenta para gerar mensagens comerciais padronizadas.
 
-&#x20; \* Comissão;
+Objetivo principal:
 
-&#x20; \* Percentual de comissão;
+* Criar mensagens para clientes;
+* Padronizar textos de atendimento;
+* Reduzir erros manuais;
+* Facilitar cópia de mensagens para WhatsApp;
+* Apoiar rotinas de contato comercial.
 
-&#x20; \* Valor caiu na promotora;
+---
 
-&#x20; \* Valor já foi sacado;
+### Gerenciador de Senhas Local
 
-&#x20; \* Benefício bloqueado;
+Aplicação local para armazenamento e organização de senhas.
 
-&#x20; \* Banco digitado;
+Objetivo principal:
 
-&#x20; \* Número da proposta;
+* Cadastrar senhas de sites, sistemas e contas;
+* Armazenar dados localmente;
+* Utilizar senha mestra;
+* Proteger informações sensíveis;
+* Servir como estudo prático de interface gráfica, arquivos locais e segurança básica.
 
-&#x20; \* Proposta de portabilidade vinculada;
+## Tecnologias utilizadas
 
-&#x20; \* Proposta de refinanciamento vinculada;
+Os projetos podem utilizar diferentes tecnologias, dependendo da proposta de cada um:
 
-\* Criação automática de refinanciamento vinculado à portabilidade;
+* Python 3;
+* Flask;
+* SQLite;
+* HTML;
+* CSS;
+* JavaScript;
+* Pandas;
+* OpenPyXL;
+* Tkinter;
+* CustomTkinter;
+* Bibliotecas de criptografia.
 
-\* Histórico de status;
-
-\* Anotações por proposta em formato de log;
-
-\* Mensagens padrão para WhatsApp editáveis pelo sistema;
-
-\* Upload de anexos dos clientes;
-
-\* Criação automática de pasta do cliente para documentos;
-
-\* Pesquisa rápida por nome, CPF ou telefone;
-
-\* Botão para copiar CPF;
-
-\* Verificação diária de propostas com indicador visual;
-
-\* Dashboard com resumo financeiro;
-
-\* Filtro por mês em propostas encerradas;
-
-\* Backup automático do banco de dados;
-
-\* Modo claro e modo escuro.
-
-
-
-\## Tecnologias utilizadas
-
-
-
-\* Python 3
-
-\* Flask
-
-\* SQLite
-
-\* HTML
-
-\* CSS
-
-\* JavaScript
-
-
-
-\## Estrutura do projeto
-
-
+## Estrutura do repositório
 
 ```text
-
-CRM Consignado/
-
+Práticas Avulsas/
 │
-
-├── app.py
-
-├── requirements.txt
-
-├── README.md
-
+├── Consultor de Regras/
+│   └── Consulta e organização de regras comerciais
+│
+├── Controle de Clientes/
+│   └── Controle de clientes, propostas e produção
+│
+├── CRM Consignado/
+│   └── CRM local para propostas de crédito consignado
+│
+├── Gerador de Mensagem/
+│   └── Geração de mensagens comerciais padronizadas
+│
+├── Gerenciador de Senhas Local/
+│   └── Gerenciador local de senhas
+│
 ├── .gitignore
-
-│
-
-├── templates/
-
-│   └── arquivos HTML do sistema
-
-│
-
-├── static/
-
-│   ├── style.css
-
-│   └── script.js
-
-│
-
-├── data/
-
-│   └── arquivos auxiliares
-
-│
-
-└── backups/
-
-&#x20;   └── backups automáticos do banco
-
+└── README.md
 ```
 
+## Como executar os projetos
 
+Cada projeto pode ter suas próprias dependências e forma de execução.
 
-\## Arquivos que não devem ser enviados ao GitHub
-
-
-
-Este projeto trabalha com dados sensíveis de clientes. Por isso, alguns arquivos e pastas devem ficar apenas no computador local:
-
-
-
-```text
-
-database.db
-
-backups/
-
-uploads/
-
-anexos/
-
-.venv/
-
-\_\_pycache\_\_/
-
-```
-
-
-
-Nunca envie ao GitHub arquivos com CPF, documentos, contratos, planilhas reais ou banco de dados com informações de clientes.
-
-
-
-\## Instalação no Windows
-
-
-
-Abra a pasta do projeto no VS Code.
-
-
-
-Crie o ambiente virtual:
-
-
+De forma geral, entre na pasta do projeto desejado:
 
 ```bash
+cd "Nome do Projeto"
+```
 
+Crie um ambiente virtual:
+
+```bash
 python -m venv .venv
-
 ```
 
-
-
-Ative o ambiente virtual pelo CMD:
-
-
+Ative no Windows usando CMD:
 
 ```bash
-
-.venv\\Scripts\\activate.bat
-
+.venv\Scripts\activate.bat
 ```
 
-
-
-Instale as dependências:
-
-
+Instale as dependências, se houver `requirements.txt`:
 
 ```bash
-
 pip install -r requirements.txt
-
 ```
 
-
-
-Execute o sistema:
-
-
+Execute o arquivo principal:
 
 ```bash
+python nome_do_arquivo.py
+```
 
+Em projetos Flask, normalmente a execução será:
+
+```bash
 python app.py
-
 ```
 
+## Segurança
 
+Alguns projetos podem manipular dados sensíveis, como clientes, CPF, documentos, senhas, bancos de dados locais ou planilhas reais.
 
-Acesse no navegador:
+Arquivos sensíveis não devem ser enviados ao GitHub.
 
-
+Exemplos de arquivos ignorados:
 
 ```text
-
-http://127.0.0.1:5000
-
-```
-
-
-
-\## Acesso pela rede local
-
-
-
-Para outra pessoa acessar o CRM no mesmo Wi-Fi, o sistema deve estar rodando no computador principal.
-
-
-
-No arquivo `app.py`, o Flask deve estar configurado com:
-
-
-
-```python
-
-app.run(host="0.0.0.0", port=5000, debug=False)
-
-```
-
-
-
-Depois, descubra o IP do computador principal com:
-
-
-
-```bash
-
-ipconfig
-
-```
-
-
-
-A outra pessoa acessa pelo navegador usando:
-
-
-
-```text
-
-http://IP-DO-COMPUTADOR:5000
-
-```
-
-
-
-Exemplo:
-
-
-
-```text
-
-http://192.168.18.103:5000
-
-```
-
-
-
-\## Banco de dados
-
-
-
-O sistema utiliza SQLite.
-
-
-
-O arquivo principal do banco é:
-
-
-
-```text
-
 database.db
-
-```
-
-
-
-Esse arquivo é criado automaticamente ao iniciar o sistema, caso não exista.
-
-
-
-\## Backup automático
-
-
-
-O sistema cria backups automáticos do banco de dados na pasta:
-
-
-
-```text
-
+*.db
+*.sqlite
+*.sqlite3
+.venv/
 backups/
-
+uploads/
+anexos/
+documentos/
+clientes/
+__pycache__/
+.env
 ```
 
+## Observações
 
+Este repositório contém projetos em evolução.
 
-Esses backups não devem ser enviados ao GitHub.
+Alguns códigos podem ter sido criados para estudo, testes ou uso pessoal, e podem receber melhorias conforme novas necessidades surgirem.
 
+## Autor
 
-
-\## Anexos
-
-
-
-Os documentos dos clientes são salvos em uma pasta local configurada no sistema.
-
-
-
-Os anexos não devem ser enviados ao GitHub por conterem dados sensíveis.
-
-
-
-\## Uso recomendado
-
-
-
-Este CRM foi pensado para uso local ou em rede privada, por poucas pessoas.
-
-
-
-Para uso externo pela internet, recomenda-se adicionar antes:
-
-
-
-\* Login com usuário e senha;
-
-\* HTTPS;
-
-\* Controle de permissões;
-
-\* Banco de dados mais robusto;
-
-\* Hospedagem segura;
-
-\* Política de backup externo.
-
-
-
-\## Aviso de segurança
-
-
-
-Este projeto pode conter ou manipular dados sensíveis, como CPF, telefone e documentos de clientes.
-
-
-
-Antes de publicar qualquer versão no GitHub, confirme que o banco de dados, anexos, backups e planilhas reais não estão sendo enviados.
-
-
-
-\## Autor
-
-
-
-Desenvolvido para uso em operação de crédito consignado.
-
-
-
+Desenvolvido por Daniel de Freitas Pinto como parte dos estudos em Engenharia de Software e aplicações práticas em rotinas administrativas, comerciais e pessoais.
