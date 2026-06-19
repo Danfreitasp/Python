@@ -1,494 +1,224 @@
 # CRM Consignado Local
 
-CRM local desenvolvido em **Python + Flask + SQLite** para controle de propostas de crédito consignado.
-
-O sistema foi criado para auxiliar no acompanhamento de propostas, funil de atendimento, controle de comissões, anexos de clientes, histórico de alterações e organização da rotina comercial/administrativa.
-
-Ele funciona localmente no computador e também pode ser acessado por outra pessoa na mesma rede local.
-
-## Funcionalidades principais
-
-* Cadastro de propostas de crédito consignado;
-* Controle de clientes, CPF, telefone, banco, promotora e produto;
-* Funil visual com cards arrastáveis;
-* Etapas editáveis;
-* Linha visual de etapas dentro da proposta;
-* Alteração rápida de status clicando na etapa desejada;
-* Separação entre propostas em andamento e propostas encerradas;
-* Controle de propostas pagas, perdidas e canceladas;
-* Tela de propostas encerradas com filtro por mês;
-* Dashboard com resumo financeiro;
-* Controle de comissão;
-* Controle de valor disponível para saque;
-* Controle de valor que ainda falta cair na promotora;
-* Controle de valor já sacado;
-* Backup automático do banco de dados;
-* Modo claro e modo escuro;
-* Ícone e título personalizados na aba do navegador.
-
-## Campos da proposta
-
-O CRM possui campos como:
-
-* Nome do cliente;
-* CPF;
-* Telefone/WhatsApp;
-* NB ou matrícula;
-* Tipo de cliente;
-* Banco atual;
-* Banco destino;
-* Banco digitado;
-* Produto;
-* Promotora;
-* Benefício bloqueado;
-* Status;
-* Número da proposta;
-* Número da portabilidade vinculada;
-* Número do refinanciamento vinculado;
-* Valor;
-* Percentual de comissão;
-* Comissão;
-* Valor caiu na promotora;
-* Valor já foi sacado;
-* Margem após operação;
-* Responsável;
-* Previsão de saldo;
-* Próxima ação;
-* Anotações;
-* Anexos.
-
-## Funil de propostas
-
-O funil exibe apenas propostas em andamento.
-
-Quando uma proposta é marcada como:
-
-```text
-Pago
-Perdido / Cancelado
-```
-
-ela sai do funil principal e passa para a tela **Encerradas**.
-
-## Propostas encerradas
-
-A tela **Encerradas** organiza propostas finalizadas e permite filtro por mês.
-
-As propostas pagas são separadas por situação financeira:
-
-```text
-Pago - falta cair na promotora
-Pago - disponível para saque
-Pago - já sacado
-Perdido / Cancelado
-```
-
-## Controle financeiro
-
-O CRM permite controlar se a comissão da proposta já caiu na promotora e se já foi sacada.
-
-A lógica utilizada é:
-
-```text
-Valor caiu na promotora: SIM/NÃO
-Valor já foi sacado: SIM/NÃO
-```
-
-No dashboard, o sistema apresenta informações como:
-
-* Comissão prevista;
-* Comissão paga;
-* Valor a sacar;
-* Valor que falta cair na promotora;
-* Valor já sacado;
-* Total por status;
-* Total por banco;
-* Total por produto.
-
-## Portabilidade e refinanciamento vinculado
-
-O CRM permite vincular propostas de portabilidade e refinanciamento.
-
-Dentro de uma proposta de portabilidade, existe a opção de criar um refinanciamento vinculado automaticamente.
-
-Exemplo:
-
-```text
-Nº proposta da portabilidade: 12222333
-Nº proposta do refinanciamento: 12222334
-```
-
-O sistema considera que o número do refinanciamento é o número da portabilidade + 1.
-
-Ao criar o refinanciamento vinculado, o CRM aproveita os dados principais do cliente e cria uma nova proposta relacionada.
-
-## Tela interna da proposta
-
-A tela de detalhes da proposta possui uma interface organizada em abas internas:
-
-```text
-Resumo
-Editar dados
-Anotações
-Anexos
-Mensagens
-Histórico
-```
-
-Na aba **Resumo**, aparecem informações importantes para consulta rápida:
-
-* CPF com botão de copiar;
-* Telefone com botão de copiar;
-* Banco digitado;
-* Número da proposta;
-* Previsão de saldo;
-* Valor;
-* Comissão;
-* Verificação diária;
-* Propostas vinculadas;
-* Botões rápidos para marcar como Pago ou Perdido.
-
-## Verificação diária
-
-O sistema possui controle de verificação diária.
-
-Cada proposta pode ser marcada como verificada no dia.
-
-No funil, os cards indicam visualmente:
-
-```text
-Laranja: ainda não verificada hoje
-Verde: já verificada hoje
-```
-
-No dia seguinte, a proposta volta automaticamente para não verificada.
-
-## Anotações da proposta
-
-As observações foram organizadas como um histórico de anotações.
-
-Cada anotação salva:
-
-* Data;
-* Hora;
-* Texto da anotação.
-
-Exemplo:
-
-```text
-18/06/2026 15:10
-Cliente solicitou acompanhamento no INSS.
-
-18/06/2026 12:45
-Aguardando desbloqueio para pagamento do refin.
-```
-
-## Histórico de status
-
-O CRM registra alterações de status da proposta.
-
-Cada mudança salva:
-
-* Data e hora;
-* Status anterior;
-* Novo status;
-* Observação da alteração, quando informada.
-
-## Anexos
-
-O sistema permite anexar documentos dentro da proposta.
-
-Ao enviar arquivos, o CRM cria uma pasta com o nome do cliente no diretório configurado para documentos.
-
-Exemplo:
-
-```text
-C:\Users\tatia\OneDrive\DOCUMENTOS FACILITA - VILA VELHA\DANIEL\NOME DO CLIENTE
-```
-
-Os anexos podem ser enviados:
-
-* Na criação da proposta;
-* Dentro da tela de detalhes da proposta.
-
-## Mensagens para WhatsApp
-
-O CRM possui mensagens padrão para WhatsApp.
-
-As mensagens podem utilizar variáveis da proposta, como:
-
-```text
-{nome}
-{cpf}
-{telefone}
-{banco_atual}
-{banco_destino}
-{banco_digitado}
-{produto}
-{valor}
-{troco}
-{comissao}
-{status}
-```
-
-As mensagens padrão podem ser editadas dentro do próprio sistema.
-
-A partir das versões mais recentes, as mensagens editadas ficam salvas no banco de dados, evitando perda ao atualizar os arquivos do sistema.
-
-## Pesquisa rápida
-
-O sistema possui uma barra de pesquisa com sugestões.
-
-É possível buscar por:
-
-* Nome;
-* CPF;
-* Telefone.
-
-Ao selecionar um resultado, o CRM abre diretamente a proposta.
-
-## Importação de planilhas
-
-O CRM possui importação compatível com planilhas de produção.
-
-Colunas reconhecidas:
-
-```text
-DIA
-NOME
-STATUS
-TELEFONE
-CPF
-BANCO
-PRODUTO
-VALOR
-PONTOS
-BLOQUEADO
-PROMOTORA
-SALDO PMT.
-ACERTO
-MOTIVO
-```
-
-Mapeamento principal:
-
-```text
-DIA          → Data de criação
-NOME         → Nome do cliente
-STATUS       → Status
-TELEFONE     → Telefone
-CPF          → CPF
-BANCO        → Banco digitado
-PRODUTO      → Produto
-VALOR        → Valor
-PONTOS       → Comissão
-BLOQUEADO    → Benefício bloqueado
-PROMOTORA    → Promotora
-SALDO PMT.   → Valor caiu na promotora
-ACERTO       → Valor já foi sacado
-MOTIVO       → Observações/anotações
-```
-
-A importação permite escolher o mês desejado, evitando importar dados antigos sem necessidade.
-
-## Backup automático
-
-O CRM cria backups automáticos do banco de dados na pasta:
-
-```text
-backups/
-```
-
-O sistema mantém os backups mais recentes e evita acumular arquivos em excesso.
-
-## Modo escuro
-
-O sistema possui modo claro e modo escuro.
-
-A preferência fica salva no navegador.
-
-## Tecnologias utilizadas
-
-* Python 3;
-* Flask;
-* SQLite;
-* HTML;
-* CSS;
-* JavaScript;
-* Pandas;
-* OpenPyXL.
-
-## Estrutura do projeto
-
-```text
-CRM Consignado/
-│
-├── app.py
-├── requirements.txt
-├── README.md
-├── .gitignore
-│
-├── templates/
-│   └── Arquivos HTML do sistema
-│
-├── static/
-│   ├── style.css
-│   ├── script.js
-│   └── favicon.svg
-│
-├── data/
-│   └── Arquivos auxiliares
-│
-└── backups/
-    └── Backups automáticos do banco
-```
-
-## Instalação no Windows
-
-Abra a pasta do projeto no VS Code ou no terminal.
-
-Crie o ambiente virtual:
-
-```bash
+CRM local em Flask + SQLite para controle de propostas de consignado.
+
+## Recursos principais
+
+- Cadastro, edição e consulta de propostas.
+- Funil Kanban com arrastar e soltar.
+- Funil principal mostra apenas propostas em andamento.
+- Propostas `Pago` e `Perdido / Cancelado` saem do funil principal e ficam no menu **Encerradas**.
+- Menu **Encerradas** com coluna verde para pagas e vermelha para perdidas.
+- Histórico automático de status.
+- Dashboard mensal.
+- Importação e exportação CSV/XLSX.
+- Importação compatível com planilhas com colunas como DIA, NOME, STATUS, TELEFONE, CPF, BANCO, PRODUTO, VALOR, PONTOS, BLOQUEADO, PROMOTORA e MOTIVO.
+- Na importação, `PONTOS` vira `Comissão` e `MOTIVO` vira `Observações`.
+- Importação mensal: escolha o mês antes de importar. Para Excel com abas mensais, o sistema prioriza a aba do mês escolhido, como JUNHO.
+
+## Como rodar no Windows
+
+```cmd
 python -m venv .venv
-```
-
-Ative pelo CMD:
-
-```bash
 .venv\Scripts\activate.bat
-```
-
-Instale as dependências:
-
-```bash
 pip install -r requirements.txt
-```
-
-Execute o sistema:
-
-```bash
 python app.py
 ```
 
-Acesse no navegador:
+Acesse:
 
 ```text
 http://127.0.0.1:5000
 ```
 
-## Acesso pela rede local
+## Como atualizar mantendo seus dados
 
-Para permitir acesso de outro computador na mesma rede, o Flask deve estar configurado assim no final do `app.py`:
-
-```python
-if __name__ == "__main__":
-    with app.app_context():
-        init_db()
-
-    app.run(host="0.0.0.0", port=5000, debug=False)
-```
-
-No computador principal, descubra o IP com:
-
-```bash
-ipconfig
-```
-
-A outra pessoa acessa no navegador usando:
+Substitua:
 
 ```text
-http://IP-DO-COMPUTADOR:5000
+app.py
+requirements.txt
+README.md
+templates
+static
+data
 ```
 
-Exemplo:
-
-```text
-http://192.168.18.103:5000
-```
-
-## Arquivos que não devem ser enviados ao GitHub
-
-Este projeto pode trabalhar com dados sensíveis de clientes.
-
-Não envie ao GitHub:
+Não substitua:
 
 ```text
 database.db
-*.db
-*.sqlite
-*.sqlite3
-backups/
-uploads/
-anexos/
-documentos/
-clientes/
-.venv/
-__pycache__/
-.env
+.venv
 ```
 
-## Exemplo de `.gitignore`
+Se apagar o `database.db`, o sistema cria um banco vazio automaticamente ao iniciar.
 
-```gitignore
-# Ambiente virtual
-.venv/
-venv/
-env/
+## Atualização v8
 
-# Banco de dados local
-database.db
-*.db
-*.sqlite
-*.sqlite3
+- Adicionado campo **Banco digitado**.
+- Na importação da planilha de produção, a coluna **BANCO** agora entra como **Banco digitado**.
+- Para produtos de portabilidade/refinanciamento de portabilidade, se o Banco destino estiver vazio, o sistema usa o Banco digitado como Banco destino.
+- Os cards do funil passam a mostrar Banco digitado.
+- O topo de cada etapa do funil mostra a quantidade de propostas e a soma das comissões daquela etapa.
 
-# Backups
-backups/
+## Atualização v9
 
-# Anexos e documentos
-uploads/
-anexos/
-documentos/
-clientes/
+- Observações agora funcionam como **Anotações da proposta**, em formato de diário/log.
+- Cada nova anotação salva data e hora automaticamente.
+- Observações antigas/importadas são migradas automaticamente para a primeira anotação da proposta.
+- A tela de detalhes ganhou um formulário rápido para adicionar novas anotações sem apagar as anteriores.
+- O histórico de status continua separado, para mostrar mudanças de etapa e atualizações do fluxo.
 
-# Cache Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
 
-# Configurações locais
-.env
-instance/
+## v12
 
-# VS Code
-.vscode/
+- Adicionada área de **Anexos iniciais** na tela **Nova proposta**.
+- Agora é possível cadastrar a proposta e enviar documentos no mesmo formulário.
+- Ao salvar, o CRM cria automaticamente a pasta do cliente dentro da pasta base de anexos e registra os arquivos na proposta.
+- A área de anexos na tela de detalhes continua funcionando para novos envios depois do cadastro.
 
-# Sistema operacional
-.DS_Store
-Thumbs.db
-desktop.ini
-```
 
-## Segurança
+## Versão 13
 
-Este sistema pode armazenar dados sensíveis, como CPF, telefone, documentos e informações comerciais.
+- Adicionado botão **Excluir lead** na tela de detalhes da proposta.
+- Adicionado botão **Excluir lead** diretamente nos cards do funil.
+- A exclusão remove a proposta, histórico, anotações e registros de anexos.
+- Quando possível, os arquivos anexados também são apagados da pasta do cliente; se algum arquivo estiver aberto ou bloqueado pelo Windows, o CRM avisa.
 
-Recomendações:
 
-* Não publicar banco de dados real no GitHub;
-* Não subir anexos de clientes;
-* Não compartilhar backups com dados reais;
-* Usar apenas em rede confiável;
-* Adicionar login antes de disponibilizar fora da rede local;
-* Evitar exposição direta na internet sem HTTPS e autenticação.
+## v14
 
-## Observação
+- Removido o botão de exclusão dos cards do funil para evitar exclusões acidentais.
+- A exclusão de lead/proposta permanece disponível apenas na tela de detalhes da proposta.
 
-Este CRM foi desenvolvido para uso local e operacional, com foco em praticidade, organização e controle de propostas de crédito consignado.
 
-O projeto está em evolução e pode receber melhorias conforme novas necessidades surgirem.
+## v15
 
-## Autor
+- Adicionado campo **% comissão** no cadastro e edição da proposta.
+- Ao informar a porcentagem, o CRM calcula automaticamente a comissão com base no campo **Valor**.
+- O campo **Comissão** continua editável para ajustes manuais.
+- O banco antigo é atualizado automaticamente criando a coluna `comissao_percentual`.
 
-Desenvolvido por Daniel de Freitas Pinto como ferramenta prática para controle de propostas de crédito consignado e estudos em desenvolvimento de software.
+
+## Versão 17
+
+- Ajustado o botão de copiar CPF/mensagens para funcionar melhor em acesso por IP local, como `http://192.168.x.x:5000`.
+- Quando o navegador bloquear a API moderna de área de transferência, o sistema usa um método alternativo com campo temporário.
+
+## v18 - Vinculação manual de Portabilidade e Refinanciamento
+
+Esta versão adiciona campos para vincular manualmente propostas de portabilidade e refinanciamento por número de proposta.
+
+Novos campos:
+
+- Nº proposta: número da proposta atual.
+- Nº proposta da port vinculada: use no refinanciamento para informar a portabilidade relacionada.
+- Nº proposta do refin vinculado: use na portabilidade para informar o refinanciamento relacionado.
+
+Na tela de detalhes, o CRM mostra um bloco "Propostas vinculadas" com os vínculos encontrados.
+
+Exemplo de uso:
+
+1. Abra a proposta de Portabilidade e preencha o Nº proposta dela.
+2. Abra a proposta de Refinanciamento e preencha o Nº proposta da port vinculada.
+3. Ao abrir qualquer uma das duas, o bloco de propostas vinculadas mostrará a outra proposta.
+
+O banco antigo é atualizado automaticamente ao iniciar o sistema.
+
+
+## Correção v20
+
+- Corrigido erro ao salvar edição da proposta: quantidade incorreta de parâmetros no UPDATE do SQLite.
+
+
+## Novidade v21
+
+- Adicionado botão **Criar refin vinculado** dentro da proposta de Portabilidade.
+- O CRM usa o número da proposta da portabilidade e gera o número do refinanciamento como **número da port + 1**.
+- O refinanciamento criado copia dados principais do cliente, banco digitado, promotora, telefone, CPF e responsável.
+- A portabilidade recebe automaticamente o número do refin vinculado e o refin recebe o número da port vinculada.
+- Se já existir uma proposta com o número do refinanciamento, o CRM apenas cria o vínculo e abre a proposta existente.
+
+
+## v22 - Mensagens preservadas
+
+A partir desta versão, as mensagens padrão editadas no CRM são salvas no `database.db`. Assim, ao atualizar o sistema substituindo as pastas `templates`, `static` e `data`, as mensagens personalizadas não são perdidas. O arquivo `data/modelos_mensagens.json` fica apenas como fallback/backup legível.
+
+
+## v23 - Modo escuro
+
+- Adicionado botão no topo para alternar entre modo claro e modo escuro.
+- A preferência fica salva no navegador usando `localStorage`.
+- Não altera o banco de dados e não exige nova dependência.
+
+### Atualização
+
+Substitua `app.py`, `requirements.txt`, `README.md`, `templates`, `static` e `data`.
+
+Não substitua `database.db`, `.venv` nem a pasta `backups`.
+
+
+## Identidade visual da aba
+
+A versão atual usa o nome **CRM Consig** no título do navegador e inclui um favicon próprio em `static/favicon.svg`.
+
+Isso ajuda a identificar rapidamente a aba do sistema quando há várias abas abertas no navegador.
+
+
+## v25 - Linha de etapas na proposta
+
+- Adicionada uma linha visual de etapas dentro da tela de detalhes da proposta.
+- Cada etapa aparece como um círculo clicável.
+- Ao clicar em uma etapa, a proposta muda diretamente para aquele status.
+- Etapas anteriores ficam em verde claro e a etapa atual fica em verde destacado.
+- Funciona também no modo escuro.
+
+
+## v26
+
+Ajustes de interface na tela de detalhes da proposta:
+
+- Removida a linha visual de etapas, que estava deixando a tela poluída;
+- Adicionada a seção recolhível **Editar dados desta proposta** dentro da própria proposta;
+- A edição completa continua disponível pelo botão **Editar**, mas agora também pode ser feita sem sair da tela de detalhes.
+
+## Atualização v27
+
+- Reorganiza a tela de detalhes da proposta em abas internas: Resumo, Editar dados, Anotações, Anexos, Mensagens e Histórico.
+- Restaura a linha visual de etapas clicável dentro da proposta.
+- Remove o formulário tradicional de mudança de status para reduzir poluição visual.
+- Mantém a edição rápida dos dados dentro da própria proposta.
+- Move informações menos usadas para a área recolhível de dados completos.
+
+
+## Atualização v30
+
+- Adicionada área de **Anotações recentes** no resumo da proposta, abaixo de Valor e Comissão.
+- A aba **Anotações** continua disponível para visualizar o histórico completo e adicionar novos registros.
+
+## Atualização v31
+
+- Adicionado campo **Endereço do cliente**.
+- Adicionado campo **Dados bancários do cliente**.
+- Os novos campos ficam em **Dados completos da proposta** e também podem ser editados na aba **Editar dados**.
+- Os campos foram incluídos na criação, edição, importação, exportação e migração automática do banco.
+
+## Atualização v32
+
+- Adicionada base de **Clientes** separada das propostas.
+- O cliente é identificado por **CPF + NB/Matrícula**.
+- Ao criar ou editar uma proposta, o CRM cria/atualiza automaticamente o cadastro do cliente.
+- Ao digitar um CPF na tela de cadastro/edição, o CRM consulta matrículas já cadastradas.
+- Se houver clientes encontrados, o campo de matrícula mostra opções como:
+  - Matrícula 1
+  - Matrícula 2
+  - Cadastrar nova matrícula
+- Ao selecionar uma matrícula cadastrada, o CRM preenche automaticamente:
+  - Nome
+  - Telefone
+  - Tipo de cliente
+  - Endereço
+  - Dados bancários
+- O campo **Benefício bloqueado** não é reaproveitado do cliente, porque pode mudar de uma proposta para outra.
+- A importação de planilhas também alimenta a base de clientes automaticamente.
+- Propostas antigas são migradas automaticamente para a tabela de clientes ao iniciar o sistema.

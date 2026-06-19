@@ -9,6 +9,116 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // v32: sugestões de cliente por CPF + matrícula.
+    const cpfField = document.querySelector('input[name="cpf"]');
+    const matriculaField = document.querySelector('input[name="nb_matricula"]');
+    const matriculaSelect = document.getElementById('cliente-matricula-select');
+    const clienteAjuda = document.querySelector('.cliente-sugestao-ajuda');
+
+    function setFieldValue(name, value) {
+        const field = document.querySelector(`[name="${name}"]`);
+        if (field && value !== undefined && value !== null) {
+            field.value = value;
+        }
+    }
+
+    function preencherDadosCliente(cliente, novaMatricula = false) {
+        if (!cliente) return;
+        setFieldValue('nome', cliente.nome || '');
+        setFieldValue('telefone', cliente.telefone || '');
+        setFieldValue('tipo_cliente', cliente.tipo_cliente || '');
+        setFieldValue('endereco', cliente.endereco || '');
+        setFieldValue('dados_bancarios', cliente.dados_bancarios || '');
+        if (!novaMatricula) {
+            setFieldValue('nb_matricula', cliente.nb_matricula || '');
+        } else if (matriculaField) {
+            matriculaField.value = '';
+            matriculaField.focus();
+        }
+        // Importante: benefício bloqueado não é reaproveitado, porque pode mudar a cada proposta.
+    }
+
+    let clientesCPFCache = [];
+    let ultimaConsultaClientes = 0;
+
+    function montarSelectMatriculas(clientes) {
+        matriculaSelect.innerHTML = '<option value="">Selecione uma matrícula cadastrada</option>';
+
+        clientes.forEach((cliente, index) => {
+            const option = document.createElement('option');
+            option.value = String(index);
+            option.textContent = cliente.label || `Matrícula ${index + 1}`;
+            matriculaSelect.appendChild(option);
+        });
+
+        const nova = document.createElement('option');
+        nova.value = 'nova';
+        nova.textContent = 'Cadastrar nova matrícula';
+        matriculaSelect.appendChild(nova);
+    }
+
+    async function buscarClientesPorCpf() {
+        if (!cpfField || !matriculaSelect) return;
+        const consultaAtual = ++ultimaConsultaClientes;
+        const digits = cpfField.value.replace(/\D/g, '');
+
+        matriculaSelect.classList.add('hidden');
+        matriculaSelect.innerHTML = '<option value="">Selecione uma matrícula cadastrada</option>';
+        clientesCPFCache = [];
+
+        if (digits.length !== 11) {
+            if (clienteAjuda) clienteAjuda.textContent = 'Digite o CPF para consultar matrículas já cadastradas.';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/clientes/por-cpf?cpf=${encodeURIComponent(cpfField.value)}`);
+            if (!response.ok) throw new Error('Falha ao consultar clientes.');
+            const clientes = await response.json();
+
+            // Evita duplicação quando blur/change disparam consultas quase ao mesmo tempo.
+            if (consultaAtual !== ultimaConsultaClientes) return;
+
+            clientesCPFCache = clientes;
+
+            if (!clientesCPFCache.length) {
+                if (clienteAjuda) clienteAjuda.textContent = 'Nenhum cliente cadastrado para este CPF. Cadastre normalmente.';
+                return;
+            }
+
+            montarSelectMatriculas(clientesCPFCache);
+            matriculaSelect.classList.remove('hidden');
+            if (clienteAjuda) clienteAjuda.textContent = 'CPF já cadastrado. Selecione uma matrícula ou cadastre uma nova.';
+        } catch (error) {
+            console.error(error);
+            if (consultaAtual === ultimaConsultaClientes && clienteAjuda) clienteAjuda.textContent = 'Não foi possível consultar matrículas agora.';
+        }
+    }
+
+    if (cpfField && matriculaSelect) {
+        cpfField.addEventListener('blur', buscarClientesPorCpf);
+        cpfField.addEventListener('change', buscarClientesPorCpf);
+        if (cpfField.value.replace(/\D/g, '').length === 11) {
+            buscarClientesPorCpf();
+        }
+
+        matriculaSelect.addEventListener('change', () => {
+            const value = matriculaSelect.value;
+            if (value === 'nova') {
+                const base = clientesCPFCache[0];
+                preencherDadosCliente(base, true);
+                if (clienteAjuda) clienteAjuda.textContent = 'Nova matrícula: dados básicos reaproveitados. Informe a matrícula nova.';
+                return;
+            }
+            const cliente = clientesCPFCache[Number(value)];
+            if (cliente) {
+                preencherDadosCliente(cliente, false);
+                if (clienteAjuda) clienteAjuda.textContent = 'Dados do cliente preenchidos automaticamente.';
+            }
+        });
+    }
+
+
     document.querySelectorAll('.money-mask').forEach((input) => {
         input.addEventListener('blur', () => {
             const digits = input.value.replace(/\D/g, '');

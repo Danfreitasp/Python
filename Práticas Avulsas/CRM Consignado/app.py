@@ -99,6 +99,8 @@ CAMPOS_PROPOSTA = [
     "status",
     "responsavel",
     "telefone",
+    "endereco",
+    "dados_bancarios",
     "proxima_acao",
     "data_retorno",
     "observacoes",
@@ -128,6 +130,7 @@ def init_db() -> None:
         """
         CREATE TABLE IF NOT EXISTS propostas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER,
             nome TEXT NOT NULL,
             cpf TEXT,
             nb_matricula TEXT,
@@ -153,6 +156,8 @@ def init_db() -> None:
             status TEXT NOT NULL DEFAULT 'Novo lead',
             responsavel TEXT,
             telefone TEXT,
+            endereco TEXT,
+            dados_bancarios TEXT,
             data_criacao TEXT NOT NULL,
             data_atualizacao TEXT NOT NULL,
             proxima_acao TEXT,
@@ -222,8 +227,28 @@ def init_db() -> None:
         """
     )
 
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS clientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            cpf TEXT NOT NULL,
+            nb_matricula TEXT NOT NULL DEFAULT '',
+            telefone TEXT,
+            tipo_cliente TEXT,
+            endereco TEXT,
+            dados_bancarios TEXT,
+            data_criacao TEXT NOT NULL,
+            data_atualizacao TEXT NOT NULL,
+            UNIQUE(cpf, nb_matricula)
+        )
+        """
+    )
+
     # Migrações incrementais: adiciona colunas em bancos criados nas versões anteriores.
     colunas_propostas = {row["name"] for row in db.execute("PRAGMA table_info(propostas)").fetchall()}
+    if "cliente_id" not in colunas_propostas:
+        db.execute("ALTER TABLE propostas ADD COLUMN cliente_id INTEGER")
     if "numero_proposta" not in colunas_propostas:
         db.execute("ALTER TABLE propostas ADD COLUMN numero_proposta TEXT")
     if "numero_port_vinculada" not in colunas_propostas:
@@ -246,6 +271,10 @@ def init_db() -> None:
         db.execute("ALTER TABLE propostas ADD COLUMN valor_sacado TEXT DEFAULT 'NÃO'")
     if "data_verificacao" not in colunas_propostas:
         db.execute("ALTER TABLE propostas ADD COLUMN data_verificacao TEXT")
+    if "endereco" not in colunas_propostas:
+        db.execute("ALTER TABLE propostas ADD COLUMN endereco TEXT")
+    if "dados_bancarios" not in colunas_propostas:
+        db.execute("ALTER TABLE propostas ADD COLUMN dados_bancarios TEXT")
 
     qtd_status = db.execute("SELECT COUNT(*) AS total FROM status_etapas").fetchone()["total"]
     if qtd_status == 0:
@@ -306,6 +335,7 @@ def init_db() -> None:
                 ),
             )
     sincronizar_modelos_banco(db)
+    migrar_clientes_a_partir_de_propostas()
     db.commit()
 
 
@@ -902,11 +932,97 @@ def dados_formulario() -> dict[str, Any]:
         "status": status,
         "responsavel": limpar_texto(request.form.get("responsavel")),
         "telefone": limpar_texto(request.form.get("telefone")),
+        "endereco": limpar_texto(request.form.get("endereco")),
+        "dados_bancarios": limpar_texto(request.form.get("dados_bancarios")),
         "proxima_acao": limpar_texto(request.form.get("proxima_acao")),
         "data_retorno": limpar_texto(request.form.get("data_retorno")),
         "observacoes": limpar_texto(request.form.get("observacoes")),
     }
 
+
+
+def chave_cliente(cpf: Any, nb_matricula: Any) -> tuple[str, str]:
+    """Retorna a chave lógica do cliente.
+
+    A chave é CPF + matrícula. Quando a matrícula está vazia, usamos string vazia
+    para permitir reaproveitamento em cadastros antigos, mas o ideal é preencher a matrícula.
+    """
+    return formatar_cpf(limpar_texto(cpf)), limpar_texto(nb_matricula)
+
+
+def salvar_cliente_dos_dados(dados: dict[str, Any] | sqlite3.Row) -> int | None:
+    """Cria ou atualiza o cadastro do cliente a partir dos dados da proposta.
+
+    O benefício bloqueado não é salvo no cadastro do cliente porque muda de uma
+    proposta para outra. A chave usada é CPF + NB/Matrícula.
+    """
+    item = dict(dados)
+    nome = limpar_texto(item.get("nome"))
+    cpf, nb = chave_cliente(item.get("cpf"), item.get("nb_matricula"))
+    if not nome or not cpf:
+        return None
+
+    agora = agora_iso()
+    db = get_db()
+    existente = db.execute(
+        "SELECT id FROM clientes WHERE cpf = ? AND COALESCE(nb_matricula, '') = ? LIMIT 1",
+        (cpf, nb),
+    ).fetchone()
+    if existente:
+        db.execute(
+            """
+            UPDATE clientes SET
+                nome = ?, telefone = ?, tipo_cliente = ?, endereco = ?, dados_bancarios = ?, data_atualizacao = ?
+            WHERE id = ?
+            """,
+            (
+                nome,
+                limpar_texto(item.get("telefone")),
+                limpar_texto(item.get("tipo_cliente")),
+                limpar_texto(item.get("endereco")),
+                limpar_texto(item.get("dados_bancarios")),
+                agora,
+                existente["id"],
+            ),
+        )
+        return int(existente["id"])
+
+    cursor = db.execute(
+        """
+        INSERT INTO clientes (
+            nome, cpf, nb_matricula, telefone, tipo_cliente, endereco, dados_bancarios, data_criacao, data_atualizacao
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            nome, cpf, nb,
+            limpar_texto(item.get("telefone")),
+            limpar_texto(item.get("tipo_cliente")),
+            limpar_texto(item.get("endereco")),
+            limpar_texto(item.get("dados_bancarios")),
+            agora, agora,
+        ),
+    )
+    return int(cursor.lastrowid)
+
+
+def migrar_clientes_a_partir_de_propostas() -> None:
+    db = get_db()
+    propostas = db.execute(
+        """
+        SELECT * FROM propostas
+        WHERE COALESCE(TRIM(cpf), '') <> ''
+          AND (cliente_id IS NULL OR cliente_id = '')
+        ORDER BY id ASC
+        """
+    ).fetchall()
+    alterou = False
+    for proposta in propostas:
+        cliente_id = salvar_cliente_dos_dados(proposta)
+        if cliente_id:
+            db.execute("UPDATE propostas SET cliente_id = ? WHERE id = ?", (cliente_id, proposta["id"]))
+            alterou = True
+    if alterou:
+        db.commit()
 
 def buscar_proposta(proposta_id: int) -> sqlite3.Row | None:
     return get_db().execute("SELECT * FROM propostas WHERE id = ?", (proposta_id,)).fetchone()
@@ -1187,17 +1303,17 @@ def nova_proposta():
         cursor = db.execute(
             """
             INSERT INTO propostas (
-                nome, cpf, nb_matricula, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
+                cliente_id, nome, cpf, nb_matricula, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
                 promotora, beneficio_bloqueado, valor_caiu_promotora, valor_sacado, data_verificacao, parcela_atual, nova_parcela, troco, comissao_percentual, comissao, margem_apos, status, responsavel,
-                telefone, data_criacao, data_atualizacao, proxima_acao, data_retorno, observacoes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                telefone, endereco, dados_bancarios, data_criacao, data_atualizacao, proxima_acao, data_retorno, observacoes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                dados["nome"], dados["cpf"], dados["nb_matricula"], dados["numero_proposta"],
+                salvar_cliente_dos_dados(dados), dados["nome"], dados["cpf"], dados["nb_matricula"], dados["numero_proposta"],
                 dados["numero_port_vinculada"], dados["numero_refin_vinculada"], dados["tipo_cliente"],
                 dados["banco_atual"], dados["banco_destino"], dados["banco_digitado"], dados["produto"],
                 dados["promotora"], dados["beneficio_bloqueado"], dados["valor_caiu_promotora"], dados["valor_sacado"], None, dados["parcela_atual"], dados["nova_parcela"], dados["troco"], dados["comissao_percentual"], dados["comissao"], dados["margem_apos"],
-                dados["status"], dados["responsavel"], dados["telefone"], agora, agora,
+                dados["status"], dados["responsavel"], dados["telefone"], dados["endereco"], dados["dados_bancarios"], agora, agora,
                 dados["proxima_acao"], dados["data_retorno"], dados["observacoes"],
             ),
         )
@@ -1281,16 +1397,19 @@ def criar_refin_vinculado(proposta_id: int):
     cursor = db.execute(
         """
         INSERT INTO propostas (
-            nome, cpf, nb_matricula, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
+            cliente_id, nome, cpf, nb_matricula, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
             promotora, beneficio_bloqueado, valor_caiu_promotora, valor_sacado, data_verificacao, parcela_atual, nova_parcela, troco, comissao_percentual, comissao, margem_apos, status, responsavel,
-            telefone, data_criacao, data_atualizacao, proxima_acao, data_retorno, observacoes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            telefone, endereco, dados_bancarios, data_criacao, data_atualizacao, proxima_acao, data_retorno, observacoes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
+            (port["cliente_id"] if "cliente_id" in port.keys() and port["cliente_id"] else salvar_cliente_dos_dados(port)),
             port["nome"], port["cpf"], port["nb_matricula"], numero_refin, numero_port, "",
             port["tipo_cliente"], banco_refin, banco_refin, banco_refin, "Refinanciamento",
             port["promotora"], port["beneficio_bloqueado"] or "NÃO", "NÃO", "NÃO", None,
             0, 0, 0, 0, 0, "", status_inicial, port["responsavel"], port["telefone"],
+            port["endereco"] if "endereco" in port.keys() else "",
+            port["dados_bancarios"] if "dados_bancarios" in port.keys() else "",
             agora, agora, "", "", observacao,
         ),
     )
@@ -1373,6 +1492,57 @@ def api_buscar_propostas():
         for p in propostas
     ])
 
+
+
+@app.route("/api/clientes/por-cpf")
+def api_clientes_por_cpf():
+    cpf = formatar_cpf(limpar_texto(request.args.get("cpf")))
+    if len(re.sub(r"\D", "", cpf)) < 11:
+        return jsonify([])
+    clientes = get_db().execute(
+        """
+        SELECT id, nome, cpf, nb_matricula, telefone, tipo_cliente, endereco, dados_bancarios, data_atualizacao
+        FROM clientes
+        WHERE cpf = ?
+        ORDER BY
+            CASE WHEN COALESCE(NULLIF(nb_matricula, ''), '') = '' THEN 1 ELSE 0 END,
+            nb_matricula ASC,
+            data_atualizacao DESC,
+            id DESC
+        """,
+        (cpf,),
+    ).fetchall()
+
+    # Evita sugestões duplicadas para o mesmo CPF + matrícula.
+    # Também evita mostrar "Sem matrícula" quando já existe uma matrícula real para o CPF,
+    # porque isso confundiria o cadastro de nova proposta.
+    por_matricula = {}
+    possui_matricula_real = any((c["nb_matricula"] or "").strip() for c in clientes)
+
+    for c in clientes:
+        nb = (c["nb_matricula"] or "").strip()
+        if not nb and possui_matricula_real:
+            continue
+        chave = nb or "__sem_matricula__"
+        if chave not in por_matricula:
+            por_matricula[chave] = c
+
+    resposta = []
+    for idx, c in enumerate(por_matricula.values(), start=1):
+        nb = (c["nb_matricula"] or "").strip()
+        label = f"Matrícula {idx}: {nb}" if nb else "Sem matrícula cadastrada"
+        resposta.append({
+            "id": c["id"],
+            "label": label,
+            "nome": c["nome"] or "",
+            "cpf": c["cpf"] or "",
+            "nb_matricula": c["nb_matricula"] or "",
+            "telefone": c["telefone"] or "",
+            "tipo_cliente": c["tipo_cliente"] or "",
+            "endereco": c["endereco"] or "",
+            "dados_bancarios": c["dados_bancarios"] or "",
+        })
+    return jsonify(resposta)
 
 @app.route("/proposta/<int:proposta_id>/anexos", methods=["POST"])
 def enviar_anexos(proposta_id: int):
@@ -1535,18 +1705,18 @@ def editar_proposta(proposta_id: int):
         db.execute(
             """
             UPDATE propostas SET
-                nome = ?, cpf = ?, nb_matricula = ?, numero_proposta = ?, numero_port_vinculada = ?, numero_refin_vinculada = ?, tipo_cliente = ?, banco_atual = ?,
+                cliente_id = ?, nome = ?, cpf = ?, nb_matricula = ?, numero_proposta = ?, numero_port_vinculada = ?, numero_refin_vinculada = ?, tipo_cliente = ?, banco_atual = ?,
                 banco_destino = ?, banco_digitado = ?, produto = ?, promotora = ?, beneficio_bloqueado = ?, valor_caiu_promotora = ?, valor_sacado = ?, parcela_atual = ?, nova_parcela = ?, troco = ?,
-                comissao_percentual = ?, comissao = ?, margem_apos = ?, status = ?, responsavel = ?, telefone = ?, data_atualizacao = ?,
+                comissao_percentual = ?, comissao = ?, margem_apos = ?, status = ?, responsavel = ?, telefone = ?, endereco = ?, dados_bancarios = ?, data_atualizacao = ?,
                 proxima_acao = ?, data_retorno = ?, observacoes = ?
             WHERE id = ?
             """,
             (
-                dados["nome"], dados["cpf"], dados["nb_matricula"], dados["numero_proposta"],
+                salvar_cliente_dos_dados(dados), dados["nome"], dados["cpf"], dados["nb_matricula"], dados["numero_proposta"],
                 dados["numero_port_vinculada"], dados["numero_refin_vinculada"], dados["tipo_cliente"],
                 dados["banco_atual"], dados["banco_destino"], dados["banco_digitado"], dados["produto"],
                 dados["promotora"], dados["beneficio_bloqueado"], dados["valor_caiu_promotora"], dados["valor_sacado"], dados["parcela_atual"], dados["nova_parcela"], dados["troco"], dados["comissao_percentual"], dados["comissao"], dados["margem_apos"],
-                dados["status"], dados["responsavel"], dados["telefone"], agora_iso(),
+                dados["status"], dados["responsavel"], dados["telefone"], dados["endereco"], dados["dados_bancarios"], agora_iso(),
                 dados["proxima_acao"], dados["data_retorno"], dados["observacoes"], proposta_id,
             ),
         )
@@ -1988,6 +2158,13 @@ def normalizar_cabecalho(cabecalho: Any) -> str:
         "numero_proposta_refin": "numero_refin_vinculada",
         "dia": "data_criacao",
         "data": "data_criacao",
+        "endereco": "endereco",
+        "endereço": "endereco",
+        "dados_bancarios": "dados_bancarios",
+        "dados_bancarios_cliente": "dados_bancarios",
+        "banco_cliente": "dados_bancarios",
+        "conta_cliente": "dados_bancarios",
+        "dados_da_conta": "dados_bancarios",
     }
     return aliases.get(texto, texto)
 
@@ -2068,12 +2245,21 @@ def importar():
         cursor = db.execute(
             """
             INSERT INTO propostas (
-                nome, cpf, nb_matricula, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
+                cliente_id, nome, cpf, nb_matricula, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
                 promotora, beneficio_bloqueado, valor_caiu_promotora, valor_sacado, data_verificacao, parcela_atual, nova_parcela, troco, comissao_percentual, comissao, margem_apos, status, responsavel,
-                telefone, data_criacao, data_atualizacao, proxima_acao, data_retorno, observacoes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                telefone, endereco, dados_bancarios, data_criacao, data_atualizacao, proxima_acao, data_retorno, observacoes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                salvar_cliente_dos_dados({
+                    "nome": nome_cliente,
+                    "cpf": formatar_cpf(texto_planilha(row.get("cpf"))),
+                    "nb_matricula": texto_planilha(row.get("nb_matricula")),
+                    "telefone": texto_planilha(row.get("telefone")),
+                    "tipo_cliente": texto_planilha(row.get("tipo_cliente")),
+                    "endereco": texto_planilha(row.get("endereco")),
+                    "dados_bancarios": texto_planilha(row.get("dados_bancarios")),
+                }),
                 nome_cliente,
                 formatar_cpf(texto_planilha(row.get("cpf"))),
                 texto_planilha(row.get("nb_matricula")),
@@ -2099,6 +2285,8 @@ def importar():
                 status,
                 texto_planilha(row.get("responsavel")),
                 texto_planilha(row.get("telefone")),
+                texto_planilha(row.get("endereco")),
+                texto_planilha(row.get("dados_bancarios")),
                 parse_data_iso(row.get("data_criacao")) or agora,
                 agora,
                 texto_planilha(row.get("proxima_acao")),

@@ -7,6 +7,10 @@
     </label>
     <label>NB ou matrícula
         <input name="nb_matricula" value="{{ proposta.nb_matricula or proposta['nb_matricula'] or '' }}">
+        <small class="muted cliente-sugestao-ajuda">Digite o CPF para consultar matrículas já cadastradas.</small>
+        <select id="cliente-matricula-select" class="cliente-matricula-select hidden" aria-label="Matrículas encontradas para este CPF">
+            <option value="">Selecione uma matrícula cadastrada</option>
+        </select>
     </label>
     <label>Nº proposta
         <input name="numero_proposta" value="{{ proposta.numero_proposta or proposta['numero_proposta'] or '' }}" placeholder="Número desta proposta">
@@ -104,6 +108,13 @@
         <input type="date" name="data_retorno" value="{{ proposta.data_retorno or proposta['data_retorno'] or '' }}">
     </label>
 </div>
+<label class="full-label">Endereço do cliente
+    <textarea name="endereco" rows="3" placeholder="Rua, número, bairro, cidade, UF, CEP">{{ proposta.endereco or proposta['endereco'] or '' }}</textarea>
+</label>
+<label class="full-label">Dados bancários do cliente
+    <textarea name="dados_bancarios" rows="3" placeholder="Banco, agência, conta, tipo de conta, chave Pix ou informações necessárias">{{ proposta.dados_bancarios or proposta['dados_bancarios'] or '' }}</textarea>
+</label>
+
 <label class="full-label">Observação inicial / importada
     <textarea name="observacoes" rows="5" placeholder="Use este campo apenas para a primeira observação. Depois, registre novas anotações na tela de detalhes da proposta.">{{ proposta.observacoes or proposta['observacoes'] or '' }}</textarea>
 </label>

@@ -140,14 +140,33 @@
                     </div>
                 </section>
 
-                <section class="note-box compact-note finance-highlight-box">
-                    <div>
-                        <small>Valor</small>
-                        <strong>{{ br_moeda(proposta.troco) }}</strong>
+                <section class="note-box compact-note finance-side-panel">
+                    <div class="finance-highlight-box">
+                        <div>
+                            <small>Valor</small>
+                            <strong>{{ br_moeda(proposta.troco) }}</strong>
+                        </div>
+                        <div>
+                            <small>Comissão</small>
+                            <strong>{{ br_moeda(proposta.comissao) }}</strong>
+                        </div>
                     </div>
-                    <div>
-                        <small>Comissão</small>
-                        <strong>{{ br_moeda(proposta.comissao) }}</strong>
+
+                    <div class="recent-notes-box">
+                        <div class="recent-notes-header">
+                            <strong>Anotações recentes</strong>
+                            <small>{{ anotacoes|length }} registro(s)</small>
+                        </div>
+                        <div class="recent-notes-list">
+                            {% for anotacao in anotacoes[:3] %}
+                                <article class="recent-note-item">
+                                    <small>{{ br_data_hora(anotacao.data_hora) }}</small>
+                                    <p>{{ anotacao.texto }}</p>
+                                </article>
+                            {% else %}
+                                <p class="empty small">Sem anotações ainda.</p>
+                            {% endfor %}
+                        </div>
                     </div>
                 </section>
             </div>
@@ -164,6 +183,8 @@
                     <div><small>Promotora</small><span>{{ proposta.promotora or '-' }}</span></div>
                     <div><small>Benefício bloqueado</small><span>{{ proposta.beneficio_bloqueado or 'NÃO' }}</span></div>
                     <div><small>Telefone</small><span>{{ proposta.telefone or '-' }}</span></div>
+                    <div class="wide-info"><small>Endereço</small><span>{{ proposta.endereco or '-' }}</span></div>
+                    <div class="wide-info"><small>Dados bancários</small><span>{{ proposta.dados_bancarios or '-' }}</span></div>
                     <div><small>Parcela atual</small><span>{{ br_moeda(proposta.parcela_atual) }}</span></div>
                     <div><small>Nova parcela</small><span>{{ br_moeda(proposta.nova_parcela) }}</span></div>
                     <div><small>Valor</small><span>{{ br_moeda(proposta.troco) }}</span></div>
