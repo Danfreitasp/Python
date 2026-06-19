@@ -95,7 +95,7 @@ Se apagar o `database.db`, o sistema cria um banco vazio automaticamente ao inic
 ## v15
 
 - Adicionado campo **% comissão** no cadastro e edição da proposta.
-- Ao informar a porcentagem, o CRM calcula automaticamente a comissão com base no campo **Troco**.
+- Ao informar a porcentagem, o CRM calcula automaticamente a comissão com base no campo **Valor**.
 - O campo **Comissão** continua editável para ajustes manuais.
 - O banco antigo é atualizado automaticamente criando a coluna `comissao_percentual`.
 
@@ -156,3 +156,36 @@ A partir desta versão, as mensagens padrão editadas no CRM são salvas no `dat
 Substitua `app.py`, `requirements.txt`, `README.md`, `templates`, `static` e `data`.
 
 Não substitua `database.db`, `.venv` nem a pasta `backups`.
+
+
+## Identidade visual da aba
+
+A versão atual usa o nome **CRM Consig** no título do navegador e inclui um favicon próprio em `static/favicon.svg`.
+
+Isso ajuda a identificar rapidamente a aba do sistema quando há várias abas abertas no navegador.
+
+
+## v25 - Linha de etapas na proposta
+
+- Adicionada uma linha visual de etapas dentro da tela de detalhes da proposta.
+- Cada etapa aparece como um círculo clicável.
+- Ao clicar em uma etapa, a proposta muda diretamente para aquele status.
+- Etapas anteriores ficam em verde claro e a etapa atual fica em verde destacado.
+- Funciona também no modo escuro.
+
+
+## v26
+
+Ajustes de interface na tela de detalhes da proposta:
+
+- Removida a linha visual de etapas, que estava deixando a tela poluída;
+- Adicionada a seção recolhível **Editar dados desta proposta** dentro da própria proposta;
+- A edição completa continua disponível pelo botão **Editar**, mas agora também pode ser feita sem sair da tela de detalhes.
+
+## Atualização v27
+
+- Reorganiza a tela de detalhes da proposta em abas internas: Resumo, Editar dados, Anotações, Anexos, Mensagens e Histórico.
+- Restaura a linha visual de etapas clicável dentro da proposta.
+- Remove o formulário tradicional de mudança de status para reduzir poluição visual.
+- Mantém a edição rápida dos dados dentro da própria proposta.
+- Move informações menos usadas para a área recolhível de dados completos.

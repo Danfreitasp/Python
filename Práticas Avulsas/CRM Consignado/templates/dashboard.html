@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% set titulo = 'Dashboard' %}
-{% set subtitulo = 'Resumo mensal de propostas, troco e conversões.' %}
+{% set subtitulo = 'Resumo mensal de propostas, valores e conversões.' %}
 {% block content %}
 <section class="card">
     <form method="get" class="month-filter">
@@ -15,8 +15,8 @@
     <div class="metric-card"><small>Total no mês</small><strong>{{ dados.total }}</strong></div>
     <div class="metric-card"><small>Pagas</small><strong>{{ dados.pagas }}</strong></div>
     <div class="metric-card"><small>Perdidas/canceladas</small><strong>{{ dados.perdidas }}</strong></div>
-    <div class="metric-card"><small>Troco previsto</small><strong>{{ br_moeda(dados.troco_previsto) }}</strong></div>
-    <div class="metric-card"><small>Troco pago</small><strong>{{ br_moeda(dados.troco_pago) }}</strong></div>
+    <div class="metric-card"><small>Valor previsto</small><strong>{{ br_moeda(dados.troco_previsto) }}</strong></div>
+    <div class="metric-card"><small>Valor pago</small><strong>{{ br_moeda(dados.troco_pago) }}</strong></div>
     <div class="metric-card"><small>Comissão prevista</small><strong>{{ br_moeda(dados.comissao_prevista) }}</strong></div>
     <div class="metric-card"><small>Comissão paga</small><strong>{{ br_moeda(dados.comissao_paga) }}</strong></div>
     <div class="metric-card highlight-card"><small>Valor a sacar</small><strong>{{ br_moeda(dados.valor_a_sacar) }}</strong></div>

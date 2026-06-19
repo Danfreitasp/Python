@@ -46,6 +46,15 @@ body {
     font-size: 14px;
     letter-spacing: .08em;
 }
+
+.brand-icon {
+    font-weight: 700;
+    letter-spacing: .02em;
+    background: linear-gradient(135deg, #2563eb, #0f172a);
+    color: #ffffff;
+    box-shadow: 0 8px 22px rgba(37, 99, 235, .20);
+}
+
 .brand p { margin: 0; font-size: 18px; }
 .brand small { color: #9ca3af; }
 
@@ -970,4 +979,419 @@ html[data-theme="escuro"] ::-webkit-scrollbar-thumb {
 
 html[data-theme="escuro"] ::-webkit-scrollbar-thumb:hover {
     background: #64748b;
+}
+
+
+/* Linha de etapas dentro da proposta */
+.status-progress-box {
+    border: 1px solid var(--line);
+    background: var(--soft);
+    border-radius: 18px;
+    padding: 14px;
+}
+
+.status-progress {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    overflow-x: auto;
+    padding: 10px 2px 4px;
+    scrollbar-width: thin;
+}
+
+.status-step-form {
+    position: relative;
+    flex: 0 0 118px;
+    display: flex;
+    justify-content: center;
+}
+
+.status-step-form::before {
+    content: "";
+    position: absolute;
+    top: 17px;
+    left: -50%;
+    width: 100%;
+    height: 3px;
+    background: #cbd5e1;
+    z-index: 0;
+}
+
+.status-step-form:first-child::before {
+    display: none;
+}
+
+.status-step-form.is-done::before,
+.status-step-form.is-current::before {
+    background: #22c55e;
+}
+
+.status-step-button {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    justify-items: center;
+    gap: 7px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    padding: 0 6px;
+}
+
+.status-step-circle {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 2px solid #cbd5e1;
+    background: var(--card);
+    color: var(--muted);
+    font-size: 13px;
+    transition: transform .15s ease, border-color .15s ease, background .15s ease;
+}
+
+.status-step-label {
+    max-width: 104px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.25;
+    color: var(--muted);
+}
+
+.status-step-button:hover .status-step-circle {
+    transform: translateY(-1px);
+    border-color: #22c55e;
+}
+
+.status-step-form.is-done .status-step-circle {
+    background: #dcfce7;
+    border-color: #22c55e;
+    color: #166534;
+}
+
+.status-step-form.is-current .status-step-circle {
+    background: #22c55e;
+    border-color: #16a34a;
+    color: #ffffff;
+    box-shadow: 0 0 0 5px rgba(34, 197, 94, .14);
+}
+
+.status-step-form.is-current .status-step-label {
+    color: var(--text);
+    font-weight: 600;
+}
+
+html[data-theme="escuro"] .status-progress-box {
+    background: #111827;
+    border-color: #263445;
+}
+
+html[data-theme="escuro"] .status-step-form::before {
+    background: #334155;
+}
+
+html[data-theme="escuro"] .status-step-form.is-done::before,
+html[data-theme="escuro"] .status-step-form.is-current::before {
+    background: #22c55e;
+}
+
+html[data-theme="escuro"] .status-step-circle {
+    background: #0f172a;
+    border-color: #334155;
+}
+
+html[data-theme="escuro"] .status-step-form.is-done .status-step-circle {
+    background: rgba(34, 197, 94, .18);
+    border-color: #22c55e;
+    color: #86efac;
+}
+
+html[data-theme="escuro"] .status-step-form.is-current .status-step-circle {
+    background: #16a34a;
+    border-color: #22c55e;
+    color: #ffffff;
+}
+
+
+/* v26 - edição rápida discreta dentro da proposta */
+.quick-edit-box {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface-soft);
+    padding: 0;
+    overflow: hidden;
+}
+
+.quick-edit-box summary {
+    cursor: pointer;
+    padding: 12px 14px;
+    font-weight: 600;
+    color: var(--text);
+    list-style-position: inside;
+}
+
+.quick-edit-box[open] summary {
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.quick-edit-form {
+    padding: 14px;
+}
+
+.quick-edit-form .form-grid {
+    margin-top: 0;
+}
+
+/* v27 - proposta com abas internas e resumo menos poluído */
+.proposal-page {
+    max-width: 1500px;
+}
+
+.proposal-main-card {
+    overflow: hidden;
+}
+
+.compact-action-form {
+    margin: 0;
+}
+
+.compact-row {
+    margin-bottom: 2px;
+}
+
+.proposal-tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 8px;
+}
+
+.proposal-tab {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 9px 13px;
+    cursor: pointer;
+    font: inherit;
+    white-space: nowrap;
+}
+
+.proposal-tab span {
+    margin-left: 4px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.proposal-tab:hover {
+    border-color: #93c5fd;
+    color: var(--text);
+}
+
+.proposal-tab.is-active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #ffffff;
+}
+
+.proposal-tab.is-active span {
+    color: rgba(255,255,255,.85);
+}
+
+.proposal-tab-panel {
+    padding-top: 4px;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(150px, 1fr));
+    gap: 12px;
+}
+
+.summary-card {
+    border: 1px solid var(--line);
+    background: #fbfcfd;
+    border-radius: 14px;
+    padding: 14px;
+    display: grid;
+    gap: 8px;
+    min-height: 96px;
+    align-content: start;
+}
+
+.summary-card small {
+    color: var(--muted);
+}
+
+.summary-card strong {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.summary-card .mini-btn {
+    justify-self: start;
+}
+
+.highlight-summary {
+    background: var(--primary-soft);
+    border-color: #bfdbfe;
+}
+
+.quick-section-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(260px, .8fr);
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.compact-note {
+    margin: 0;
+}
+
+.complete-data-box {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    margin-top: 14px;
+    background: var(--panel);
+    overflow: hidden;
+}
+
+.complete-data-box summary,
+.message-editor summary {
+    cursor: pointer;
+    padding: 13px 14px;
+    color: var(--text);
+    font-weight: 500;
+}
+
+.complete-data-box[open] summary,
+.message-editor[open] summary {
+    border-bottom: 1px solid var(--line);
+    background: var(--soft);
+}
+
+.compact-info-grid {
+    padding: 14px;
+}
+
+.compact-finance-form {
+    margin-top: 14px;
+}
+
+.message-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+@media (max-width: 1200px) {
+    .summary-grid {
+        grid-template-columns: repeat(3, minmax(150px, 1fr));
+    }
+
+    .message-grid,
+    .quick-section-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 720px) {
+    .summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .detail-header {
+        flex-direction: column;
+    }
+
+    .detail-actions {
+        justify-content: flex-start;
+    }
+}
+
+html[data-theme="escuro"] .proposal-tab {
+    background: #111827;
+    border-color: #263445;
+    color: #cbd5e1;
+}
+
+html[data-theme="escuro"] .proposal-tab.is-active {
+    background: #2563eb;
+    border-color: #3b82f6;
+    color: #ffffff;
+}
+
+html[data-theme="escuro"] .summary-card,
+html[data-theme="escuro"] .complete-data-box {
+    background: #111827;
+    border-color: #263445;
+}
+
+html[data-theme="escuro"] .highlight-summary {
+    background: rgba(37, 99, 235, .18);
+    border-color: #1d4ed8;
+}
+
+.quick-close-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+}
+
+.quick-close-actions span {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 0 4px;
+}
+
+.btn-success {
+    border-color: #86efac;
+    background: #dcfce7;
+    color: #166534;
+}
+
+.btn-success:hover {
+    border-color: #22c55e;
+}
+
+.finance-highlight-box {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-content: start;
+}
+
+.finance-highlight-box div {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+    background: var(--bg);
+}
+
+.finance-highlight-box strong {
+    display: block;
+    font-size: 20px;
+    margin-top: 6px;
+}
+
+html[data-theme="escuro"] .btn-success {
+    background: rgba(34, 197, 94, .18);
+    color: #bbf7d0;
+    border-color: rgba(34, 197, 94, .55);
+}
+
+@media (max-width: 760px) {
+    .finance-highlight-box { grid-template-columns: 1fr; }
+    .quick-close-actions { justify-content: flex-start; }
 }

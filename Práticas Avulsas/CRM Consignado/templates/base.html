@@ -3,7 +3,11 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ titulo or 'CRM Consignado' }}</title>
+    <title>CRM Consig{% if titulo %} · {{ titulo }}{% endif %}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.svg') }}">
+    <meta name="application-name" content="CRM Consig">
+    <meta name="theme-color" content="#111827">
     <script>
         (function () {
             const temaSalvo = localStorage.getItem('crmTema') || 'claro';
@@ -15,9 +19,9 @@
 <body>
     <aside class="sidebar">
         <div class="brand">
-            <span class="brand-mark">CRM</span>
+            <span class="brand-mark brand-icon" aria-hidden="true">CC</span>
             <div>
-                <p>Consignado</p>
+                <p>CRM Consig</p>
                 <small>Funil local</small>
             </div>
         </div>

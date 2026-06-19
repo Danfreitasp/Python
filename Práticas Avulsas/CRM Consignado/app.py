@@ -311,7 +311,7 @@ def init_db() -> None:
 
 def modelos_padrao() -> dict[str, str]:
     return {
-        "Mensagem inicial": "Olá, {nome}. Tudo bem? Tenho uma simulação de {produto} para seu contrato do banco {banco_atual}, com possibilidade de redução de parcela e liberação de troco. Posso te passar os detalhes?",
+        "Mensagem inicial": "Olá, {nome}. Tudo bem? Tenho uma simulação de {produto} para seu contrato do banco {banco_atual}, com possibilidade de redução de parcela e liberação de valor. Posso te passar os detalhes?",
         "Solicitação de documentos": "Olá, {nome}. Para seguir com sua proposta de {produto}, preciso que me envie os documentos necessários para análise. Assim que receber, dou andamento por aqui.",
         "Proposta em andamento": "Olá, {nome}. Sua proposta de {produto} está em andamento no banco {banco_destino}. Status atual: {status}. Assim que houver atualização, te aviso.",
         "Aguardando interação": "Olá, {nome}. Sua proposta já foi digitada e agora precisamos que você conclua a assinatura digital com selfie. Assim que concluir, me avise para seguirmos acompanhando.",
@@ -1106,6 +1106,7 @@ def proposta_para_dict(row: sqlite3.Row) -> dict[str, str]:
     dados["parcela_atual"] = br_moeda(dados.get("parcela_atual"))
     dados["nova_parcela"] = br_moeda(dados.get("nova_parcela"))
     dados["troco"] = br_moeda(dados.get("troco"))
+    dados["valor"] = dados["troco"]
     dados["comissao_percentual"] = br_percentual(dados.get("comissao_percentual"))
     dados["comissao"] = br_moeda(dados.get("comissao"))
     return {k: "" if v is None else str(v) for k, v in dados.items()}

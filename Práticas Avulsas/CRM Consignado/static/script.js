@@ -321,3 +321,42 @@ document.addEventListener('DOMContentLoaded', () => {
         aplicarTema(atual === 'escuro' ? 'claro' : 'escuro');
     });
 });
+
+// v27 - Abas internas na tela de detalhes da proposta.
+document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll('.proposal-tab[data-tab-target]');
+    const panels = document.querySelectorAll('.proposal-tab-panel[data-tab-panel]');
+    if (!tabs.length || !panels.length) return;
+
+    function activateTab(target) {
+        tabs.forEach((tab) => {
+            tab.classList.toggle('is-active', tab.dataset.tabTarget === target);
+        });
+        panels.forEach((panel) => {
+            const isActive = panel.dataset.tabPanel === target;
+            panel.classList.toggle('is-active', isActive);
+            panel.hidden = !isActive;
+        });
+    }
+
+    tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+            const target = tab.dataset.tabTarget;
+            activateTab(target);
+            try {
+                sessionStorage.setItem('crmProposalTab', target);
+            } catch (error) {
+                // Ignora navegadores que bloqueiam sessionStorage.
+            }
+        });
+    });
+
+    try {
+        const savedTab = sessionStorage.getItem('crmProposalTab');
+        if (savedTab && document.querySelector(`.proposal-tab[data-tab-target="${savedTab}"]`)) {
+            activateTab(savedTab);
+        }
+    } catch (error) {
+        // Mantém a primeira aba ativa.
+    }
+});

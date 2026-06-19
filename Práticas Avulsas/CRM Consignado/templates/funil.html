@@ -27,7 +27,7 @@
                 {% if p.banco_atual or p.banco_destino %}<small>{{ p.banco_atual or '-' }} → {{ p.banco_destino or '-' }}</small>{% endif %}
                 <small>Promotora: {{ p.promotora or '-' }}</small>
                 <div class="card-values">
-                    <span><small>Troco</small><strong>{{ br_moeda(p.troco) }}</strong></span>
+                    <span><small>Valor</small><strong>{{ br_moeda(p.troco) }}</strong></span>
                     <span><small>Comissão</small><strong>{{ br_moeda(p.comissao) }}</strong></span>
                 </div>
                 <span class="card-flag {% if p.beneficio_bloqueado == 'SIM' %}flag-alert{% else %}flag-ok{% endif %}">Benefício bloqueado: {{ p.beneficio_bloqueado or 'NÃO' }}</span>
