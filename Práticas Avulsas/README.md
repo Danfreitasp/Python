@@ -1,129 +1,402 @@
-# Práticas Avulsas em Python
+\# CRM Consignado Local
 
-Repositório com projetos práticos desenvolvidos em Python para automatizar tarefas do dia a dia, principalmente voltadas para atendimento, consulta de regras e geração de mensagens comerciais.
 
-## Projetos
 
-### Consultor de Regras
+CRM local desenvolvido em \*\*Python + Flask + SQLite\*\* para controle de propostas de crédito consignado.
 
-Programa em Python para consulta de regras de portabilidade bancária.
 
-O sistema utiliza uma planilha Excel como base de dados editável, permitindo cadastrar e consultar regras de bancos de forma simples.
 
-#### Funcionalidades
+O sistema foi criado para auxiliar no acompanhamento de propostas, funil de atendimento, controle de comissões, anexos de clientes e histórico de alterações, funcionando localmente no computador ou em rede local.
 
-* Consulta de bancos disponíveis para portabilidade.
-* Leitura das regras a partir de arquivo Excel.
-* Campo pesquisável para banco de origem.
-* Filtro por tipo de origem:
 
-  * Banco de rede
-  * Origem corban
-* Validação de quantidade de parcelas pagas.
-* Exibição de bancos disponíveis, condicionais ou recusados.
-* Tratamento de nomes duplicados ou variações, como:
 
-  * C6 / C6 Bank
-  * Agibank / 121 Agibank
-  * Olé / 169 Olé
-* Botão para abrir e editar a planilha de regras.
-* Recriação automática da planilha modelo caso o arquivo esteja inválido.
+\## Funcionalidades
 
-#### Tecnologias usadas
 
-* Python
-* CustomTkinter
-* Pandas
-* OpenPyXL
 
----
+\* Cadastro de propostas de consignado;
 
-### Gerador de Mensagem
+\* Controle de clientes, CPF, telefone, banco, promotora e produto;
 
-Programa em Python para gerar mensagens comerciais de forma mais rápida e padronizada.
+\* Funil visual com cards arrastáveis;
 
-O objetivo é facilitar a criação de textos para atendimento, propostas e contato com clientes, reduzindo erros de digitação e agilizando o trabalho.
+\* Etapas editáveis;
 
-#### Funcionalidades
+\* Separação entre propostas em andamento e encerradas;
 
-* Geração automática de mensagens.
-* Campos editáveis para dados do cliente.
-* Padronização do texto comercial.
-* Botão para copiar a mensagem gerada.
-* Possibilidade de alterar o modelo de mensagem.
-* Interface simples para uso no dia a dia.
+\* Controle de propostas pagas, perdidas e canceladas;
 
-#### Tecnologias usadas
+\* Controle financeiro de comissão;
 
-* Python
-* CustomTkinter / Tkinter
-* Manipulação de arquivos de texto
+\* Campos para:
 
----
 
-## Como executar os projetos
 
-Entre na pasta do projeto desejado pelo terminal.
+&#x20; \* Comissão;
 
-Exemplo:
+&#x20; \* Percentual de comissão;
+
+&#x20; \* Valor caiu na promotora;
+
+&#x20; \* Valor já foi sacado;
+
+&#x20; \* Benefício bloqueado;
+
+&#x20; \* Banco digitado;
+
+&#x20; \* Número da proposta;
+
+&#x20; \* Proposta de portabilidade vinculada;
+
+&#x20; \* Proposta de refinanciamento vinculada;
+
+\* Criação automática de refinanciamento vinculado à portabilidade;
+
+\* Histórico de status;
+
+\* Anotações por proposta em formato de log;
+
+\* Mensagens padrão para WhatsApp editáveis pelo sistema;
+
+\* Upload de anexos dos clientes;
+
+\* Criação automática de pasta do cliente para documentos;
+
+\* Pesquisa rápida por nome, CPF ou telefone;
+
+\* Botão para copiar CPF;
+
+\* Verificação diária de propostas com indicador visual;
+
+\* Dashboard com resumo financeiro;
+
+\* Filtro por mês em propostas encerradas;
+
+\* Backup automático do banco de dados;
+
+\* Modo claro e modo escuro.
+
+
+
+\## Tecnologias utilizadas
+
+
+
+\* Python 3
+
+\* Flask
+
+\* SQLite
+
+\* HTML
+
+\* CSS
+
+\* JavaScript
+
+
+
+\## Estrutura do projeto
+
+
+
+```text
+
+CRM Consignado/
+
+│
+
+├── app.py
+
+├── requirements.txt
+
+├── README.md
+
+├── .gitignore
+
+│
+
+├── templates/
+
+│   └── arquivos HTML do sistema
+
+│
+
+├── static/
+
+│   ├── style.css
+
+│   └── script.js
+
+│
+
+├── data/
+
+│   └── arquivos auxiliares
+
+│
+
+└── backups/
+
+&#x20;   └── backups automáticos do banco
+
+```
+
+
+
+\## Arquivos que não devem ser enviados ao GitHub
+
+
+
+Este projeto trabalha com dados sensíveis de clientes. Por isso, alguns arquivos e pastas devem ficar apenas no computador local:
+
+
+
+```text
+
+database.db
+
+backups/
+
+uploads/
+
+anexos/
+
+.venv/
+
+\_\_pycache\_\_/
+
+```
+
+
+
+Nunca envie ao GitHub arquivos com CPF, documentos, contratos, planilhas reais ou banco de dados com informações de clientes.
+
+
+
+\## Instalação no Windows
+
+
+
+Abra a pasta do projeto no VS Code.
+
+
+
+Crie o ambiente virtual:
+
+
 
 ```bash
-cd "Consultor de Regras"
+
+python -m venv .venv
+
 ```
+
+
+
+Ative o ambiente virtual pelo CMD:
+
+
+
+```bash
+
+.venv\\Scripts\\activate.bat
+
+```
+
+
 
 Instale as dependências:
 
+
+
 ```bash
+
 pip install -r requirements.txt
+
 ```
 
-Execute o programa:
+
+
+Execute o sistema:
+
+
 
 ```bash
-python main.py
+
+python app.py
+
 ```
 
-> Dependendo do projeto, o arquivo principal pode ter outro nome. Verifique os arquivos `.py` dentro de cada pasta.
 
----
 
-## Como gerar executável `.exe`
+Acesse no navegador:
 
-Para transformar um projeto em executável, instale o PyInstaller:
+
+
+```text
+
+http://127.0.0.1:5000
+
+```
+
+
+
+\## Acesso pela rede local
+
+
+
+Para outra pessoa acessar o CRM no mesmo Wi-Fi, o sistema deve estar rodando no computador principal.
+
+
+
+No arquivo `app.py`, o Flask deve estar configurado com:
+
+
+
+```python
+
+app.run(host="0.0.0.0", port=5000, debug=False)
+
+```
+
+
+
+Depois, descubra o IP do computador principal com:
+
+
 
 ```bash
-pip install pyinstaller
+
+ipconfig
+
 ```
 
-Depois, dentro da pasta do projeto, execute:
 
-```bash
-pyinstaller --onefile --windowed main.py
+
+A outra pessoa acessa pelo navegador usando:
+
+
+
+```text
+
+http://IP-DO-COMPUTADOR:5000
+
 ```
 
-O executável será criado dentro da pasta:
 
-```bash
-dist
+
+Exemplo:
+
+
+
+```text
+
+http://192.168.18.103:5000
+
 ```
 
-Caso o projeto utilize arquivos externos, como Excel ou `.txt`, mantenha esses arquivos na mesma pasta do executável.
 
----
 
-## Objetivo do repositório
+\## Banco de dados
 
-Este repositório tem como objetivo reunir pequenos projetos e automações desenvolvidos para estudo e uso prático, principalmente com foco em:
 
-* Automação de tarefas repetitivas.
-* Criação de interfaces gráficas simples.
-* Organização de regras comerciais.
-* Geração de mensagens padronizadas.
-* Prática de desenvolvimento em Python.
 
----
+O sistema utiliza SQLite.
 
-## Observação
 
-Os projetos deste repositório foram criados para fins de estudo e produtividade pessoal.
-As regras, mensagens e dados utilizados podem precisar de ajustes conforme o uso real e as políticas de cada instituição.
+
+O arquivo principal do banco é:
+
+
+
+```text
+
+database.db
+
+```
+
+
+
+Esse arquivo é criado automaticamente ao iniciar o sistema, caso não exista.
+
+
+
+\## Backup automático
+
+
+
+O sistema cria backups automáticos do banco de dados na pasta:
+
+
+
+```text
+
+backups/
+
+```
+
+
+
+Esses backups não devem ser enviados ao GitHub.
+
+
+
+\## Anexos
+
+
+
+Os documentos dos clientes são salvos em uma pasta local configurada no sistema.
+
+
+
+Os anexos não devem ser enviados ao GitHub por conterem dados sensíveis.
+
+
+
+\## Uso recomendado
+
+
+
+Este CRM foi pensado para uso local ou em rede privada, por poucas pessoas.
+
+
+
+Para uso externo pela internet, recomenda-se adicionar antes:
+
+
+
+\* Login com usuário e senha;
+
+\* HTTPS;
+
+\* Controle de permissões;
+
+\* Banco de dados mais robusto;
+
+\* Hospedagem segura;
+
+\* Política de backup externo.
+
+
+
+\## Aviso de segurança
+
+
+
+Este projeto pode conter ou manipular dados sensíveis, como CPF, telefone e documentos de clientes.
+
+
+
+Antes de publicar qualquer versão no GitHub, confirme que o banco de dados, anexos, backups e planilhas reais não estão sendo enviados.
+
+
+
+\## Autor
+
+
+
+Desenvolvido para uso em operação de crédito consignado.
+
+
+

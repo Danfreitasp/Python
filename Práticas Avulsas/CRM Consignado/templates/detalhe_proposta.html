@@ -1,0 +1,234 @@
+{% extends 'base.html' %}
+{% set titulo = proposta.nome %}
+{% set subtitulo = 'Detalhes, anotações, histórico e mensagens prontas para WhatsApp.' %}
+{% block content %}
+<section class="detail-grid">
+    <div class="card stack">
+        <div class="detail-header">
+            <div>
+                <span class="badge">{{ proposta.status }}</span>
+                <h2>{{ proposta.nome }}</h2>
+                <p>{{ proposta.produto }} · Banco digitado: {{ banco_digitado_exibicao(proposta) or '-' }}</p>
+            </div>
+            <div class="detail-actions">
+                <a class="btn" href="{{ url_for('editar_proposta', proposta_id=proposta.id) }}">Editar</a>
+                <form method="post" action="{{ url_for('excluir_proposta', proposta_id=proposta.id) }}" onsubmit="return confirm('Excluir definitivamente este lead/proposta? Esta ação remove também anotações, histórico e anexos cadastrados no CRM.');">
+                    <input type="hidden" name="next" value="{{ url_for('index') }}">
+                    <button class="btn btn-danger" type="submit">Excluir lead</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="info-grid">
+            <div><small>CPF</small><span class="inline-copy-value">{{ proposta.cpf }} <button class="mini-btn copy-btn" type="button" data-copy="{{ proposta.cpf }}">Copiar CPF</button></span></div>
+            <div><small>Verificação diária</small><span class="verification-status"><span class="verification-dot {% if verificado_hoje(proposta) %}dot-ok{% else %}dot-pending{% endif %}"></span>{{ status_verificacao_texto(proposta) }}</span></div>
+            <div><small>NB/Matrícula</small><span>{{ proposta.nb_matricula }}</span></div>
+            <div><small>Nº proposta</small><span>{{ proposta.numero_proposta or '-' }}</span></div>
+            <div><small>Nº port vinculada</small><span>{{ proposta.numero_port_vinculada or '-' }}</span></div>
+            <div><small>Nº refin vinculado</small><span>{{ proposta.numero_refin_vinculada or '-' }}</span></div>
+            <div><small>Tipo</small><span>{{ proposta.tipo_cliente }}</span></div>
+            <div><small>Banco atual</small><span>{{ proposta.banco_atual }}</span></div>
+            <div><small>Banco destino</small><span>{{ proposta.banco_destino }}</span></div>
+            <div><small>Banco digitado</small><span>{{ banco_digitado_exibicao(proposta) or '-' }}</span></div>
+            <div><small>Promotora</small><span>{{ proposta.promotora }}</span></div>
+            <div><small>Benefício bloqueado</small><span>{{ proposta.beneficio_bloqueado or 'NÃO' }}</span></div>
+            <div><small>Telefone</small><span>{{ proposta.telefone }}</span></div>
+            <div><small>Parcela atual</small><span>{{ br_moeda(proposta.parcela_atual) }}</span></div>
+            <div><small>Nova parcela</small><span>{{ br_moeda(proposta.nova_parcela) }}</span></div>
+            <div><small>Troco</small><span>{{ br_moeda(proposta.troco) }}</span></div>
+            <div><small>% comissão</small><span>{{ br_percentual(proposta.comissao_percentual) }}</span></div>
+            <div><small>Comissão</small><span>{{ br_moeda(proposta.comissao) }}</span></div>
+            <div><small>Valor caiu na promotora</small><span>{{ proposta.valor_caiu_promotora or 'NÃO' }}</span></div>
+            <div><small>Valor já foi sacado</small><span>{{ proposta.valor_sacado or 'NÃO' }}</span></div>
+            <div><small>Margem após</small><span>{{ proposta.margem_apos }}</span></div>
+            <div><small>Responsável</small><span>{{ proposta.responsavel }}</span></div>
+            <div><small>Criação</small><span>{{ br_data_hora(proposta.data_criacao) }}</span></div>
+            <div><small>Atualização</small><span>{{ br_data_hora(proposta.data_atualizacao) }}</span></div>
+            <div><small>Previsão de saldo</small><span>{{ br_data(proposta.data_retorno) }}</span></div>
+        </div>
+
+        <form method="post" action="{{ url_for('atualizar_verificacao', proposta_id=proposta.id) }}" class="verification-form">
+            <div>
+                <small>Conferência da manhã</small>
+                <strong>{{ status_verificacao_texto(proposta) }}</strong>
+            </div>
+            {% if verificado_hoje(proposta) %}
+                <input type="hidden" name="verificado" value="NÃO">
+                <button class="btn" type="submit">Marcar como não verificada</button>
+            {% else %}
+                <input type="hidden" name="verificado" value="SIM">
+                <button class="btn btn-primary" type="submit">Marcar como verificada hoje</button>
+            {% endif %}
+        </form>
+
+        <div class="note-box">
+            <small>Próxima ação</small>
+            <p>{{ proposta.proxima_acao or 'Não informado' }}</p>
+        </div>
+
+        <section class="linked-box stack">
+            <div class="section-title-row">
+                <div>
+                    <h2>Propostas vinculadas</h2>
+                    <small>Vínculo manual por número da proposta da portabilidade ou do refinanciamento.</small>
+                </div>
+                <div class="section-actions">
+                    {% if pode_criar_refin_vinculado(proposta) %}
+                        <form method="post" action="{{ url_for('criar_refin_vinculado', proposta_id=proposta.id) }}" onsubmit="return confirm('Criar refinanciamento vinculado com nº {{ incrementar_numero_proposta(proposta.numero_proposta) }}?');">
+                            <button class="btn btn-primary" type="submit">Criar refin vinculado</button>
+                        </form>
+                    {% endif %}
+                    <small>{{ vinculadas|length }} vínculo(s)</small>
+                </div>
+            </div>
+            <div class="linked-list">
+                {% for vinculada in vinculadas %}
+                    <a class="linked-item" href="{{ url_for('detalhe_proposta', proposta_id=vinculada.id) }}">
+                        <div>
+                            <strong>{{ vinculada.produto or 'Proposta' }} · {{ vinculada.status }}</strong>
+                            <small>{{ vinculada.nome }}{% if vinculada.numero_proposta %} · Nº {{ vinculada.numero_proposta }}{% endif %}</small>
+                        </div>
+                        <div>
+                            <span>{{ br_moeda(vinculada.comissao) }}</span>
+                            <small>Comissão</small>
+                        </div>
+                    </a>
+                {% else %}
+                    <p class="empty small">Nenhuma proposta vinculada ainda. Preencha o número da proposta vinculada na edição.</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="attachments-box stack">
+            <div class="section-title-row">
+                <div>
+                    <h2>Anexos</h2>
+                    <small>Pasta: {{ pasta_anexos }}</small>
+                </div>
+                <small>{{ anexos|length }} arquivo(s)</small>
+            </div>
+            <form method="post" action="{{ url_for('enviar_anexos', proposta_id=proposta.id) }}" enctype="multipart/form-data" class="attachment-form">
+                <label>Enviar documentos
+                    <input type="file" name="arquivos" multiple>
+                </label>
+                <button class="btn btn-primary" type="submit">Enviar anexos</button>
+            </form>
+            <div class="attachment-list">
+                {% for anexo in anexos %}
+                    <article class="attachment-item">
+                        <div>
+                            <strong>{{ anexo.nome_original }}</strong>
+                            <small>{{ br_data_hora(anexo.data_upload) }}{% if tamanho_arquivo(anexo.caminho) %} · {{ tamanho_arquivo(anexo.caminho) }}{% endif %}</small>
+                        </div>
+                        <div class="attachment-actions">
+                            <a class="mini-btn" href="{{ url_for('baixar_anexo', anexo_id=anexo.id) }}">Baixar</a>
+                            <form method="post" action="{{ url_for('excluir_anexo', anexo_id=anexo.id) }}" onsubmit="return confirm('Remover este anexo?')">
+                                <button class="mini-btn danger" type="submit">Excluir</button>
+                            </form>
+                        </div>
+                    </article>
+                {% else %}
+                    <p class="empty small">Nenhum anexo enviado ainda.</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        {% if proposta.status == 'Pago' %}
+        <form method="post" action="{{ url_for('atualizar_financeiro', proposta_id=proposta.id) }}" class="status-form finance-form">
+            <label>Valor caiu na promotora
+                <select name="valor_caiu_promotora">
+                    <option value="NÃO" {% if (proposta.valor_caiu_promotora or 'NÃO') == 'NÃO' %}selected{% endif %}>NÃO</option>
+                    <option value="SIM" {% if proposta.valor_caiu_promotora == 'SIM' %}selected{% endif %}>SIM</option>
+                </select>
+            </label>
+            <label>Valor já foi sacado
+                <select name="valor_sacado">
+                    <option value="NÃO" {% if (proposta.valor_sacado or 'NÃO') == 'NÃO' %}selected{% endif %}>NÃO</option>
+                    <option value="SIM" {% if proposta.valor_sacado == 'SIM' %}selected{% endif %}>SIM</option>
+                </select>
+            </label>
+            <button class="btn btn-primary" type="submit">Atualizar financeiro</button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('mudar_status', proposta_id=proposta.id) }}" class="status-form">
+            <label>Mudar status
+                <select name="status">
+                    {% for status in STATUS_LIST %}
+                        <option value="{{ status }}" {% if proposta.status == status %}selected{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Observação da alteração
+                <input name="observacao" placeholder="Ex.: Cliente enviou documentos">
+            </label>
+            <button class="btn btn-primary" type="submit">Atualizar status</button>
+        </form>
+
+        <section class="annotations stack">
+            <div class="section-title-row">
+                <h2>Anotações da proposta</h2>
+                <small>{{ anotacoes|length }} registro(s)</small>
+            </div>
+            <form method="post" action="{{ url_for('adicionar_anotacao', proposta_id=proposta.id) }}" class="annotation-form">
+                <label>Nova anotação
+                    <textarea name="texto" rows="3" placeholder="Ex.: Cliente já solicitou, aguardando atualizar no INSS"></textarea>
+                </label>
+                <button class="btn btn-primary" type="submit">Adicionar anotação</button>
+            </form>
+            <div class="annotation-list">
+                {% for anotacao in anotacoes %}
+                    <article class="annotation-item">
+                        <small>{{ br_data_hora(anotacao.data_hora) }}</small>
+                        <p>{{ anotacao.texto }}</p>
+                    </article>
+                {% else %}
+                    <p class="empty">Sem anotações ainda.</p>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+
+    <div class="card stack">
+        <h2>Mensagens para WhatsApp</h2>
+        {% for nome, texto in mensagens.items() %}
+            <div class="message-box">
+                <div class="message-top">
+                    <span>{{ nome }}</span>
+                    <button class="mini-btn copy-btn" data-copy="{{ texto|e }}">Copiar</button>
+                </div>
+                <p>{{ texto }}</p>
+            </div>
+        {% endfor %}
+
+        <details class="message-editor">
+            <summary>Editar mensagens padrão</summary>
+            <form method="post" action="{{ url_for('atualizar_modelos_mensagens') }}" class="stack">
+                <input type="hidden" name="next" value="{{ url_for('detalhe_proposta', proposta_id=proposta.id) }}">
+                <p class="small muted">Edite os modelos globais. Você pode usar variáveis como {nome}, {cpf}, {produto}, {status}, {banco_atual}, {banco_destino}, {banco_digitado}, {troco} e {comissao}.</p>
+                {% for nome, modelo in modelos_mensagens.items() %}
+                    <label>{{ nome }}
+                        <textarea name="modelo__{{ nome }}" rows="4">{{ modelo }}</textarea>
+                    </label>
+                {% endfor %}
+                <button class="btn btn-primary" type="submit">Salvar mensagens padrão</button>
+            </form>
+        </details>
+    </div>
+</section>
+
+<section class="card stack">
+    <h2>Histórico de status e alterações</h2>
+    <div class="timeline">
+        {% for h in historico %}
+            <div class="timeline-item">
+                <small>{{ br_data_hora(h.data_hora) }}</small>
+                <p>{{ h.status_anterior or 'Início' }} → {{ h.status_novo }}</p>
+                <span>{{ h.observacao }}</span>
+            </div>
+        {% else %}
+            <p class="empty">Sem histórico.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

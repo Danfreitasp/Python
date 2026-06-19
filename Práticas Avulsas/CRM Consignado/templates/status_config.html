@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card module-help">
+    <p>Use esta tela para ajustar o funil sem mexer no código. Se renomear uma etapa, as propostas que estavam nela serão atualizadas automaticamente.</p>
+</section>
+
+<section class="card">
+    <h2>Adicionar nova etapa</h2>
+    <form method="post" class="status-add-form">
+        <input type="hidden" name="acao" value="adicionar">
+        <label>Nome da etapa
+            <input name="nome" placeholder="Ex.: Pendência banco">
+        </label>
+        <button class="btn btn-primary" type="submit">Adicionar etapa</button>
+    </form>
+</section>
+
+<section class="card">
+    <h2>Etapas cadastradas</h2>
+    <div class="table-wrap">
+        <table class="status-table">
+            <thead>
+                <tr>
+                    <th>Ordem</th>
+                    <th>Nome</th>
+                    <th>Ativa</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for etapa in etapas %}
+                <tr>
+                    <td colspan="4">
+                        <form method="post" class="status-row-form">
+                            <input type="hidden" name="acao" value="salvar">
+                            <input type="hidden" name="etapa_id" value="{{ etapa.id }}">
+                            <input type="number" name="ordem" value="{{ etapa.ordem }}" min="1" title="Ordem">
+                            <input name="nome" value="{{ etapa.nome }}" title="Nome da etapa">
+                            <select name="ativo" title="Ativa">
+                                <option value="1" {% if etapa.ativo %}selected{% endif %}>Sim</option>
+                                <option value="0" {% if not etapa.ativo %}selected{% endif %}>Não</option>
+                            </select>
+                            <button class="mini-btn" type="submit">Salvar</button>
+                        </form>
+                        <form method="post" class="status-delete-form" onsubmit="return confirm('Excluir esta etapa? As propostas serão movidas para a etapa de destino.');">
+                            <input type="hidden" name="acao" value="excluir">
+                            <input type="hidden" name="etapa_id" value="{{ etapa.id }}">
+                            <select name="destino_status" required>
+                                <option value="">Mover propostas para...</option>
+                                {% for status in STATUS_LIST %}
+                                    {% if status != etapa.nome %}
+                                        <option value="{{ status }}">{{ status }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                            <button class="mini-btn danger" type="submit">Excluir</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="empty">Nenhuma etapa cadastrada.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

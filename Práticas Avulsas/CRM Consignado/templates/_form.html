@@ -1,0 +1,109 @@
+<div class="form-grid">
+    <label>Nome do cliente
+        <input name="nome" value="{{ proposta.nome or proposta['nome'] or '' }}" required>
+    </label>
+    <label>CPF
+        <input name="cpf" class="cpf-mask" value="{{ proposta.cpf or proposta['cpf'] or '' }}" placeholder="000.000.000-00">
+    </label>
+    <label>NB ou matrícula
+        <input name="nb_matricula" value="{{ proposta.nb_matricula or proposta['nb_matricula'] or '' }}">
+    </label>
+    <label>Nº proposta
+        <input name="numero_proposta" value="{{ proposta.numero_proposta or proposta['numero_proposta'] or '' }}" placeholder="Número desta proposta">
+    </label>
+    <label>Nº proposta da port vinculada
+        <input name="numero_port_vinculada" value="{{ proposta.numero_port_vinculada or proposta['numero_port_vinculada'] or '' }}" placeholder="Use no refin, se houver">
+    </label>
+    <label>Nº proposta do refin vinculado
+        <input name="numero_refin_vinculada" value="{{ proposta.numero_refin_vinculada or proposta['numero_refin_vinculada'] or '' }}" placeholder="Use na port, se houver">
+    </label>
+    <label>Tipo de cliente
+        <select name="tipo_cliente">
+            <option value="">Selecione</option>
+            {% for tipo in TIPOS_CLIENTE %}
+                <option value="{{ tipo }}" {% if (proposta.tipo_cliente or proposta['tipo_cliente'] or '') == tipo %}selected{% endif %}>{{ tipo }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>Banco atual
+        <input name="banco_atual" value="{{ proposta.banco_atual or proposta['banco_atual'] or '' }}">
+    </label>
+    <label>Banco destino
+        <input name="banco_destino" value="{{ proposta.banco_destino or proposta['banco_destino'] or '' }}">
+    </label>
+    <label>Banco digitado
+        <input name="banco_digitado" value="{{ proposta.banco_digitado or proposta['banco_digitado'] or '' }}" placeholder="Banco onde a proposta foi digitada">
+    </label>
+    <label>Produto
+        <select name="produto">
+            <option value="">Selecione</option>
+            {% for produto in PRODUTOS %}
+                <option value="{{ produto }}" {% if (proposta.produto or proposta['produto'] or '') == produto %}selected{% endif %}>{{ produto }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>Promotora
+        <input name="promotora" value="{{ proposta.promotora or proposta['promotora'] or '' }}" placeholder="Ex.: Única, Vieira">
+    </label>
+    <label>Benefício bloqueado
+        <select name="beneficio_bloqueado">
+            {% set bloqueado = proposta.beneficio_bloqueado or proposta['beneficio_bloqueado'] or 'NÃO' %}
+            <option value="NÃO" {% if bloqueado == 'NÃO' %}selected{% endif %}>NÃO</option>
+            <option value="SIM" {% if bloqueado == 'SIM' %}selected{% endif %}>SIM</option>
+        </select>
+    </label>
+    <label>Valor caiu na promotora
+        <select name="valor_caiu_promotora">
+            {% set caiu = proposta.valor_caiu_promotora or proposta['valor_caiu_promotora'] or 'NÃO' %}
+            <option value="NÃO" {% if caiu == 'NÃO' %}selected{% endif %}>NÃO</option>
+            <option value="SIM" {% if caiu == 'SIM' %}selected{% endif %}>SIM</option>
+        </select>
+    </label>
+    <label>Valor já foi sacado
+        <select name="valor_sacado">
+            {% set sacado = proposta.valor_sacado or proposta['valor_sacado'] or 'NÃO' %}
+            <option value="NÃO" {% if sacado == 'NÃO' %}selected{% endif %}>NÃO</option>
+            <option value="SIM" {% if sacado == 'SIM' %}selected{% endif %}>SIM</option>
+        </select>
+    </label>
+    <label>Status
+        <select name="status">
+            {% for status in STATUS_LIST %}
+                <option value="{{ status }}" {% if (proposta.status or proposta['status'] or '') == status %}selected{% endif %}>{{ status }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>Parcela atual
+        <input name="parcela_atual" class="money-mask" value="{{ br_moeda(proposta.parcela_atual or proposta['parcela_atual'] or 0) }}">
+    </label>
+    <label>Nova parcela
+        <input name="nova_parcela" class="money-mask" value="{{ br_moeda(proposta.nova_parcela or proposta['nova_parcela'] or 0) }}">
+    </label>
+    <label>Troco
+        <input name="troco" class="money-mask" value="{{ br_moeda(proposta.troco or proposta['troco'] or 0) }}">
+    </label>
+    <label>% comissão
+        <input name="comissao_percentual" class="percent-mask" value="{{ proposta.comissao_percentual or proposta['comissao_percentual'] or '' }}" placeholder="Ex.: 3,5">
+    </label>
+    <label>Comissão
+        <input name="comissao" class="money-mask" value="{{ br_moeda(proposta.comissao or proposta['comissao'] or 0) }}">
+    </label>
+    <label>Margem após operação
+        <input name="margem_apos" value="{{ proposta.margem_apos or proposta['margem_apos'] or '' }}">
+    </label>
+    <label>Responsável
+        <input name="responsavel" value="{{ proposta.responsavel or proposta['responsavel'] or '' }}">
+    </label>
+    <label>Telefone/WhatsApp
+        <input name="telefone" value="{{ proposta.telefone or proposta['telefone'] or '' }}">
+    </label>
+    <label>Próxima ação
+        <input name="proxima_acao" value="{{ proposta.proxima_acao or proposta['proxima_acao'] or '' }}">
+    </label>
+    <label>Previsão de saldo
+        <input type="date" name="data_retorno" value="{{ proposta.data_retorno or proposta['data_retorno'] or '' }}">
+    </label>
+</div>
+<label class="full-label">Observação inicial / importada
+    <textarea name="observacoes" rows="5" placeholder="Use este campo apenas para a primeira observação. Depois, registre novas anotações na tela de detalhes da proposta.">{{ proposta.observacoes or proposta['observacoes'] or '' }}</textarea>
+</label>

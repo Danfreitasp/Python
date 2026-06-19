@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card module-help">
+    <p><strong>Encerradas:</strong> propostas pagas ficam separadas entre <strong>falta cair na promotora</strong>, <strong>disponível para saque</strong> e <strong>já sacado</strong>. Perdidas ficam em uma coluna própria.</p>
+</section>
+
+<section class="card filters-card">
+    <form method="get" class="filters encerradas-filter">
+        <label class="compact-label">Mês das encerradas
+            <input type="month" name="mes" value="{{ mes }}">
+        </label>
+        <button class="btn btn-primary" type="submit">Filtrar mês</button>
+        <a class="btn" href="{{ url_for('encerradas') }}">Mês atual</a>
+        <span class="filter-hint">Filtro usado para levantamentos mensais das propostas pagas e perdidas.</span>
+    </form>
+</section>
+
+<section class="kanban encerradas-kanban" data-modulo="encerradas">
+    {% for status, itens in por_status.items() %}
+    <div class="kanban-column encerrada-column {% if 'disponível' in status or 'sacado' in status %}column-paid{% elif 'falta' in status %}column-pending{% else %}column-lost{% endif %}" data-status="{{ status }}">
+        <div class="column-title">
+            <span>{{ status }}</span>
+            <div class="column-meta">
+                <small>{{ itens|length }} proposta(s)</small>
+                <small>{{ br_moeda(totais_status[status].comissao) }}</small>
+            </div>
+        </div>
+        <div class="kanban-cards" data-status="{{ status }}">
+            {% for p in itens %}
+            <article class="kanban-card encerrada-card {% if p.status == 'Pago' %}card-paid{% else %}card-lost{% endif %}" draggable="true" data-proposta-id="{{ p.id }}">
+                <a href="{{ url_for('detalhe_proposta', proposta_id=p.id) }}">{{ p.nome }}</a>
+                <p>{{ p.produto or 'Produto não informado' }}</p>
+                <small>Banco digitado: {{ banco_digitado_exibicao(p) or '-' }}</small>
+                {% if p.banco_atual or p.banco_destino %}<small>{{ p.banco_atual or '-' }} → {{ p.banco_destino or '-' }}</small>{% endif %}
+                <small>Promotora: {{ p.promotora or '-' }}</small>
+                <div class="card-values">
+                    <span><small>Troco</small><strong>{{ br_moeda(p.troco) }}</strong></span>
+                    <span><small>Comissão</small><strong>{{ br_moeda(p.comissao) }}</strong></span>
+                </div>
+                <span class="card-flag {% if p.beneficio_bloqueado == 'SIM' %}flag-alert{% else %}flag-ok{% endif %}">Benefício bloqueado: {{ p.beneficio_bloqueado or 'NÃO' }}</span>
+                {% if p.status == 'Pago' %}
+                    <span class="card-flag {% if p.valor_caiu_promotora == 'SIM' %}flag-ok{% else %}flag-alert{% endif %}">Caiu na promotora: {{ p.valor_caiu_promotora or 'NÃO' }}</span>
+                    <span class="card-flag {% if p.valor_sacado == 'SIM' %}flag-ok{% else %}flag-alert{% endif %}">Sacado: {{ p.valor_sacado or 'NÃO' }}</span>
+                {% endif %}
+                <span>Encerrada em: {{ br_data_hora(p.data_atualizacao) }}</span>
+                {% if p.observacoes %}<em>{{ p.observacoes[:90] }}{% if p.observacoes|length > 90 %}...{% endif %}</em>{% endif %}
+            </article>
+            {% else %}
+            <p class="empty small">Sem propostas.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</section>
+{% endblock %}

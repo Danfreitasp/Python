@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% set titulo = 'Dashboard' %}
+{% set subtitulo = 'Resumo mensal de propostas, troco e conversões.' %}
+{% block content %}
+<section class="card">
+    <form method="get" class="month-filter">
+        <label>Mês de análise
+            <input type="month" name="mes" value="{{ dados.mes }}">
+        </label>
+        <button class="btn btn-primary" type="submit">Atualizar</button>
+    </form>
+</section>
+
+<section class="metrics">
+    <div class="metric-card"><small>Total no mês</small><strong>{{ dados.total }}</strong></div>
+    <div class="metric-card"><small>Pagas</small><strong>{{ dados.pagas }}</strong></div>
+    <div class="metric-card"><small>Perdidas/canceladas</small><strong>{{ dados.perdidas }}</strong></div>
+    <div class="metric-card"><small>Troco previsto</small><strong>{{ br_moeda(dados.troco_previsto) }}</strong></div>
+    <div class="metric-card"><small>Troco pago</small><strong>{{ br_moeda(dados.troco_pago) }}</strong></div>
+    <div class="metric-card"><small>Comissão prevista</small><strong>{{ br_moeda(dados.comissao_prevista) }}</strong></div>
+    <div class="metric-card"><small>Comissão paga</small><strong>{{ br_moeda(dados.comissao_paga) }}</strong></div>
+    <div class="metric-card highlight-card"><small>Valor a sacar</small><strong>{{ br_moeda(dados.valor_a_sacar) }}</strong></div>
+    <div class="metric-card"><small>Falta cair na promotora</small><strong>{{ br_moeda(dados.falta_cair_promotora) }}</strong></div>
+    <div class="metric-card"><small>Já sacado</small><strong>{{ br_moeda(dados.valor_ja_sacado) }}</strong></div>
+</section>
+
+<section class="charts-grid">
+    <div class="card stack">
+        <h2>Propostas por status</h2>
+        {% for item in dados.por_status %}
+            <div class="bar-row"><span>{{ item.nome }}</span><div><b style="width: {{ item.percentual }}%"></b></div><small>{{ item.qtd }}</small></div>
+        {% else %}<p class="empty">Sem dados neste mês.</p>{% endfor %}
+    </div>
+    <div class="card stack">
+        <h2>Propostas por banco destino</h2>
+        {% for item in dados.por_banco %}
+            <div class="bar-row"><span>{{ item.nome }}</span><div><b style="width: {{ item.percentual }}%"></b></div><small>{{ item.qtd }}</small></div>
+        {% else %}<p class="empty">Sem dados neste mês.</p>{% endfor %}
+    </div>
+    <div class="card stack">
+        <h2>Propostas por produto</h2>
+        {% for item in dados.por_produto %}
+            <div class="bar-row"><span>{{ item.nome }}</span><div><b style="width: {{ item.percentual }}%"></b></div><small>{{ item.qtd }}</small></div>
+        {% else %}<p class="empty">Sem dados neste mês.</p>{% endfor %}
+    </div>
+</section>
+{% endblock %}

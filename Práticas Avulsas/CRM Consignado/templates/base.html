@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ titulo or 'CRM Consignado' }}</title>
+    <script>
+        (function () {
+            const temaSalvo = localStorage.getItem('crmTema') || 'claro';
+            document.documentElement.setAttribute('data-theme', temaSalvo);
+        })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="brand">
+            <span class="brand-mark">CRM</span>
+            <div>
+                <p>Consignado</p>
+                <small>Funil local</small>
+            </div>
+        </div>
+        <nav>
+            <a href="{{ url_for('index') }}" class="nav-link">Propostas</a>
+            <a href="{{ url_for('nova_proposta') }}" class="nav-link">Nova proposta</a>
+            <a href="{{ url_for('funil') }}" class="nav-link">Funil</a>
+            <a href="{{ url_for('encerradas') }}" class="nav-link">Encerradas</a>
+            <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+            <a href="{{ url_for('configurar_status') }}" class="nav-link">Etapas</a>
+        </nav>
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div>
+                <h1>{{ titulo or 'CRM Consignado' }}</h1>
+                <p>{{ subtitulo or 'Controle local de propostas, clientes e funis.' }}</p>
+            </div>
+            <div class="topbar-actions">
+                <div class="quick-search" data-search-url="{{ url_for('api_buscar_propostas') }}">
+                    <input id="quickSearchInput" type="search" placeholder="Pesquisar cliente, CPF ou telefone..." autocomplete="off">
+                    <div id="quickSearchResults" class="quick-search-results" hidden></div>
+                </div>
+                <button type="button" id="themeToggle" class="btn theme-toggle" title="Alternar modo claro/escuro">🌙 Modo escuro</button>
+                <a class="btn btn-primary" href="{{ url_for('nova_proposta') }}">+ Nova proposta</a>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <section class="alerts">
+                    {% for category, message in messages %}
+                        <div class="alert {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

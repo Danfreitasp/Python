@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card module-help">
+    <p><strong>Funil em andamento:</strong> aqui aparecem apenas propostas abertas. Ao mover para <strong>Pago</strong> ou <strong>Perdido / Cancelado</strong>, o card sai deste funil e aparece em <strong>Encerradas</strong>.</p>
+</section>
+
+<section class="kanban" data-modulo="funil">
+    {% for status, itens in por_status.items() %}
+    <div class="kanban-column" data-status="{{ status }}">
+        <div class="column-title">
+            <span>{{ status }}</span>
+            <div class="column-meta">
+                <small>{{ itens|length }} proposta(s)</small>
+                <small>{{ br_moeda(totais_status[status].comissao) }}</small>
+            </div>
+        </div>
+        <div class="kanban-cards" data-status="{{ status }}">
+            {% for p in itens %}
+            <article class="kanban-card" draggable="true" data-proposta-id="{{ p.id }}">
+                <div class="card-topline">
+                    <span class="verification-dot {% if verificado_hoje(p) %}dot-ok{% else %}dot-pending{% endif %}" title="{{ status_verificacao_texto(p) }}"></span>
+                    <a href="{{ url_for('detalhe_proposta', proposta_id=p.id) }}">{{ p.nome }}</a>
+                </div>
+                {% if p.cpf %}<small>CPF: {{ p.cpf }} <button class="mini-btn copy-btn card-copy" type="button" data-copy="{{ p.cpf }}">Copiar</button></small>{% endif %}
+                <p>{{ p.produto or 'Produto não informado' }}</p>
+                <small>Banco digitado: {{ banco_digitado_exibicao(p) or '-' }}</small>
+                {% if p.banco_atual or p.banco_destino %}<small>{{ p.banco_atual or '-' }} → {{ p.banco_destino or '-' }}</small>{% endif %}
+                <small>Promotora: {{ p.promotora or '-' }}</small>
+                <div class="card-values">
+                    <span><small>Troco</small><strong>{{ br_moeda(p.troco) }}</strong></span>
+                    <span><small>Comissão</small><strong>{{ br_moeda(p.comissao) }}</strong></span>
+                </div>
+                <span class="card-flag {% if p.beneficio_bloqueado == 'SIM' %}flag-alert{% else %}flag-ok{% endif %}">Benefício bloqueado: {{ p.beneficio_bloqueado or 'NÃO' }}</span>
+                <span>Previsão de saldo: {{ br_data(p.data_retorno) or 'sem data' }}</span>
+                {% if p.observacoes %}<em>{{ p.observacoes[:90] }}{% if p.observacoes|length > 90 %}...{% endif %}</em>{% endif %}
+            </article>
+            {% else %}
+            <p class="empty small">Sem propostas.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</section>
+{% endblock %}

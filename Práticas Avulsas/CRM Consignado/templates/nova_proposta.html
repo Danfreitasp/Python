@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% set titulo = 'Nova proposta' %}
+{% set subtitulo = 'Cadastre um lead ou uma proposta em andamento.' %}
+{% block content %}
+<section class="card">
+    <form method="post" enctype="multipart/form-data" class="stack">
+        {% include '_form.html' %}
+
+        <section class="attachments-box stack">
+            <div class="section-title-row">
+                <div>
+                    <h2>Anexos iniciais</h2>
+                    <small>Opcional. Ao salvar, o CRM cria a pasta do cliente e envia os arquivos para ela.</small>
+                </div>
+            </div>
+            <label>Enviar documentos junto com a proposta
+                <input type="file" name="arquivos" multiple>
+            </label>
+            <small class="muted">Pasta base: {{ anexos_base_dir }}</small>
+        </section>
+
+        <div class="actions">
+            <button class="btn btn-primary" type="submit">Salvar proposta</button>
+            <a class="btn" href="{{ url_for('index') }}">Cancelar</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% set titulo = 'Editar proposta' %}
+{% set subtitulo = 'Atualize os dados do cliente e da operação.' %}
+{% block content %}
+<section class="card">
+    <form method="post" class="stack">
+        {% include '_form.html' %}
+        <div class="actions">
+            <button class="btn btn-primary" type="submit">Salvar alterações</button>
+            <a class="btn" href="{{ url_for('detalhe_proposta', proposta_id=proposta.id) }}">Cancelar</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

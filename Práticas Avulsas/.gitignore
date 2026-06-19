@@ -1,0 +1,37 @@
+# Ambiente virtual
+.venv/
+venv/
+env/
+
+# Banco de dados local
+database.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Backups
+backups/
+
+# Anexos e documentos
+uploads/
+anexos/
+documentos/
+clientes/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Configurações locais
+.env
+instance/
+
+# VS Code
+.vscode/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
