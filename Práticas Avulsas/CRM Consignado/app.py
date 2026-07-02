@@ -73,6 +73,27 @@ STATUS_ENCERRADOS = ["Pago", "Perdido / Cancelado"]
 TIPOS_CLIENTE = ["INSS", "SIAPE"]
 PRODUTOS = ["Portabilidade", "Refinanciamento", "Novo", "Cartão", "Saque Complementar", "Outro"]
 
+# Coeficientes extraídos da aba INSS do arquivo "SIMULADOR 05.06.2026.xlsx".
+# Novo por valor: parcela = valor * coeficiente.
+# Novo por margem: valor liberado = margem / coeficiente.
+INSS_NOVO_COEFICIENTES = {
+    "36": {"label": "36x", "coeficiente": 0.040573, "idade": "Até 78 anos"},
+    "48": {"label": "48x", "coeficiente": 0.033523, "idade": "Até 77 anos"},
+    "60": {"label": "60x", "coeficiente": 0.029420, "idade": "Até 76 anos"},
+    "72": {"label": "72x", "coeficiente": 0.026789, "idade": "Até 75 anos"},
+    "84": {"label": "84x", "coeficiente": 0.024995, "idade": "Até 74 anos"},
+    "96": {"label": "96x", "coeficiente": 0.023720, "idade": "Até 73 anos"},
+    "108": {"label": "108x", "coeficiente": 0.022227, "idade": "Até 72 anos"},
+    "108_carencia": {"label": "108x com carência 90d", "coeficiente": 0.024088, "idade": "Até 71 anos"},
+}
+
+# Cartão INSS por margem, conforme aba INSS do simulador.
+INSS_CARTAO_COEFICIENTES = {
+    "ate_74": {"label": "Até 74 anos", "coeficiente": 0.04465},
+    "75": {"label": "75 anos", "coeficiente": 0.05450},
+    "76": {"label": "76 anos", "coeficiente": 0.06654},
+}
+
 CAMPOS_PROPOSTA = [
     "nome",
     "cpf",
@@ -219,6 +240,17 @@ def init_db() -> None:
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS modelos_mensagens (
+            nome TEXT PRIMARY KEY,
+            texto TEXT NOT NULL,
+            ordem INTEGER NOT NULL DEFAULT 0,
+            data_atualizacao TEXT
+        )
+        """
+    )
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS modelos_gerador_mensagens (
             nome TEXT PRIMARY KEY,
             texto TEXT NOT NULL,
             ordem INTEGER NOT NULL DEFAULT 0,
@@ -414,6 +446,87 @@ def sincronizar_modelos_banco(db: sqlite3.Connection) -> None:
             )
 
 
+
+def modelos_gerador_padrao() -> dict[str, str]:
+    return {
+        "Portabilidade com redução de parcela": """Olá, {nome},
+
+Meu nome é {atendente} e entrei em contato para falar sobre a portabilidade do seu contrato, com redução da taxa de juros e liberação de troco.
+
+Além disso, atualmente o INSS está permitindo uma carência de até 90 dias para o início do desconto da parcela após a realização da portabilidade.
+
+Tenho uma proposta para seu contrato do Banco {banco}:
+
+✅ Parcela reduzida de {parcela_antiga} para {parcela_nova}
+✅ Regularizar sua margem negativa de {economia}
+✅ Liberação de troco no valor de {troco}
+✅ Carência de 90 dias, ficando até 3 meses sem o desconto dessa parcela
+✅ Sua conta de recebimento permanece a mesma, pois somos conveniados ao INSS
+
+Podemos dar prosseguimento e garantir essa redução na sua parcela?""",
+        "Portabilidade apenas com troco": """Olá, {nome},
+
+Meu nome é {atendente} e encontrei uma possibilidade de portabilidade para seu contrato do Banco {banco}.
+
+Nessa opção, há possibilidade de liberação de troco no valor de {troco}, mantendo a operação sujeita à análise e aprovação do banco.
+
+Posso seguir com a simulação para confirmar as condições?""",
+        "Redução sem troco": """Olá, {nome}, tudo bem?
+
+Meu nome é {atendente}. Fiz uma análise do seu contrato do Banco {banco} e encontrei uma possibilidade de redução de parcela.
+
+✅ Parcela atual: {parcela_antiga}
+✅ Nova parcela: {parcela_nova}
+✅ Economia mensal estimada: {economia}
+
+Posso seguir com a análise para confirmar essa condição?""",
+        "Recontato de proposta": """Olá, {nome}. Tudo bem?
+
+Meu nome é {atendente}. Estou passando para saber se ainda tem interesse na proposta do Banco {banco}.
+
+Condição simulada:
+✅ Parcela de {parcela_antiga} para {parcela_nova}
+✅ Economia mensal de {economia}
+✅ Valor liberado: {troco}
+
+Posso atualizar essa simulação para você?""",
+    }
+
+
+def sincronizar_modelos_gerador_banco(db: sqlite3.Connection) -> None:
+    existentes = db.execute("SELECT nome FROM modelos_gerador_mensagens ORDER BY ordem, nome").fetchall()
+    if not existentes:
+        for ordem, (nome, texto) in enumerate(modelos_gerador_padrao().items(), start=1):
+            db.execute(
+                """
+                INSERT OR REPLACE INTO modelos_gerador_mensagens (nome, texto, ordem, data_atualizacao)
+                VALUES (?, ?, ?, ?)
+                """,
+                (nome, texto, ordem, agora_iso()),
+            )
+        return
+
+    nomes_existentes = {row["nome"] for row in existentes}
+    maior_ordem = db.execute("SELECT COALESCE(MAX(ordem), 0) AS maior FROM modelos_gerador_mensagens").fetchone()["maior"]
+    for nome, texto in modelos_gerador_padrao().items():
+        if nome not in nomes_existentes:
+            maior_ordem += 1
+            db.execute(
+                """
+                INSERT INTO modelos_gerador_mensagens (nome, texto, ordem, data_atualizacao)
+                VALUES (?, ?, ?, ?)
+                """,
+                (nome, texto, maior_ordem, agora_iso()),
+            )
+
+
+def carregar_modelos_gerador() -> dict[str, str]:
+    db = get_db()
+    sincronizar_modelos_gerador_banco(db)
+    db.commit()
+    rows = db.execute("SELECT nome, texto FROM modelos_gerador_mensagens ORDER BY ordem, nome").fetchall()
+    return {row["nome"]: row["texto"] for row in rows}
+
 def criar_backup_automatico() -> None:
     """Cria um backup diário do database.db na pasta backups.
 
@@ -572,8 +685,12 @@ def parse_moeda(valor: Any) -> float:
     if not texto:
         return 0.0
     texto = texto.replace("R$", "").replace(" ", "")
+    if not texto:
+        return 0.0
     if "," in texto:
         texto = texto.replace(".", "").replace(",", ".")
+    elif re.fullmatch(r"\d{1,3}(\.\d{3})+", texto):
+        texto = texto.replace(".", "")
     try:
         return float(texto)
     except ValueError:
@@ -1217,6 +1334,18 @@ def carregar_modelos() -> dict[str, str]:
         return carregar_modelos_arquivo()
 
 
+
+def exportar_modelos_para_json() -> None:
+    """Mantém o arquivo JSON como backup legível dos modelos salvos no banco."""
+    try:
+        rows = get_db().execute("SELECT nome, texto FROM modelos_mensagens ORDER BY ordem, nome").fetchall()
+        dados = {row["nome"]: row["texto"] for row in rows}
+        DATA_DIR.mkdir(exist_ok=True)
+        MODELOS_PATH.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        # O banco é a fonte principal. Falha no backup JSON não deve impedir o CRM.
+        pass
+
 def proposta_para_dict(row: sqlite3.Row) -> dict[str, str]:
     dados = dict(row)
     dados["parcela_atual"] = br_moeda(dados.get("parcela_atual"))
@@ -1279,6 +1408,190 @@ def helpers() -> dict[str, Any]:
         "incrementar_numero_proposta": incrementar_numero_proposta,
         "anexos_base_dir": str(ANEXOS_BASE_DIR),
     }
+
+
+
+def dados_simulador_inss() -> dict[str, Any]:
+    tipo_operacao = limpar_texto(request.form.get("tipo_operacao")) or "novo_valor"
+    if tipo_operacao not in {"novo_valor", "novo_margem"}:
+        tipo_operacao = "novo_valor"
+    prazo = limpar_texto(request.form.get("prazo")) or "84"
+    faixa_cartao = limpar_texto(request.form.get("faixa_cartao")) or "ate_74"
+    valor_base = parse_moeda(request.form.get("valor_base"))
+    margem = parse_moeda(request.form.get("margem"))
+    return {
+        "nome": limpar_texto(request.form.get("nome")),
+        "cpf": formatar_cpf(limpar_texto(request.form.get("cpf"))),
+        "telefone": limpar_texto(request.form.get("telefone")),
+        "nb_matricula": limpar_texto(request.form.get("nb_matricula")),
+        "banco_digitado": limpar_texto(request.form.get("banco_digitado")),
+        "promotora": limpar_texto(request.form.get("promotora")),
+        "tipo_operacao": tipo_operacao,
+        "prazo": prazo,
+        "faixa_cartao": faixa_cartao,
+        "valor_base": valor_base,
+        "margem": margem,
+        "observacoes": limpar_texto(request.form.get("observacoes")),
+    }
+
+
+def calcular_simulador_inss(dados: dict[str, Any]) -> dict[str, Any]:
+    tipo = dados.get("tipo_operacao") or "novo_valor"
+    prazo = dados.get("prazo") or "84"
+    faixa_cartao = dados.get("faixa_cartao") or "ate_74"
+    coef_info = INSS_NOVO_COEFICIENTES.get(prazo) or INSS_NOVO_COEFICIENTES["84"]
+    coeficiente = float(coef_info["coeficiente"])
+    valor = float(dados.get("valor_base") or 0)
+    parcela = 0.0
+    valor_estimado = 0.0
+    produto = "Novo"
+    descricao = "Empréstimo novo INSS"
+    prazo_label = coef_info["label"]
+
+    if tipo == "novo_margem":
+        parcela = float(dados.get("margem") or 0)
+        valor_estimado = parcela / coeficiente if coeficiente else 0.0
+        descricao = "Novo INSS por margem"
+    else:
+        valor_estimado = valor
+        parcela = valor_estimado * coeficiente
+        descricao = "Novo INSS por valor"
+
+    return {
+        "produto": produto,
+        "descricao": descricao,
+        "prazo_label": prazo_label,
+        "coeficiente": coeficiente,
+        "valor_estimado": round(valor_estimado, 2),
+        "parcela_estimativa": round(parcela, 2),
+        "mensagem": montar_mensagem_simulador_inss(dados, produto, descricao, valor_estimado, parcela, prazo_label),
+    }
+
+
+def montar_mensagem_simulador_inss(dados: dict[str, Any], produto: str, descricao: str, valor: float, parcela: float, prazo_label: str) -> str:
+    return (
+        f"Simulação INSS - {descricao}\n\n"
+        f"Valor estimado: {br_moeda(valor)}\n"
+        f"Parcela estimada: {br_moeda(parcela)}\n"
+        f"Prazo: {prazo_label}\n\n"
+        "Valores sujeitos à análise e confirmação do banco."
+    )
+
+
+
+
+@app.route("/converter-contatos", methods=["GET", "POST"])
+def converter_contatos():
+    if request.method == "POST":
+        arquivo = request.files.get("arquivo")
+        if not arquivo or not arquivo.filename:
+            flash("Selecione um arquivo CSV ou XLSX para converter.", "erro")
+            return redirect(url_for("converter_contatos"))
+        try:
+            linhas, total_lidas = linhas_contatos_convertidas(arquivo)
+        except Exception as exc:
+            flash(f"Erro ao converter arquivo: {exc}", "erro")
+            return redirect(url_for("converter_contatos"))
+
+        if not linhas:
+            flash("Nenhum contato válido encontrado. Verifique se TELEFONE1 possui números preenchidos.", "erro")
+            return redirect(url_for("converter_contatos"))
+
+        memoria = gerar_excel_contatos_convertidos(linhas)
+        nome_saida = f"contatos_convertidos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        return send_file(
+            memoria,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=nome_saida,
+        )
+
+    return render_template("converter_contatos.html")
+
+
+@app.route("/simulador-inss", methods=["GET", "POST"])
+def simulador_inss():
+    dados = {
+        "nome": "", "cpf": "", "telefone": "", "nb_matricula": "", "banco_digitado": "", "promotora": "",
+        "tipo_operacao": "novo_valor", "prazo": "84", "faixa_cartao": "ate_74", "valor_base": 0,
+        "margem": 0, "observacoes": "",
+    }
+    resultado = None
+    if request.method == "POST":
+        dados = dados_simulador_inss()
+        resultado = calcular_simulador_inss(dados)
+    return render_template(
+        "simulador_inss.html",
+        dados=dados,
+        resultado=resultado,
+        prazos=INSS_NOVO_COEFICIENTES
+    )
+
+
+@app.route("/simulador-inss/criar-proposta", methods=["POST"])
+def simulador_inss_criar_proposta():
+    dados_sim = dados_simulador_inss()
+    resultado = calcular_simulador_inss(dados_sim)
+    if not dados_sim["nome"]:
+        flash("Informe o nome do cliente antes de criar a proposta.", "erro")
+        return redirect(url_for("simulador_inss"))
+
+    agora = agora_iso()
+    dados_prop = {
+        "nome": dados_sim["nome"],
+        "cpf": dados_sim["cpf"],
+        "nb_matricula": dados_sim["nb_matricula"],
+        "numero_proposta": "",
+        "numero_port_vinculada": "",
+        "numero_refin_vinculada": "",
+        "tipo_cliente": "INSS",
+        "banco_atual": "",
+        "banco_destino": dados_sim["banco_digitado"],
+        "banco_digitado": dados_sim["banco_digitado"],
+        "produto": resultado["produto"],
+        "promotora": dados_sim["promotora"],
+        "beneficio_bloqueado": "NÃO",
+        "valor_caiu_promotora": "NÃO",
+        "valor_sacado": "NÃO",
+        "parcela_atual": 0,
+        "nova_parcela": resultado["parcela_estimativa"],
+        "troco": resultado["valor_estimado"],
+        "comissao_percentual": 0,
+        "comissao": 0,
+        "margem_apos": "",
+        "status": "Em atendimento" if status_valido("Em atendimento") else status_padrao(),
+        "responsavel": "",
+        "telefone": dados_sim["telefone"],
+        "endereco": "",
+        "dados_bancarios": "",
+        "proxima_acao": "",
+        "data_retorno": "",
+        "observacoes": dados_sim["observacoes"] or f"Proposta criada a partir do Simulador INSS: {resultado['descricao']} ({resultado['prazo_label']}).",
+    }
+
+    db = get_db()
+    cursor = db.execute(
+        """
+        INSERT INTO propostas (
+            cliente_id, nome, cpf, nb_matricula, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
+            promotora, beneficio_bloqueado, valor_caiu_promotora, valor_sacado, data_verificacao, parcela_atual, nova_parcela, troco, comissao_percentual, comissao, margem_apos, status, responsavel,
+            telefone, endereco, dados_bancarios, data_criacao, data_atualizacao, proxima_acao, data_retorno, observacoes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            salvar_cliente_dos_dados(dados_prop), dados_prop["nome"], dados_prop["cpf"], dados_prop["nb_matricula"], dados_prop["numero_proposta"],
+            dados_prop["numero_port_vinculada"], dados_prop["numero_refin_vinculada"], dados_prop["tipo_cliente"], dados_prop["banco_atual"], dados_prop["banco_destino"], dados_prop["banco_digitado"], dados_prop["produto"],
+            dados_prop["promotora"], dados_prop["beneficio_bloqueado"], dados_prop["valor_caiu_promotora"], dados_prop["valor_sacado"], None, dados_prop["parcela_atual"], dados_prop["nova_parcela"], dados_prop["troco"],
+            dados_prop["comissao_percentual"], dados_prop["comissao"], dados_prop["margem_apos"], dados_prop["status"], dados_prop["responsavel"], dados_prop["telefone"], dados_prop["endereco"], dados_prop["dados_bancarios"],
+            agora, agora, dados_prop["proxima_acao"], dados_prop["data_retorno"], dados_prop["observacoes"],
+        ),
+    )
+    proposta_id = cursor.lastrowid
+    db.commit()
+    registrar_historico(proposta_id, None, dados_prop["status"], "Proposta criada a partir do Simulador INSS.")
+    registrar_anotacao(proposta_id, dados_prop["observacoes"], agora)
+    flash("Proposta criada a partir da simulação INSS.", "ok")
+    return redirect(url_for("detalhe_proposta", proposta_id=proposta_id))
 
 
 @app.route("/")
@@ -1461,25 +1774,56 @@ def detalhe_proposta(proposta_id: int):
 
 @app.route("/api/propostas/buscar")
 def api_buscar_propostas():
-    termo = limpar_texto(request.args.get("q"))
-    if len(termo) < 2:
+    termo_original = limpar_texto(request.args.get("q"))
+    termo = termo_original.lower()
+    termo_digitos = re.sub(r"\D", "", termo_original)
+    if len(termo_original) < 2:
         return jsonify([])
-    like = f"%{termo}%"
+
+    like = f"%{termo_original}%"
+    like_digitos = f"%{termo_digitos}%" if termo_digitos else like
     propostas = get_db().execute(
         """
-        SELECT id, nome, cpf, telefone, status, produto, banco_digitado, banco_atual, banco_destino
+        SELECT id, nome, cpf, telefone, status, produto, banco_digitado, banco_atual, banco_destino,
+               numero_proposta, numero_port_vinculada, numero_refin_vinculada
         FROM propostas
-        WHERE nome LIKE ? OR cpf LIKE ? OR telefone LIKE ?
+        WHERE nome LIKE ?
+           OR cpf LIKE ?
+           OR telefone LIKE ?
+           OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', ''), ' ', ''), '/', '') LIKE ?
+           OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(telefone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE ?
            OR COALESCE(numero_proposta, '') LIKE ?
            OR COALESCE(numero_port_vinculada, '') LIKE ?
            OR COALESCE(numero_refin_vinculada, '') LIKE ?
         ORDER BY data_atualizacao DESC, id DESC
         LIMIT 10
         """,
-        (like, like, like, like, like, like),
+        (like, like, like, like_digitos, like_digitos, like, like, like),
     ).fetchall()
-    return jsonify([
-        {
+
+    def match_info(p: sqlite3.Row) -> tuple[str, str]:
+        campos = [
+            ("Telefone", p["telefone"] or "", True),
+            ("CPF", p["cpf"] or "", True),
+            ("Nº proposta", p["numero_proposta"] or "", False),
+            ("Nº port vinculada", p["numero_port_vinculada"] or "", False),
+            ("Nº refin vinculado", p["numero_refin_vinculada"] or "", False),
+            ("Nome", p["nome"] or "", False),
+        ]
+        for rotulo, valor, comparar_digitos in campos:
+            valor_texto = str(valor)
+            if comparar_digitos and termo_digitos:
+                valor_digitos = re.sub(r"\D", "", valor_texto)
+                if termo_digitos in valor_digitos:
+                    return rotulo, valor_texto
+            if termo and termo in valor_texto.lower():
+                return rotulo, valor_texto
+        return "Resultado", termo_original
+
+    resultados = []
+    for p in propostas:
+        campo, valor = match_info(p)
+        resultados.append({
             "id": p["id"],
             "nome": p["nome"] or "",
             "cpf": p["cpf"] or "",
@@ -1487,10 +1831,11 @@ def api_buscar_propostas():
             "status": p["status"] or "",
             "produto": p["produto"] or "",
             "banco": banco_digitado_exibicao(p) or p["banco_atual"] or p["banco_destino"] or "",
+            "match_campo": campo,
+            "match_valor": valor,
             "url": url_for("detalhe_proposta", proposta_id=p["id"]),
-        }
-        for p in propostas
-    ])
+        })
+    return jsonify(resultados)
 
 
 
@@ -1634,17 +1979,26 @@ def atualizar_verificacao(proposta_id: int):
     return redirect(url_for("detalhe_proposta", proposta_id=proposta_id))
 
 
+@app.route("/mensagens")
+def modelos_mensagens_page():
+    return render_template(
+        "modelos_mensagens.html",
+        modelos_mensagens=carregar_modelos(),
+        titulo="Modelos de mensagens",
+        subtitulo="Cadastre, edite e exclua modelos usados nas propostas.",
+    )
+
+
 @app.route("/mensagens/modelos", methods=["POST"])
 def atualizar_modelos_mensagens():
+    """Compatibilidade com a tela antiga: atualiza todos os modelos enviados no formulário."""
     db = get_db()
     modelos_atuais = carregar_modelos()
-    novos_modelos: dict[str, str] = {}
 
     for ordem, nome in enumerate(modelos_atuais.keys(), start=1):
         campo = f"modelo__{nome}"
         texto = request.form.get(campo)
         texto_final = texto if texto is not None else modelos_atuais[nome]
-        novos_modelos[nome] = texto_final
         db.execute(
             """
             INSERT OR REPLACE INTO modelos_mensagens (nome, texto, ordem, data_atualizacao)
@@ -1654,15 +2008,178 @@ def atualizar_modelos_mensagens():
         )
 
     db.commit()
-
-    # Mantém o JSON apenas como backup legível, mas a fonte principal agora é o database.db.
-    DATA_DIR.mkdir(exist_ok=True)
-    MODELOS_PATH.write_text(json.dumps(novos_modelos, ensure_ascii=False, indent=2), encoding="utf-8")
-
+    exportar_modelos_para_json()
     flash("Mensagens padrão atualizadas.", "ok")
     destino = request.form.get("next") or request.referrer or url_for("index")
     return redirect(destino)
 
+
+@app.route("/mensagens/modelos/adicionar", methods=["POST"])
+def adicionar_modelo_mensagem():
+    db = get_db()
+    nome = limpar_texto(request.form.get("nome_modelo"))
+    texto = (request.form.get("texto_modelo") or "").strip()
+
+    if not nome or not texto:
+        flash("Informe o nome e o texto do modelo.", "erro")
+        return redirect(request.form.get("next") or request.referrer or url_for("index"))
+
+    existente = db.execute("SELECT nome FROM modelos_mensagens WHERE LOWER(nome) = LOWER(?)", (nome,)).fetchone()
+    if existente:
+        flash("Já existe um modelo com esse nome.", "erro")
+        return redirect(request.form.get("next") or request.referrer or url_for("index"))
+
+    maior_ordem = db.execute("SELECT COALESCE(MAX(ordem), 0) AS maior FROM modelos_mensagens").fetchone()["maior"]
+    db.execute(
+        """
+        INSERT INTO modelos_mensagens (nome, texto, ordem, data_atualizacao)
+        VALUES (?, ?, ?, ?)
+        """,
+        (nome, texto, maior_ordem + 1, agora_iso()),
+    )
+    db.commit()
+    exportar_modelos_para_json()
+    flash("Modelo de mensagem adicionado.", "ok")
+    return redirect(request.form.get("next") or request.referrer or url_for("index"))
+
+
+@app.route("/mensagens/modelos/editar", methods=["POST"])
+def editar_modelo_mensagem():
+    db = get_db()
+    nome_original = request.form.get("nome_original") or ""
+    nome_novo = limpar_texto(request.form.get("nome_modelo"))
+    texto = (request.form.get("texto_modelo") or "").strip()
+
+    if not nome_original or not nome_novo or not texto:
+        flash("Informe o nome e o texto do modelo para editar.", "erro")
+        return redirect(request.form.get("next") or request.referrer or url_for("index"))
+
+    atual = db.execute("SELECT nome, ordem FROM modelos_mensagens WHERE nome = ?", (nome_original,)).fetchone()
+    if not atual:
+        flash("Modelo não encontrado.", "erro")
+        return redirect(request.form.get("next") or request.referrer or url_for("index"))
+
+    if nome_novo != nome_original:
+        duplicado = db.execute("SELECT nome FROM modelos_mensagens WHERE LOWER(nome) = LOWER(?)", (nome_novo,)).fetchone()
+        if duplicado:
+            flash("Já existe outro modelo com esse nome.", "erro")
+            return redirect(request.form.get("next") or request.referrer or url_for("index"))
+
+    db.execute(
+        """
+        UPDATE modelos_mensagens
+        SET nome = ?, texto = ?, data_atualizacao = ?
+        WHERE nome = ?
+        """,
+        (nome_novo, texto, agora_iso(), nome_original),
+    )
+    db.commit()
+    exportar_modelos_para_json()
+    flash("Modelo de mensagem atualizado.", "ok")
+    return redirect(request.form.get("next") or request.referrer or url_for("index"))
+
+
+@app.route("/mensagens/modelos/excluir", methods=["POST"])
+def excluir_modelo_mensagem():
+    db = get_db()
+    nome = request.form.get("nome_modelo") or ""
+    total = db.execute("SELECT COUNT(*) AS total FROM modelos_mensagens").fetchone()["total"]
+    if total <= 1:
+        flash("Mantenha pelo menos um modelo de mensagem cadastrado.", "erro")
+        return redirect(request.form.get("next") or request.referrer or url_for("index"))
+
+    db.execute("DELETE FROM modelos_mensagens WHERE nome = ?", (nome,))
+    db.commit()
+    exportar_modelos_para_json()
+    flash("Modelo de mensagem excluído.", "ok")
+    return redirect(request.form.get("next") or request.referrer or url_for("index"))
+
+
+
+@app.route("/gerador-mensagens")
+def gerador_mensagens_page():
+    return render_template(
+        "gerador_mensagens.html",
+        modelos_gerador=carregar_modelos_gerador(),
+        titulo="Gerador de mensagens",
+        subtitulo="Preencha os valores, selecione um modelo e copie a mensagem pronta.",
+    )
+
+
+@app.route("/gerador-mensagens/modelos/adicionar", methods=["POST"])
+def adicionar_modelo_gerador():
+    db = get_db()
+    nome = limpar_texto(request.form.get("nome_modelo"))
+    texto = (request.form.get("texto_modelo") or "").strip()
+    if not nome or not texto:
+        flash("Informe o nome e o texto do modelo.", "erro")
+        return redirect(url_for("gerador_mensagens_page"))
+    existente = db.execute(
+        "SELECT nome FROM modelos_gerador_mensagens WHERE LOWER(nome) = LOWER(?)",
+        (nome,),
+    ).fetchone()
+    if existente:
+        flash("Já existe um modelo com esse nome.", "erro")
+        return redirect(url_for("gerador_mensagens_page"))
+    maior_ordem = db.execute("SELECT COALESCE(MAX(ordem), 0) AS maior FROM modelos_gerador_mensagens").fetchone()["maior"]
+    db.execute(
+        """
+        INSERT INTO modelos_gerador_mensagens (nome, texto, ordem, data_atualizacao)
+        VALUES (?, ?, ?, ?)
+        """,
+        (nome, texto, maior_ordem + 1, agora_iso()),
+    )
+    db.commit()
+    flash("Modelo do gerador adicionado.", "ok")
+    return redirect(url_for("gerador_mensagens_page"))
+
+
+@app.route("/gerador-mensagens/modelos/editar", methods=["POST"])
+def editar_modelo_gerador():
+    db = get_db()
+    nome_original = request.form.get("nome_original") or ""
+    nome_novo = limpar_texto(request.form.get("nome_modelo"))
+    texto = (request.form.get("texto_modelo") or "").strip()
+    if not nome_original or not nome_novo or not texto:
+        flash("Informe o nome e o texto do modelo para editar.", "erro")
+        return redirect(url_for("gerador_mensagens_page"))
+    atual = db.execute("SELECT nome, ordem FROM modelos_gerador_mensagens WHERE nome = ?", (nome_original,)).fetchone()
+    if not atual:
+        flash("Modelo não encontrado.", "erro")
+        return redirect(url_for("gerador_mensagens_page"))
+    if nome_novo.lower() != nome_original.lower():
+        duplicado = db.execute(
+            "SELECT nome FROM modelos_gerador_mensagens WHERE LOWER(nome) = LOWER(?)",
+            (nome_novo,),
+        ).fetchone()
+        if duplicado:
+            flash("Já existe outro modelo com esse nome.", "erro")
+            return redirect(url_for("gerador_mensagens_page"))
+    db.execute(
+        """
+        UPDATE modelos_gerador_mensagens
+        SET nome = ?, texto = ?, data_atualizacao = ?
+        WHERE nome = ?
+        """,
+        (nome_novo, texto, agora_iso(), nome_original),
+    )
+    db.commit()
+    flash("Modelo do gerador atualizado.", "ok")
+    return redirect(url_for("gerador_mensagens_page"))
+
+
+@app.route("/gerador-mensagens/modelos/excluir", methods=["POST"])
+def excluir_modelo_gerador():
+    db = get_db()
+    nome = request.form.get("nome_modelo") or ""
+    total = db.execute("SELECT COUNT(*) AS total FROM modelos_gerador_mensagens").fetchone()["total"]
+    if total <= 1:
+        flash("Mantenha pelo menos um modelo no gerador.", "erro")
+        return redirect(url_for("gerador_mensagens_page"))
+    db.execute("DELETE FROM modelos_gerador_mensagens WHERE nome = ?", (nome,))
+    db.commit()
+    flash("Modelo do gerador excluído.", "ok")
+    return redirect(url_for("gerador_mensagens_page"))
 
 @app.route("/proposta/<int:proposta_id>/financeiro", methods=["POST"])
 def atualizar_financeiro(proposta_id: int):
@@ -1734,6 +2251,18 @@ def editar_proposta(proposta_id: int):
     return render_template("editar_proposta.html", proposta=proposta)
 
 
+
+
+def mapear_status_encerradas(rotulo: str) -> dict[str, str] | None:
+    mapa = {
+        "Pago - falta cair na promotora": {"status": "Pago", "valor_caiu_promotora": "NÃO", "valor_sacado": "NÃO"},
+        "Pago - disponível para saque": {"status": "Pago", "valor_caiu_promotora": "SIM", "valor_sacado": "NÃO"},
+        "Pago - já sacado": {"status": "Pago", "valor_caiu_promotora": "SIM", "valor_sacado": "SIM"},
+        "Perdido / Cancelado": {"status": "Perdido / Cancelado", "valor_caiu_promotora": "NÃO", "valor_sacado": "NÃO"},
+    }
+    return mapa.get(rotulo)
+
+
 @app.route("/proposta/<int:proposta_id>/status", methods=["POST"])
 def mudar_status(proposta_id: int):
     proposta = buscar_proposta(proposta_id)
@@ -1743,23 +2272,49 @@ def mudar_status(proposta_id: int):
     novo_status = limpar_texto(request.form.get("status"))
     observacao = limpar_texto(request.form.get("observacao")) or "Status atualizado"
     origem = limpar_texto(request.form.get("origem")) or "index"
-    if not status_valido(novo_status):
-        if request.headers.get("X-Requested-With") == "fetch":
-            return jsonify({"ok": False, "erro": "Status inválido."}), 400
-        flash("Status inválido.", "erro")
-        return redirect(request.referrer or url_for("index"))
-    if novo_status != proposta["status"]:
-        get_db().execute(
-            "UPDATE propostas SET status = ?, data_atualizacao = ? WHERE id = ?",
-            (novo_status, agora_iso(), proposta_id),
+
+    dados_encerrada = mapear_status_encerradas(novo_status)
+    if dados_encerrada:
+        status_final = dados_encerrada["status"]
+        caiu = dados_encerrada["valor_caiu_promotora"]
+        sacado = dados_encerrada["valor_sacado"]
+        mudou_algo = (
+            status_final != proposta["status"]
+            or caiu != (proposta["valor_caiu_promotora"] or "NÃO")
+            or sacado != (proposta["valor_sacado"] or "NÃO")
         )
-        get_db().commit()
-        registrar_historico(proposta_id, proposta["status"], novo_status, observacao)
+        if mudou_algo:
+            get_db().execute(
+                """
+                UPDATE propostas
+                SET status = ?, valor_caiu_promotora = ?, valor_sacado = ?, data_atualizacao = ?
+                WHERE id = ?
+                """,
+                (status_final, caiu, sacado, agora_iso(), proposta_id),
+            )
+            get_db().commit()
+            registrar_historico(proposta_id, proposta["status"], status_final, observacao)
         if request.headers.get("X-Requested-With") == "fetch":
             return jsonify({"ok": True, "status": novo_status})
-        flash("Status atualizado.", "ok")
-    elif request.headers.get("X-Requested-With") == "fetch":
-        return jsonify({"ok": True, "status": novo_status})
+        flash("Situação da encerrada atualizada.", "ok")
+    else:
+        if not status_valido(novo_status):
+            if request.headers.get("X-Requested-With") == "fetch":
+                return jsonify({"ok": False, "erro": "Status inválido."}), 400
+            flash("Status inválido.", "erro")
+            return redirect(request.referrer or url_for("index"))
+        if novo_status != proposta["status"]:
+            get_db().execute(
+                "UPDATE propostas SET status = ?, data_atualizacao = ? WHERE id = ?",
+                (novo_status, agora_iso(), proposta_id),
+            )
+            get_db().commit()
+            registrar_historico(proposta_id, proposta["status"], novo_status, observacao)
+            if request.headers.get("X-Requested-With") == "fetch":
+                return jsonify({"ok": True, "status": novo_status})
+            flash("Status atualizado.", "ok")
+        elif request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"ok": True, "status": novo_status})
     if origem == "funil":
         return redirect(url_for("funil"))
     if origem == "encerradas":
@@ -1769,6 +2324,38 @@ def mudar_status(proposta_id: int):
     if origem == "administrativo":
         return redirect(url_for("administrativo"))
     return redirect(request.referrer or url_for("index"))
+
+
+
+
+@app.route("/proposta/<int:proposta_id>/financeiro-rapido", methods=["POST"])
+def atualizar_financeiro_rapido(proposta_id: int):
+    proposta = buscar_proposta(proposta_id)
+    if not proposta:
+        flash("Proposta não encontrada.", "erro")
+        return redirect(url_for("encerradas"))
+
+    valor = parse_moeda(request.form.get("troco"))
+    comissao = parse_moeda(request.form.get("comissao"))
+    percentual = round((comissao / valor) * 100, 4) if valor > 0 and comissao > 0 else 0.0
+
+    get_db().execute(
+        """
+        UPDATE propostas
+        SET troco = ?, comissao = ?, comissao_percentual = ?, data_atualizacao = ?
+        WHERE id = ?
+        """,
+        (valor, comissao, percentual, agora_iso(), proposta_id),
+    )
+    get_db().commit()
+    registrar_historico(
+        proposta_id,
+        proposta["status"],
+        proposta["status"],
+        f"Valor/comissão atualizados em Encerradas. Percentual calculado: {percentual:.2f}%",
+    )
+    flash("Valor e comissão atualizados.", "ok")
+    return redirect(request.form.get("next") or url_for("encerradas"))
 
 
 @app.route("/proposta/<int:proposta_id>/excluir", methods=["POST"])
@@ -1943,6 +2530,7 @@ def configurar_status():
             return redirect(url_for("configurar_status"))
 
         if acao == "salvar":
+            # Compatibilidade com versões antigas da tela de etapas.
             etapa_id = int(request.form.get("etapa_id") or 0)
             etapa = db.execute("SELECT * FROM status_etapas WHERE id = ?", (etapa_id,)).fetchone()
             if not etapa:
@@ -1971,6 +2559,75 @@ def configurar_status():
                 db.execute("UPDATE historico SET status_novo = ? WHERE status_novo = ?", (nome, etapa["nome"]))
             db.commit()
             flash("Etapa atualizada.", "ok")
+            return redirect(url_for("configurar_status"))
+
+        if acao == "salvar_todas":
+            ids = request.form.getlist("etapa_id")
+            nomes = request.form.getlist("nome")
+            ordens = request.form.getlist("ordem")
+            ativos = request.form.getlist("ativo")
+
+            if not ids:
+                flash("Nenhuma etapa enviada para salvar.", "erro")
+                return redirect(url_for("configurar_status"))
+
+            total = min(len(ids), len(nomes), len(ordens), len(ativos))
+            dados = []
+            nomes_normalizados = []
+
+            for idx in range(total):
+                try:
+                    etapa_id = int(ids[idx])
+                except (TypeError, ValueError):
+                    continue
+                nome = limpar_texto(nomes[idx])
+                if not nome:
+                    flash("Nenhuma etapa pode ficar sem nome.", "erro")
+                    return redirect(url_for("configurar_status"))
+                nome_chave = nome.casefold()
+                if nome_chave in nomes_normalizados:
+                    flash(f"Existe etapa duplicada com o nome: {nome}.", "erro")
+                    return redirect(url_for("configurar_status"))
+                nomes_normalizados.append(nome_chave)
+                try:
+                    ordem = int(ordens[idx] or idx + 1)
+                except (TypeError, ValueError):
+                    ordem = idx + 1
+                ativo = 1 if str(ativos[idx]) == "1" else 0
+                dados.append((etapa_id, nome, ordem, ativo))
+
+            etapas_atuais = {
+                row["id"]: row
+                for row in db.execute("SELECT * FROM status_etapas").fetchall()
+            }
+
+            for etapa_id, nome, ordem, ativo in dados:
+                etapa = etapas_atuais.get(etapa_id)
+                if not etapa:
+                    continue
+                duplicada = db.execute(
+                    "SELECT id FROM status_etapas WHERE nome = ? AND id <> ?",
+                    (nome, etapa_id),
+                ).fetchone()
+                if duplicada:
+                    flash(f"Já existe outra etapa com o nome: {nome}.", "erro")
+                    return redirect(url_for("configurar_status"))
+
+            for etapa_id, nome, ordem, ativo in dados:
+                etapa = etapas_atuais.get(etapa_id)
+                if not etapa:
+                    continue
+                db.execute(
+                    "UPDATE status_etapas SET nome = ?, grupo = ?, ordem = ?, ativo = ? WHERE id = ?",
+                    (nome, "geral", ordem, ativo, etapa_id),
+                )
+                if nome != etapa["nome"]:
+                    db.execute("UPDATE propostas SET status = ? WHERE status = ?", (nome, etapa["nome"]))
+                    db.execute("UPDATE historico SET status_anterior = ? WHERE status_anterior = ?", (nome, etapa["nome"]))
+                    db.execute("UPDATE historico SET status_novo = ? WHERE status_novo = ?", (nome, etapa["nome"]))
+
+            db.commit()
+            flash("Etapas atualizadas com sucesso.", "ok")
             return redirect(url_for("configurar_status"))
 
         if acao == "excluir":
@@ -2167,6 +2824,105 @@ def normalizar_cabecalho(cabecalho: Any) -> str:
         "dados_da_conta": "dados_bancarios",
     }
     return aliases.get(texto, texto)
+
+
+
+
+def localizar_coluna_contatos(headers: list[Any], candidatos: set[str]) -> int | None:
+    """Localiza coluna por cabeçalho normalizado, aceitando variações como TELEFONE1 e TELEFONE 1."""
+    for idx, header in enumerate(headers):
+        normalizado = normalizar_cabecalho(header)
+        compactado = re.sub(r"[^a-z0-9]", "", normalizado)
+        if normalizado in candidatos or compactado in candidatos:
+            return idx
+    return None
+
+
+def normalizar_telefone_contato(valor: Any) -> str:
+    """Mantém apenas dígitos e adiciona DDI 55 quando ainda não estiver presente."""
+    digitos = re.sub(r"\D", "", limpar_texto(valor))
+    if not digitos:
+        return ""
+    # Evita duplicar o DDI se a base já vier com 55 no início.
+    if digitos.startswith("55") and len(digitos) >= 12:
+        return digitos
+    return f"55{digitos}"
+
+
+def linhas_contatos_convertidas(arquivo: Any) -> tuple[list[dict[str, str]], int]:
+    """Lê CSV/XLSX e retorna linhas no modelo: nome, numero.
+
+    A base original deve ter NOME e TELEFONE1/TELEFONE 1. Telefones vazios são ignorados.
+    """
+    filename = (arquivo.filename or "").lower()
+    linhas: list[dict[str, str]] = []
+    total_lidas = 0
+
+    if filename.endswith(".csv"):
+        conteudo = arquivo.read().decode("utf-8-sig", errors="replace")
+        sample = conteudo[:4096]
+        delimiter = ";" if sample.count(";") >= sample.count(",") else ","
+        reader = csv.reader(io.StringIO(conteudo), delimiter=delimiter)
+        rows = list(reader)
+        if not rows:
+            return [], 0
+        headers = rows[0]
+        idx_nome = localizar_coluna_contatos(headers, {"nome"})
+        idx_tel = localizar_coluna_contatos(headers, {"telefone1", "telefone_1"})
+        if idx_nome is None or idx_tel is None:
+            raise ValueError("Não encontrei as colunas NOME e TELEFONE1/TELEFONE 1 no arquivo.")
+        for row in rows[1:]:
+            total_lidas += 1
+            nome = limpar_texto(row[idx_nome] if idx_nome < len(row) else "").strip('"')
+            numero = normalizar_telefone_contato(row[idx_tel] if idx_tel < len(row) else "")
+            if nome and numero:
+                linhas.append({"nome": nome, "numero": numero})
+        return linhas, total_lidas
+
+    if filename.endswith(".xlsx"):
+        wb = load_workbook(arquivo, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            return [], 0
+        header_idx = None
+        idx_nome = idx_tel = None
+        for i, possivel_header in enumerate(rows[:10]):
+            nome_idx = localizar_coluna_contatos(list(possivel_header), {"nome"})
+            tel_idx = localizar_coluna_contatos(list(possivel_header), {"telefone1", "telefone_1"})
+            if nome_idx is not None and tel_idx is not None:
+                header_idx = i
+                idx_nome = nome_idx
+                idx_tel = tel_idx
+                break
+        if header_idx is None or idx_nome is None or idx_tel is None:
+            raise ValueError("Não encontrei as colunas NOME e TELEFONE1/TELEFONE 1 no arquivo.")
+        for row in rows[header_idx + 1:]:
+            total_lidas += 1
+            nome = limpar_texto(row[idx_nome] if idx_nome < len(row) else "").strip('"')
+            numero = normalizar_telefone_contato(row[idx_tel] if idx_tel < len(row) else "")
+            if nome and numero:
+                linhas.append({"nome": nome, "numero": numero})
+        return linhas, total_lidas
+
+    raise ValueError("Formato inválido. Use CSV ou XLSX.")
+
+
+def gerar_excel_contatos_convertidos(linhas: list[dict[str, str]]) -> io.BytesIO:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Contatos"
+    ws.append(["nome", "numero"])
+    for row in linhas:
+        ws.append([row["nome"], row["numero"]])
+    ws.column_dimensions["A"].width = 38
+    ws.column_dimensions["B"].width = 18
+    for cell in ws["B"]:
+        cell.number_format = "@"
+    memoria = io.BytesIO()
+    wb.save(memoria)
+    memoria.seek(0)
+    return memoria
 
 
 @app.route("/importar", methods=["POST"])

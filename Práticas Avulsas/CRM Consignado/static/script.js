@@ -119,14 +119,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
+    function parseMoneyInputValue(value) {
+        let text = String(value || '').replace('R$', '').replace(/\s/g, '').trim();
+        if (!text) return 0;
+
+        // Quando o usuário digita 5000, interpretar como 5000,00 e não 50,00.
+        // Quando digita 5.000, interpretar como milhar brasileiro.
+        // Quando digita 5000,50 ou 5.000,50, respeitar a vírgula decimal.
+        if (text.includes(',')) {
+            text = text.replace(/\./g, '').replace(',', '.');
+            return Number(text) || 0;
+        }
+
+        if (/^\d{1,3}(\.\d{3})+$/.test(text)) {
+            text = text.replace(/\./g, '');
+            return Number(text) || 0;
+        }
+
+        return Number(text.replace(',', '.')) || 0;
+    }
+
     document.querySelectorAll('.money-mask').forEach((input) => {
         input.addEventListener('blur', () => {
-            const digits = input.value.replace(/\D/g, '');
-            if (!digits) {
-                input.value = 'R$ 0,00';
-                return;
-            }
-            const number = Number(digits) / 100;
+            const number = parseMoneyInputValue(input.value);
             input.value = number.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         });
     });
@@ -146,10 +161,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    const trocoInput = document.querySelector('input[name="troco"]');
-    const percentualInput = document.querySelector('input[name="comissao_percentual"]');
-    const comissaoInput = document.querySelector('input[name="comissao"]');
-
     function parseBRNumber(value) {
         const text = String(value || '').replace('R$', '').replace('%', '').trim();
         if (!text) return 0;
@@ -160,21 +171,40 @@ document.addEventListener('DOMContentLoaded', () => {
         return Number(number || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     }
 
-    function calcularComissaoAutomatica() {
+    // Calcula comissão em qualquer formulário/tela que tenha Valor + % comissão + Comissão.
+    // Isso cobre Nova proposta, Editar proposta e a aba "Editar dados" dentro da proposta.
+    function calcularComissaoNoEscopo(escopo) {
+        if (!escopo) return;
+        const trocoInput = escopo.querySelector('input[name="troco"]');
+        const percentualInput = escopo.querySelector('input[name="comissao_percentual"]');
+        const comissaoInput = escopo.querySelector('input[name="comissao"]');
         if (!trocoInput || !percentualInput || !comissaoInput) return;
+
         const percentualTexto = percentualInput.value.trim();
         if (!percentualTexto) return;
-        const troco = parseBRNumber(trocoInput.value);
+
+        const valor = parseBRNumber(trocoInput.value);
         const percentual = parseBRNumber(percentualTexto);
-        const comissao = troco * (percentual / 100);
+        const comissao = valor * (percentual / 100);
         comissaoInput.value = formatBRL(comissao);
     }
 
-    if (trocoInput && percentualInput && comissaoInput) {
-        percentualInput.addEventListener('input', calcularComissaoAutomatica);
-        percentualInput.addEventListener('blur', calcularComissaoAutomatica);
-        trocoInput.addEventListener('blur', calcularComissaoAutomatica);
-    }
+    document.querySelectorAll('form').forEach((form) => {
+        const trocoInput = form.querySelector('input[name="troco"]');
+        const percentualInput = form.querySelector('input[name="comissao_percentual"]');
+        const comissaoInput = form.querySelector('input[name="comissao"]');
+
+        if (!trocoInput || !percentualInput || !comissaoInput) return;
+
+        percentualInput.addEventListener('input', () => calcularComissaoNoEscopo(form));
+        percentualInput.addEventListener('change', () => calcularComissaoNoEscopo(form));
+        percentualInput.addEventListener('blur', () => calcularComissaoNoEscopo(form));
+        trocoInput.addEventListener('input', () => {
+            if (percentualInput.value.trim()) calcularComissaoNoEscopo(form);
+        });
+        trocoInput.addEventListener('change', () => calcularComissaoNoEscopo(form));
+        trocoInput.addEventListener('blur', () => calcularComissaoNoEscopo(form));
+    });
 
     function mostrarAvisoCopiado(mensagem) {
         const aviso = document.createElement('div');
@@ -365,6 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <strong>${escapeHtml(item.nome)}</strong>
                 <small>${escapeHtml(item.cpf || 'CPF não informado')} · ${escapeHtml(item.status || '')}</small>
                 <span>${escapeHtml(item.produto || '')}${item.banco ? ' · Banco: ' + escapeHtml(item.banco) : ''}</span>
+                <em class="quick-search-match">Encontrado em ${escapeHtml(item.match_campo || 'resultado')}: ${escapeHtml(item.match_valor || '')}</em>
             </a>
         `).join('');
         results.hidden = false;
@@ -469,4 +500,302 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
         // Mantém a primeira aba ativa.
     }
+});
+
+// v35 - Editor visual de etapas: arrastar, reordenar e salvar tudo de uma vez.
+document.addEventListener('DOMContentLoaded', () => {
+    const list = document.getElementById('statusEditorList');
+    const preview = document.getElementById('statusPreviewLine');
+    if (!list || !preview) return;
+
+    let dragging = null;
+
+    function getCards() {
+        return Array.from(list.querySelectorAll('[data-status-card="true"]'));
+    }
+
+    function atualizarOrdensEPreview() {
+        const cards = getCards();
+        preview.innerHTML = '';
+
+        cards.forEach((card, index) => {
+            const ordemInput = card.querySelector('input[name="ordem"]');
+            const nomeInput = card.querySelector('[data-status-name-input]');
+            const ativoSelect = card.querySelector('[data-status-active-select]');
+            const nome = (nomeInput?.value || 'Sem nome').trim() || 'Sem nome';
+            const ativo = (ativoSelect?.value || '1') === '1';
+
+            if (ordemInput) ordemInput.value = String(index + 1);
+
+            const step = document.createElement('div');
+            step.className = 'status-preview-step' + (ativo ? '' : ' inactive');
+            step.dataset.previewId = card.dataset.etapaId || '';
+
+            const dot = document.createElement('div');
+            dot.className = 'status-preview-dot';
+            dot.textContent = String(index + 1);
+
+            const label = document.createElement('span');
+            label.textContent = nome;
+
+            step.appendChild(dot);
+            step.appendChild(label);
+            preview.appendChild(step);
+        });
+    }
+
+    function getDragAfterElement(container, y) {
+        const cards = [...container.querySelectorAll('[data-status-card="true"]:not(.dragging)')];
+        return cards.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+                return { offset, element: child };
+            }
+            return closest;
+        }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+    }
+
+    getCards().forEach((card) => {
+        card.addEventListener('dragstart', (event) => {
+            dragging = card;
+            card.classList.add('dragging');
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', card.dataset.etapaId || '');
+        });
+
+        card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
+            dragging = null;
+            atualizarOrdensEPreview();
+        });
+    });
+
+    list.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        if (!dragging) return;
+        const afterElement = getDragAfterElement(list, event.clientY);
+        if (afterElement == null) {
+            list.appendChild(dragging);
+        } else {
+            list.insertBefore(dragging, afterElement);
+        }
+    });
+
+    list.addEventListener('input', (event) => {
+        if (event.target.matches('[data-status-name-input]')) atualizarOrdensEPreview();
+    });
+
+    list.addEventListener('change', (event) => {
+        if (event.target.matches('[data-status-active-select]')) atualizarOrdensEPreview();
+    });
+
+    atualizarOrdensEPreview();
+});
+
+// v41 - Simulador INSS: cálculo automático entre valor e parcela/margem.
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('simuladorInssForm');
+    const dataTag = document.getElementById('inssCoeficientes');
+    if (!form || !dataTag) return;
+
+    let dados = { novo: {} };
+    try { dados = JSON.parse(dataTag.textContent || '{}'); } catch (e) { return; }
+
+    const tipo = document.getElementById('simTipoOperacao');
+    const prazo = document.getElementById('simPrazo');
+    const valorBase = document.getElementById('simValorBase');
+    const margem = document.getElementById('simMargem');
+    const valorOut = document.getElementById('simValorEstimado');
+    const parcelaOut = document.getElementById('simParcelaEstimativa');
+    const coefOut = document.getElementById('simCoeficiente');
+    const resumoTexto = document.getElementById('simResumoTexto');
+    const copiarResumo = form.querySelector('[data-copy]');
+
+    function parseBR(value) {
+        const text = String(value || '').replace('%', '').trim();
+        if (!text) return 0;
+        if (typeof parseMoneyInputValue === 'function') {
+            return parseMoneyInputValue(text);
+        }
+        return Number(text.replace('R$', '').replace(/\./g, '').replace(',', '.')) || 0;
+    }
+
+    function brl(value) {
+        return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function prazoLabel() {
+        const selected = prazo ? prazo.options[prazo.selectedIndex] : null;
+        return selected ? (selected.dataset.label || selected.textContent || '') : '';
+    }
+
+    function montarMensagem(valor, parcela, descricao) {
+        return `Simulação INSS - ${descricao}\n\n` +
+            `Valor estimado: ${brl(valor)}\n` +
+            `Parcela estimada: ${brl(parcela)}\n` +
+            `Prazo: ${prazoLabel()}\n\n` +
+            'Valores sujeitos à análise e confirmação do banco.';
+    }
+
+    function atualizarResumo(mensagem) {
+        if (resumoTexto) resumoTexto.innerHTML = mensagem.replace(/\n/g, '<br>');
+        if (copiarResumo) copiarResumo.dataset.copy = mensagem;
+    }
+
+    function calcular(campoOrigem = null) {
+        if (!tipo || !prazo || !valorBase || !margem) return;
+
+        if (campoOrigem === valorBase) tipo.value = 'novo_valor';
+        if (campoOrigem === margem) tipo.value = 'novo_margem';
+
+        const item = dados.novo[prazo.value] || dados.novo['84'] || {};
+        const coef = Number(item.coeficiente || 0);
+        let valor = 0;
+        let parcela = 0;
+        let descricao = 'Novo INSS por valor';
+
+        if (tipo.value === 'novo_margem') {
+            parcela = parseBR(margem.value);
+            valor = coef ? parcela / coef : 0;
+            descricao = 'Novo INSS por margem';
+            if (campoOrigem === margem && document.activeElement !== valorBase) {
+                valorBase.value = brl(valor);
+            }
+        } else {
+            valor = parseBR(valorBase.value);
+            parcela = valor * coef;
+            descricao = 'Novo INSS por valor';
+            if (campoOrigem === valorBase && document.activeElement !== margem) {
+                margem.value = brl(parcela);
+            }
+        }
+
+        if (valorOut) valorOut.textContent = brl(valor);
+        if (parcelaOut) parcelaOut.textContent = brl(parcela);
+        if (coefOut) coefOut.textContent = coef ? coef.toFixed(6) : '-';
+        atualizarResumo(montarMensagem(valor, parcela, descricao));
+    }
+
+    if (valorBase) {
+        valorBase.addEventListener('input', () => calcular(valorBase));
+        valorBase.addEventListener('blur', () => calcular(valorBase));
+    }
+    if (margem) {
+        margem.addEventListener('input', () => calcular(margem));
+        margem.addEventListener('blur', () => calcular(margem));
+    }
+    if (prazo) {
+        prazo.addEventListener('change', () => calcular(tipo.value === 'novo_margem' ? margem : valorBase));
+    }
+    calcular(tipo && tipo.value === 'novo_margem' ? margem : valorBase);
+});
+
+// v42 - Seleção de modelos de mensagem na aba Mensagens.
+document.addEventListener('DOMContentLoaded', () => {
+    const select = document.getElementById('modeloMensagemSelect');
+    const items = document.querySelectorAll('.selected-message-item[data-message-index]');
+    if (!select || !items.length) return;
+
+    function atualizarModeloSelecionado() {
+        const value = select.value;
+        items.forEach((item) => {
+            item.classList.toggle('hidden', item.dataset.messageIndex !== value);
+        });
+    }
+
+    select.addEventListener('change', atualizarModeloSelecionado);
+    atualizarModeloSelecionado();
+});
+
+// v44 - Gerador de mensagens comercial separado, inspirado no gerador desktop antigo.
+document.addEventListener('DOMContentLoaded', () => {
+    const root = document.getElementById('geradorMensagens');
+    if (!root) return;
+
+    let modelos = {};
+    try { modelos = JSON.parse(root.dataset.modelos || '{}'); } catch (error) { modelos = {}; }
+
+    const modeloSelect = document.getElementById('gerModeloSelect');
+    const nome = document.getElementById('gerNome');
+    const banco = document.getElementById('gerBanco');
+    const parcelaAntiga = document.getElementById('gerParcelaAntiga');
+    const parcelaNova = document.getElementById('gerParcelaNova');
+    const troco = document.getElementById('gerTroco');
+    const atendente = document.getElementById('gerAtendente');
+    const economia = document.getElementById('gerEconomia');
+    const saida = document.getElementById('gerMensagemResultado');
+    const copiar = document.getElementById('copiarGeradorBtn');
+    const gerar = document.getElementById('gerarMensagemBtn');
+    const limpar = document.getElementById('limparGeradorBtn');
+
+    function parseMoneyGerador(value) {
+        let text = String(value || '').replace('R$', '').replace(/\s/g, '').trim();
+        if (!text) return 0;
+        if (text.includes(',')) {
+            text = text.replace(/\./g, '').replace(',', '.');
+            return Number(text) || 0;
+        }
+        if (/^\d{1,3}(\.\d{3})+$/.test(text)) {
+            text = text.replace(/\./g, '');
+            return Number(text) || 0;
+        }
+        return Number(text) || 0;
+    }
+
+    function brl(value) {
+        return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function calcularEconomia() {
+        const antiga = parseMoneyGerador(parcelaAntiga?.value);
+        const nova = parseMoneyGerador(parcelaNova?.value);
+        const valor = antiga - nova;
+        if (economia) economia.value = valor > 0 ? brl(valor) : brl(0);
+        return valor > 0 ? valor : 0;
+    }
+
+    function preencherModelo(modelo, dados) {
+        return String(modelo || '').replace(/\{(nome|banco|parcela_antiga|parcela_nova|troco|valor|economia|atendente)\}/g, (match, key) => dados[key] ?? '');
+    }
+
+    function gerarMensagem() {
+        const modeloNome = modeloSelect?.value || Object.keys(modelos)[0];
+        const modelo = modelos[modeloNome] || '';
+        const eco = calcularEconomia();
+        const dados = {
+            nome: nome?.value.trim() || '',
+            banco: banco?.value.trim() || '',
+            parcela_antiga: brl(parseMoneyGerador(parcelaAntiga?.value)),
+            parcela_nova: brl(parseMoneyGerador(parcelaNova?.value)),
+            troco: brl(parseMoneyGerador(troco?.value)),
+            valor: brl(parseMoneyGerador(troco?.value)),
+            economia: brl(eco),
+            atendente: atendente?.value.trim() || '',
+        };
+        const mensagem = preencherModelo(modelo, dados);
+        if (saida) saida.value = mensagem;
+        if (copiar) copiar.dataset.copy = mensagem;
+        return mensagem;
+    }
+
+    [modeloSelect, nome, banco, parcelaAntiga, parcelaNova, troco, atendente].forEach((field) => {
+        if (!field) return;
+        field.addEventListener('input', gerarMensagem);
+        field.addEventListener('change', gerarMensagem);
+        field.addEventListener('blur', gerarMensagem);
+    });
+
+    if (gerar) gerar.addEventListener('click', gerarMensagem);
+    if (limpar) {
+        limpar.addEventListener('click', () => {
+            [nome, banco, parcelaAntiga, parcelaNova, troco].forEach((field) => { if (field) field.value = ''; });
+            if (atendente) atendente.value = 'Poliana';
+            if (economia) economia.value = '';
+            if (saida) saida.value = '';
+            if (copiar) copiar.dataset.copy = '';
+        });
+    }
+
+    gerarMensagem();
 });

@@ -28,6 +28,9 @@
         <nav>
             <a href="{{ url_for('index') }}" class="nav-link">Propostas</a>
             <a href="{{ url_for('nova_proposta') }}" class="nav-link">Nova proposta</a>
+            <a href="{{ url_for('simulador_inss') }}" class="nav-link">Simulador INSS</a>
+            <a href="{{ url_for('gerador_mensagens_page') }}" class="nav-link">Gerador de mensagens</a>
+            <a href="{{ url_for('converter_contatos') }}" class="nav-link">Converter contatos</a>
             <a href="{{ url_for('funil') }}" class="nav-link">Funil</a>
             <a href="{{ url_for('encerradas') }}" class="nav-link">Encerradas</a>
             <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
@@ -42,6 +45,7 @@
                 <p>{{ subtitulo or 'Controle local de propostas, clientes e funis.' }}</p>
             </div>
             <div class="topbar-actions">
+                <button type="button" class="btn btn-back" onclick="history.back()" title="Voltar para a página anterior">← Voltar</button>
                 <div class="quick-search" data-search-url="{{ url_for('api_buscar_propostas') }}">
                     <input id="quickSearchInput" type="search" placeholder="Pesquisar cliente, CPF ou telefone..." autocomplete="off">
                     <div id="quickSearchResults" class="quick-search-results" hidden></div>

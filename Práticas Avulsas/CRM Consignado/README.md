@@ -1,5 +1,7 @@
 # CRM Consignado Local
 
+> Atualização v45: menu lateral simplificado e layout do Gerador de mensagens ajustado.
+
 CRM local em Flask + SQLite para controle de propostas de consignado.
 
 ## Recursos principais
@@ -222,3 +224,77 @@ Ajustes de interface na tela de detalhes da proposta:
 - O campo **Benefício bloqueado** não é reaproveitado do cliente, porque pode mudar de uma proposta para outra.
 - A importação de planilhas também alimenta a base de clientes automaticamente.
 - Propostas antigas são migradas automaticamente para a tabela de clientes ao iniciar o sistema.
+
+
+## Atualização v34
+
+- Cards do funil simplificados para reduzir altura e melhorar a visualização.
+- Cards exibem apenas nome, CPF, valor, comissão e previsão de saldo.
+- Informações de banco, promotora, benefício bloqueado e anotações continuam disponíveis dentro da proposta, mas não ocupam espaço no funil.
+
+## Simulador INSS
+
+O CRM possui uma área **Simulador INSS** no menu lateral.
+
+Essa tela funciona como uma calculadora simples de valores, usando como base apenas a aba INSS do arquivo de simulação.
+
+A tela foi mantida propositalmente limpa, sem cadastro de cliente. Ela não exige CPF, telefone, matrícula, banco digitado ou promotora.
+
+Recursos disponíveis:
+
+- Empréstimo novo com cálculo automático entre valor e parcela/margem;
+- Ao digitar o valor desejado, o sistema calcula a parcela estimada;
+- Ao digitar a parcela/margem disponível, o sistema calcula o valor estimado;
+- Prazos selecionáveis;
+- Resumo para copiar.
+
+Resultados exibidos:
+
+- Valor estimado;
+- Parcela estimada;
+- Coeficiente usado.
+
+Observação: o simulador é uma ferramenta de pré-atendimento. Os valores são estimativos e devem ser confirmados na análise final do banco.
+
+
+## Ajuste v39
+
+- O Simulador INSS foi simplificado para remover a opção de cartão.
+- Os campos monetários agora interpretam `5000` como R$ 5.000,00, evitando conversão indevida para R$ 50,00.
+
+## Ajuste v40
+
+- O Simulador INSS foi simplificado para remover a parte de comissão.
+- A comissão permanece no cadastro da proposta, pois depende do banco/promotora escolhido depois.
+
+## Ajuste v41
+
+- O Simulador INSS não usa mais seletor de tipo de cálculo.
+- O sistema identifica automaticamente o cálculo conforme o campo digitado:
+  - digitando **Valor desejado**, calcula a **Parcela estimada**;
+  - digitando **Parcela/Margem disponível**, calcula o **Valor estimado**.
+
+## Gerador de mensagens comercial
+
+O CRM possui uma área separada no menu lateral chamada **Gerador de mensagens**.
+
+Essa tela centraliza o antigo gerador desktop de mensagens e permite preencher dados comerciais simples, como:
+
+- Nome do cliente;
+- Banco;
+- Parcela antiga;
+- Nova parcela;
+- Valor/troco liberado;
+- Atendente.
+
+O sistema calcula automaticamente a economia mensal e gera uma mensagem pronta para copiar e enviar no WhatsApp.
+
+Também é possível:
+
+- Selecionar modelos salvos;
+- Adicionar novos modelos;
+- Editar modelos existentes;
+- Excluir modelos;
+- Usar variáveis como `{nome}`, `{banco}`, `{parcela_antiga}`, `{parcela_nova}`, `{troco}`, `{valor}`, `{economia}` e `{atendente}`.
+
+Os modelos do gerador ficam salvos no banco de dados local e não são perdidos ao atualizar os arquivos do sistema, desde que `database.db` não seja substituído.

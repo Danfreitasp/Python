@@ -22,17 +22,11 @@
                     <a href="{{ url_for('detalhe_proposta', proposta_id=p.id) }}">{{ p.nome }}</a>
                 </div>
                 {% if p.cpf %}<small>CPF: {{ p.cpf }} <button class="mini-btn copy-btn card-copy" type="button" data-copy="{{ p.cpf }}">Copiar</button></small>{% endif %}
-                <p>{{ p.produto or 'Produto não informado' }}</p>
-                <small>Banco digitado: {{ banco_digitado_exibicao(p) or '-' }}</small>
-                {% if p.banco_atual or p.banco_destino %}<small>{{ p.banco_atual or '-' }} → {{ p.banco_destino or '-' }}</small>{% endif %}
-                <small>Promotora: {{ p.promotora or '-' }}</small>
-                <div class="card-values">
+                <div class="card-values compact-card-values">
                     <span><small>Valor</small><strong>{{ br_moeda(p.troco) }}</strong></span>
                     <span><small>Comissão</small><strong>{{ br_moeda(p.comissao) }}</strong></span>
                 </div>
-                <span class="card-flag {% if p.beneficio_bloqueado == 'SIM' %}flag-alert{% else %}flag-ok{% endif %}">Benefício bloqueado: {{ p.beneficio_bloqueado or 'NÃO' }}</span>
-                <span>Previsão de saldo: {{ br_data(p.data_retorno) or 'sem data' }}</span>
-                {% if p.observacoes %}<em>{{ p.observacoes[:90] }}{% if p.observacoes|length > 90 %}...{% endif %}</em>{% endif %}
+                <span class="card-date-line">Previsão de saldo: {{ br_data(p.data_retorno) or 'sem data' }}</span>
             </article>
             {% else %}
             <p class="empty small">Sem propostas.</p>

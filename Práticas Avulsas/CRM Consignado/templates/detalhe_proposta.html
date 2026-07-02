@@ -293,35 +293,41 @@
         <section class="proposal-tab-panel" data-tab-panel="mensagens" hidden>
             <div class="section-title-row">
                 <div>
-                    <h2>Mensagens para WhatsApp</h2>
-                    <small>Copie mensagens prontas ou edite os modelos globais.</small>
+                    <h2>Modelos de mensagens</h2>
+                    <small>Selecione um modelo salvo e copie a mensagem preenchida com os dados da proposta.</small>
                 </div>
             </div>
-            <div class="message-grid">
-                {% for nome, texto in mensagens.items() %}
-                    <div class="message-box">
-                        <div class="message-top">
-                            <span>{{ nome }}</span>
-                            <button class="mini-btn copy-btn" data-copy="{{ texto|e }}">Copiar</button>
-                        </div>
-                        <p>{{ texto }}</p>
-                    </div>
-                {% endfor %}
-            </div>
-            <details class="message-editor">
-                <summary>Editar mensagens padrão</summary>
-                <form method="post" action="{{ url_for('atualizar_modelos_mensagens') }}" class="stack">
-                    <input type="hidden" name="next" value="{{ url_for('detalhe_proposta', proposta_id=proposta.id) }}">
-                    <p class="small muted">Edite os modelos globais. Você pode usar variáveis como {nome}, {cpf}, {produto}, {status}, {banco_atual}, {banco_destino}, {banco_digitado}, {valor}, {troco} e {comissao}.</p>
-                    {% for nome, modelo in modelos_mensagens.items() %}
-                        <label>{{ nome }}
-                            <textarea name="modelo__{{ nome }}" rows="4">{{ modelo }}</textarea>
-                        </label>
+
+            <div class="message-selector-panel">
+                <label>Modelo de mensagem
+                    <select id="modeloMensagemSelect">
+                        {% for nome, texto in mensagens.items() %}
+                            <option value="{{ loop.index0 }}">{{ nome }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <div class="selected-message-box">
+                    {% for nome, texto in mensagens.items() %}
+                        <article class="selected-message-item {% if not loop.first %}hidden{% endif %}" data-message-index="{{ loop.index0 }}">
+                            <div class="message-top">
+                                <span>{{ nome }}</span>
+                                <button class="mini-btn copy-btn" type="button" data-copy="{{ texto|e }}">Copiar mensagem</button>
+                            </div>
+                            <p>{{ texto }}</p>
+                        </article>
+                    {% else %}
+                        <p class="empty small">Nenhum modelo cadastrado.</p>
                     {% endfor %}
-                    <button class="btn btn-primary" type="submit">Salvar mensagens padrão</button>
-                </form>
-            </details>
+                </div>
+            </div>
+
+            <div class="message-management-link">
+                <a class="btn" href="{{ url_for('modelos_mensagens_page') }}">Gerenciar modelos de mensagens</a>
+                <small>Os modelos são cadastrados em uma tela separada no menu lateral.</small>
+            </div>
         </section>
+
 
         <section class="proposal-tab-panel" data-tab-panel="historico" hidden>
             <h2>Histórico de status e alterações</h2>
