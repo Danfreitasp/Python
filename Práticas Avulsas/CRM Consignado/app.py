@@ -375,12 +375,12 @@ def modelos_padrao() -> dict[str, str]:
     return {
         "Mensagem inicial": "Olá, {nome}. Tudo bem? Tenho uma simulação de {produto} para seu contrato do banco {banco_atual}, com possibilidade de redução de parcela e liberação de valor. Posso te passar os detalhes?",
         "Solicitação de documentos": "Olá, {nome}. Para seguir com sua proposta de {produto}, preciso que me envie os documentos necessários para análise. Assim que receber, dou andamento por aqui.",
-        "Proposta em andamento": "Olá, {nome}. Sua proposta de {produto} está em andamento no banco {banco_destino}. Status atual: {status}. Assim que houver atualização, te aviso.",
+        "Proposta em andamento": "Olá, {nome}. Sua proposta de {produto} está em andamento no banco {banco_digitado}. Status atual: {status}. Assim que houver atualização, te aviso.",
         "Aguardando interação": "Olá, {nome}. Sua proposta já foi digitada e agora precisamos que você conclua a assinatura digital com selfie. Assim que concluir, me avise para seguirmos acompanhando.",
-        "Em análise": "Olá, {nome}. Sua proposta está em análise documental pelo banco {banco_destino}. Sigo acompanhando e te aviso assim que houver atualização.",
+        "Em análise": "Olá, {nome}. Sua proposta está em análise documental pelo banco {banco_digitado}. Sigo acompanhando e te aviso assim que houver atualização.",
         "Aguardando CIP": "Olá, {nome}. Sua proposta está aguardando retorno da CIP. Essa etapa depende da comunicação entre os bancos, mas sigo acompanhando de perto.",
         "Aguardando averbação": "Olá, {nome}. Sua proposta está aguardando averbação. Essa é uma das etapas finais antes da liberação do pagamento.",
-        "Aguardando pagamento": "Olá, {nome}. Sua proposta já avançou e está aguardando pagamento pelo banco {banco_destino}. Assim que constar pago, te aviso.",
+        "Aguardando pagamento": "Olá, {nome}. Sua proposta já avançou e está aguardando pagamento pelo banco {banco_digitado}. Assim que constar pago, te aviso.",
         "Aguardando reapresentação": "Olá, {nome}. O pagamento retornou e precisamos ajustar os dados bancários para reapresentar. Pode me confirmar a conta para pagamento?",
         "Proposta paga": "Olá, {nome}. Sua proposta consta como paga. Verifique sua conta e me avise caso precise de mais alguma informação.",
         "Falta de margem": "Olá, {nome}. No momento, a análise indicou falta de margem para seguir com a proposta. Vou manter seu cadastro acompanhado para uma nova oportunidade.",
@@ -896,15 +896,7 @@ def banco_digitado_exibicao(proposta: Any) -> str:
         dados = dict(proposta)
     except Exception:
         dados = proposta or {}
-    banco_digitado = limpar_texto(dados.get("banco_digitado"))
-    banco_destino = limpar_texto(dados.get("banco_destino"))
-    banco_atual = limpar_texto(dados.get("banco_atual"))
-    produto = dados.get("produto")
-    if banco_digitado:
-        return banco_digitado
-    if produto_portabilidade(produto) and banco_destino:
-        return banco_destino
-    return banco_destino or banco_atual
+    return limpar_texto(dados.get("banco_digitado"))
 
 
 def status_ativos() -> list[str]:
@@ -1018,6 +1010,23 @@ def status_padrao() -> str:
 def status_valido(status: str) -> bool:
     return status in nomes_status()
 
+def status_entrada_proposta() -> str:
+    status = "Aguardando inserção"
+    db = get_db()
+    existente = db.execute("SELECT id, ativo FROM status_etapas WHERE nome = ?", (status,)).fetchone()
+    if existente:
+        if not existente["ativo"]:
+            db.execute("UPDATE status_etapas SET ativo = 1 WHERE id = ?", (existente["id"],))
+            db.commit()
+        return status
+
+    proxima_ordem = db.execute("SELECT COALESCE(MAX(ordem), 0) + 1 AS ordem FROM status_etapas").fetchone()["ordem"]
+    db.execute(
+        "INSERT INTO status_etapas (nome, grupo, ordem, ativo) VALUES (?, 'geral', ?, 1)",
+        (status, proxima_ordem),
+    )
+    db.commit()
+    return status
 
 def dados_formulario() -> dict[str, Any]:
     status = limpar_texto(request.form.get("status")) or "Novo lead"
@@ -1057,6 +1066,60 @@ def dados_formulario() -> dict[str, Any]:
     }
 
 
+
+
+def dados_nova_proposta() -> dict[str, Any]:
+    return {
+        "nome": limpar_texto(request.form.get("nome")),
+        "cpf": formatar_cpf(limpar_texto(request.form.get("cpf"))),
+        "nb_matricula": limpar_texto(request.form.get("nb_matricula")),
+        "numero_proposta": "",
+        "numero_port_vinculada": "",
+        "numero_refin_vinculada": "",
+        "tipo_cliente": "",
+        "banco_atual": "",
+        "banco_destino": "",
+        "banco_digitado": "",
+        "produto": limpar_texto(request.form.get("produto")),
+        "promotora": "",
+        "beneficio_bloqueado": "NÃO",
+        "valor_caiu_promotora": "NÃO",
+        "valor_sacado": "NÃO",
+        "parcela_atual": 0,
+        "nova_parcela": 0,
+        "troco": 0,
+        "comissao_percentual": 0,
+        "comissao": 0,
+        "margem_apos": "",
+        "status": status_entrada_proposta(),
+        "responsavel": "",
+        "telefone": limpar_texto(request.form.get("telefone")),
+        "endereco": limpar_texto(request.form.get("endereco")),
+        "dados_bancarios": limpar_texto(request.form.get("dados_bancarios")),
+        "proxima_acao": "",
+        "data_retorno": "",
+        "observacoes": limpar_texto(request.form.get("observacoes")),
+    }
+
+
+def proposta_vazia(status: str | None = None) -> dict[str, Any]:
+    proposta = {campo: "" for campo in CAMPOS_PROPOSTA}
+    proposta["status"] = status or status_entrada_proposta()
+    proposta["beneficio_bloqueado"] = "NÃO"
+    proposta["valor_caiu_promotora"] = "NÃO"
+    proposta["valor_sacado"] = "NÃO"
+    return proposta
+
+
+def validar_nova_proposta(dados: dict[str, Any]) -> list[str]:
+    obrigatorios = [
+        ("nome", "Nome"),
+        ("cpf", "CPF"),
+        ("nb_matricula", "Benefício (NB/Matrícula)"),
+        ("produto", "Produto"),
+        ("telefone", "Telefone"),
+    ]
+    return [rotulo for campo, rotulo in obrigatorios if not limpar_texto(dados.get(campo))]
 
 def chave_cliente(cpf: Any, nb_matricula: Any) -> tuple[str, str]:
     """Retorna a chave lógica do cliente.
@@ -1255,7 +1318,6 @@ def filtros_sql() -> tuple[str, list[Any], dict[str, str]]:
         "mes": limpar_texto(request.args.get("mes")),
         "status": limpar_texto(request.args.get("status")),
         "banco_atual": limpar_texto(request.args.get("banco_atual")),
-        "banco_destino": limpar_texto(request.args.get("banco_destino")),
         "banco_digitado": limpar_texto(request.args.get("banco_digitado")),
         "tipo_cliente": limpar_texto(request.args.get("tipo_cliente")),
         "produto": limpar_texto(request.args.get("produto")),
@@ -1282,9 +1344,6 @@ def filtros_sql() -> tuple[str, list[Any], dict[str, str]]:
     if filtros["banco_atual"]:
         where.append("banco_atual LIKE ?")
         params.append(f"%{filtros['banco_atual']}%")
-    if filtros["banco_destino"]:
-        where.append("banco_destino LIKE ?")
-        params.append(f"%{filtros['banco_destino']}%")
     if filtros["banco_digitado"]:
         where.append("COALESCE(banco_digitado, '') LIKE ?")
         params.append(f"%{filtros['banco_digitado']}%")
@@ -1546,7 +1605,7 @@ def simulador_inss_criar_proposta():
         "numero_refin_vinculada": "",
         "tipo_cliente": "INSS",
         "banco_atual": "",
-        "banco_destino": dados_sim["banco_digitado"],
+        "banco_destino": "",
         "banco_digitado": dados_sim["banco_digitado"],
         "produto": resultado["produto"],
         "promotora": dados_sim["promotora"],
@@ -1606,9 +1665,10 @@ def index():
 @app.route("/nova", methods=["GET", "POST"])
 def nova_proposta():
     if request.method == "POST":
-        dados = dados_formulario()
-        if not dados["nome"]:
-            flash("Informe o nome do cliente.", "erro")
+        dados = dados_nova_proposta()
+        pendentes = validar_nova_proposta(dados)
+        if pendentes:
+            flash("Preencha os campos obrigatórios: " + ", ".join(pendentes) + ".", "erro")
             return render_template("nova_proposta.html", proposta=dados)
 
         agora = agora_iso()
@@ -1631,11 +1691,10 @@ def nova_proposta():
             ),
         )
         db.commit()
-        registrar_historico(cursor.lastrowid, None, dados["status"], "Proposta criada")
+        registrar_historico(cursor.lastrowid, None, dados["status"], "Proposta criada em Aguardando inserção")
         if dados.get("observacoes"):
             registrar_anotacao(cursor.lastrowid, dados["observacoes"], agora)
 
-        # v12: permite anexar documentos já na criação da proposta.
         proposta_criada = buscar_proposta(cursor.lastrowid)
         salvos = salvar_anexos_upload(
             cursor.lastrowid,
@@ -1644,14 +1703,10 @@ def nova_proposta():
         )
         if salvos:
             registrar_historico(cursor.lastrowid, dados["status"], dados["status"], f"{salvos} anexo(s) enviado(s) na criação")
-            flash(f"Proposta cadastrada com sucesso. {salvos} anexo(s) salvo(s) na pasta do cliente.", "ok")
-        else:
-            flash("Proposta cadastrada com sucesso.", "ok")
-        return redirect(url_for("detalhe_proposta", proposta_id=cursor.lastrowid))
+        flash("Proposta criada com sucesso.", "ok")
+        return render_template("nova_proposta.html", proposta=proposta_vazia())
 
-    proposta = {campo: "" for campo in CAMPOS_PROPOSTA}
-    proposta["status"] = "Novo lead"
-    return render_template("nova_proposta.html", proposta=proposta)
+    return render_template("nova_proposta.html", proposta=proposta_vazia())
 
 
 @app.route("/proposta/<int:proposta_id>/criar-refin-vinculado", methods=["POST"])
@@ -1703,7 +1758,7 @@ def criar_refin_vinculado(proposta_id: int):
         flash("Refinanciamento existente vinculado à portabilidade.", "ok")
         return redirect(url_for("detalhe_proposta", proposta_id=existente["id"]))
 
-    banco_refin = banco_digitado_exibicao(port) or port["banco_destino"] or port["banco_atual"] or ""
+    banco_refin = banco_digitado_exibicao(port) or port["banco_atual"] or ""
     status_inicial = status_padrao()
     observacao = f"Refinanciamento criado a partir da portabilidade nº {numero_port}."
 
@@ -1830,7 +1885,7 @@ def api_buscar_propostas():
             "telefone": p["telefone"] or "",
             "status": p["status"] or "",
             "produto": p["produto"] or "",
-            "banco": banco_digitado_exibicao(p) or p["banco_atual"] or p["banco_destino"] or "",
+            "banco": banco_digitado_exibicao(p) or "",
             "match_campo": campo,
             "match_valor": valor,
             "url": url_for("detalhe_proposta", proposta_id=p["id"]),
@@ -2698,7 +2753,7 @@ def consulta_dashboard(mes: str) -> dict[str, Any]:
         "falta_cair_promotora": falta_cair_promotora,
         "valor_ja_sacado": valor_ja_sacado,
         "por_status": agrupar("status"),
-        "por_banco": agrupar("banco_destino"),
+        "por_banco": agrupar("banco_digitado"),
         "por_produto": agrupar("produto"),
     }
 
@@ -2715,7 +2770,7 @@ def exportar_csv():
     propostas = get_db().execute("SELECT * FROM propostas ORDER BY data_criacao DESC").fetchall()
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
-    colunas = [desc[0] for desc in get_db().execute("SELECT * FROM propostas LIMIT 1").description]
+    colunas = [desc[0] for desc in get_db().execute("SELECT * FROM propostas LIMIT 1").description if desc[0] != "banco_destino"]
     writer.writerow(colunas)
     for p in propostas:
         writer.writerow([p[c] for c in colunas])
@@ -2729,7 +2784,7 @@ def exportar_xlsx():
     wb = Workbook()
     ws = wb.active
     ws.title = "Propostas"
-    colunas = [desc[0] for desc in get_db().execute("SELECT * FROM propostas LIMIT 1").description]
+    colunas = [desc[0] for desc in get_db().execute("SELECT * FROM propostas LIMIT 1").description if desc[0] != "banco_destino"]
     ws.append(colunas)
     for p in propostas:
         ws.append([p[c] for c in colunas])
@@ -2756,8 +2811,8 @@ def normalizar_cabecalho(cabecalho: Any) -> str:
         "banco_digitado": "banco_digitado",
         "banco_de_digitacao": "banco_digitado",
         "digitado": "banco_digitado",
-        "destino": "banco_destino",
-        "banco_destino": "banco_destino",
+        "destino": "banco_digitado",
+        "banco_destino": "banco_digitado",
         "promotora": "promotora",
         "promotora_responsavel": "promotora",
         "bloqueado": "beneficio_bloqueado",
@@ -2994,9 +3049,7 @@ def importar():
             status = status_padrao()
         produto_importado = normalizar_produto_importacao(row.get("produto"))
         banco_digitado_importado = texto_planilha(row.get("banco_digitado"))
-        banco_destino_importado = texto_planilha(row.get("banco_destino"))
-        if not banco_destino_importado and produto_portabilidade(produto_importado):
-            banco_destino_importado = banco_digitado_importado
+        banco_destino_importado = ""
         agora = agora_iso()
         cursor = db.execute(
             """
@@ -3069,3 +3122,4 @@ if __name__ == "__main__":
         garantir_modelos()
         criar_backup_automatico()
     app.run(host="0.0.0.0", port=5000, debug=False)
+

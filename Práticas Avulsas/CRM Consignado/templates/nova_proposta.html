@@ -1,28 +1,82 @@
 {% extends 'base.html' %}
-{% set titulo = 'Nova proposta' %}
-{% set subtitulo = 'Cadastre um lead ou uma proposta em andamento.' %}
+{% set titulo = 'Nova Proposta' %}
+{% set subtitulo = 'Entrada simplificada de propostas.' %}
 {% block content %}
-<section class="card">
-    <form method="post" enctype="multipart/form-data" class="stack">
-        {% include '_form.html' %}
-
-        <section class="attachments-box stack">
-            <div class="section-title-row">
-                <div>
-                    <h2>Anexos iniciais</h2>
-                    <small>Opcional. Ao salvar, o CRM cria a pasta do cliente e envia os arquivos para ela.</small>
-                </div>
+<section class="card proposal-entry-card">
+    <form method="post" enctype="multipart/form-data" class="stack proposal-entry-form">
+        <section class="form-section stack">
+            <div class="section-title-row compact-row">
+                <h2>Cliente</h2>
             </div>
-            <label>Enviar documentos junto com a proposta
+            <div class="form-grid">
+                <label>Nome
+                    <input name="nome" value="{{ proposta.nome or proposta['nome'] or '' }}" required>
+                </label>
+                <label>CPF
+                    <input name="cpf" class="cpf-mask" value="{{ proposta.cpf or proposta['cpf'] or '' }}" placeholder="000.000.000-00" required>
+                    <small class="muted cliente-sugestao-ajuda">Digite o CPF para consultar matrículas já cadastradas.</small>
+                </label>
+                <label>Benefício (NB/Matrícula)
+                    <input name="nb_matricula" value="{{ proposta.nb_matricula or proposta['nb_matricula'] or '' }}" required>
+                    <select id="cliente-matricula-select" class="cliente-matricula-select hidden" aria-label="Matrículas encontradas para este CPF">
+                        <option value="">Selecione uma matrícula cadastrada</option>
+                    </select>
+                </label>
+                <label>Produto
+                    <select name="produto" required>
+                        <option value="">Selecione</option>
+                        {% for produto in PRODUTOS %}
+                            <option value="{{ produto }}" {% if (proposta.produto or proposta['produto'] or '') == produto %}selected{% endif %}>{{ produto }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Telefone
+                    <input name="telefone" value="{{ proposta.telefone or proposta['telefone'] or '' }}" required>
+                </label>
+            </div>
+        </section>
+
+        <section class="form-section stack">
+            <div class="section-title-row compact-row">
+                <h2>Endereço</h2>
+            </div>
+            <label class="full-label">Endereço do cliente
+                <textarea name="endereco" rows="3" placeholder="Rua, número, bairro, cidade, UF, CEP">{{ proposta.endereco or proposta['endereco'] or '' }}</textarea>
+            </label>
+        </section>
+
+        <section class="form-section stack">
+            <div class="section-title-row compact-row">
+                <h2>Dados Bancários</h2>
+            </div>
+            <label class="full-label">Dados bancários do cliente
+                <textarea name="dados_bancarios" rows="3" placeholder="Banco, agência, conta, tipo de conta, chave Pix ou informações necessárias">{{ proposta.dados_bancarios or proposta['dados_bancarios'] or '' }}</textarea>
+            </label>
+        </section>
+
+        <section class="form-section attachments-box stack">
+            <div class="section-title-row compact-row">
+                <h2>Documentos</h2>
+            </div>
+            <label>Enviar documentos
                 <input type="file" name="arquivos" multiple>
             </label>
             <small class="muted">Pasta base: {{ anexos_base_dir }}</small>
         </section>
 
+        <section class="form-section stack">
+            <div class="section-title-row compact-row">
+                <h2>Observação</h2>
+            </div>
+            <label class="full-label">Observação inicial
+                <textarea name="observacoes" rows="4">{{ proposta.observacoes or proposta['observacoes'] or '' }}</textarea>
+            </label>
+        </section>
+
         <div class="actions">
-            <button class="btn btn-primary" type="submit">Salvar proposta</button>
-            <a class="btn" href="{{ url_for('index') }}">Cancelar</a>
+            <button class="btn btn-primary" type="submit">Salvar em Aguardando Inserção</button>
         </div>
     </form>
 </section>
 {% endblock %}
+

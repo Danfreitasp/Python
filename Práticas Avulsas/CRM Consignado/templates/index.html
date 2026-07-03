@@ -14,7 +14,6 @@
             {% endfor %}
         </select>
         <input name="banco_atual" placeholder="Banco atual" value="{{ filtros.banco_atual }}">
-        <input name="banco_destino" placeholder="Banco destino" value="{{ filtros.banco_destino }}">
         <input name="banco_digitado" placeholder="Banco digitado" value="{{ filtros.banco_digitado }}">
         <select name="tipo_cliente">
             <option value="">Tipo</option>
@@ -72,7 +71,6 @@
                     <th>CPF</th>
                     <th>Tipo</th>
                     <th>Banco atual</th>
-                    <th>Banco destino</th>
                     <th>Banco digitado</th>
                     <th>Produto</th>
                     <th>Promotora</th>
@@ -95,7 +93,6 @@
                     <td>{{ p.cpf }}{% if p.cpf %}<button class="mini-btn copy-btn table-copy" type="button" data-copy="{{ p.cpf }}">Copiar</button>{% endif %}</td>
                     <td>{{ p.tipo_cliente }}</td>
                     <td>{{ p.banco_atual }}</td>
-                    <td>{{ p.banco_destino }}</td>
                     <td>{{ banco_digitado_exibicao(p) }}</td>
                     <td>{{ p.produto }}</td>
                     <td>{{ p.promotora }}</td>
@@ -124,10 +121,11 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="17" class="empty">Nenhuma proposta encontrada.</td></tr>
+                <tr><td colspan="16" class="empty">Nenhuma proposta encontrada.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </section>
 {% endblock %}
+

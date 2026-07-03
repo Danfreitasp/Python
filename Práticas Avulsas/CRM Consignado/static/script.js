@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let ultimaConsultaClientes = 0;
 
     function montarSelectMatriculas(clientes) {
-        matriculaSelect.innerHTML = '<option value="">Selecione uma matrícula cadastrada</option>';
+        matriculaSelect.innerHTML = '<option value="">Cliente encontrado</option>';
 
         clientes.forEach((cliente, index) => {
             const option = document.createElement('option');
@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const nova = document.createElement('option');
         nova.value = 'nova';
-        nova.textContent = 'Cadastrar nova matrícula';
+        nova.textContent = 'Nova matrícula';
         matriculaSelect.appendChild(nova);
     }
 
@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const digits = cpfField.value.replace(/\D/g, '');
 
         matriculaSelect.classList.add('hidden');
-        matriculaSelect.innerHTML = '<option value="">Selecione uma matrícula cadastrada</option>';
+        matriculaSelect.innerHTML = '<option value="">Cliente encontrado</option>';
         clientesCPFCache = [];
 
         if (digits.length !== 11) {
@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             montarSelectMatriculas(clientesCPFCache);
             matriculaSelect.classList.remove('hidden');
-            if (clienteAjuda) clienteAjuda.textContent = 'CPF já cadastrado. Selecione uma matrícula ou cadastre uma nova.';
+            if (clienteAjuda) clienteAjuda.textContent = 'Cliente encontrado';
         } catch (error) {
             console.error(error);
             if (consultaAtual === ultimaConsultaClientes && clienteAjuda) clienteAjuda.textContent = 'Não foi possível consultar matrículas agora.';
@@ -107,13 +107,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (value === 'nova') {
                 const base = clientesCPFCache[0];
                 preencherDadosCliente(base, true);
-                if (clienteAjuda) clienteAjuda.textContent = 'Nova matrícula: dados básicos reaproveitados. Informe a matrícula nova.';
+                if (clienteAjuda) clienteAjuda.textContent = 'Cliente encontrado · nova matrícula';
                 return;
             }
             const cliente = clientesCPFCache[Number(value)];
             if (cliente) {
                 preencherDadosCliente(cliente, false);
-                if (clienteAjuda) clienteAjuda.textContent = 'Dados do cliente preenchidos automaticamente.';
+                if (clienteAjuda) clienteAjuda.textContent = 'Cliente encontrado · dados preenchidos automaticamente.';
             }
         });
     }
@@ -172,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Calcula comissão em qualquer formulário/tela que tenha Valor + % comissão + Comissão.
-    // Isso cobre Nova proposta, Editar proposta e a aba "Editar dados" dentro da proposta.
+    // Isso cobre os formulários administrativos de edição da proposta.
     function calcularComissaoNoEscopo(escopo) {
         if (!escopo) return;
         const trocoInput = escopo.querySelector('input[name="troco"]');
@@ -799,3 +799,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     gerarMensagem();
 });
+

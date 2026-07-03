@@ -32,9 +32,6 @@
     <label>Banco atual
         <input name="banco_atual" value="{{ proposta.banco_atual or proposta['banco_atual'] or '' }}">
     </label>
-    <label>Banco destino
-        <input name="banco_destino" value="{{ proposta.banco_destino or proposta['banco_destino'] or '' }}">
-    </label>
     <label>Banco digitado
         <input name="banco_digitado" value="{{ proposta.banco_digitado or proposta['banco_digitado'] or '' }}" placeholder="Banco onde a proposta foi digitada">
     </label>
@@ -118,3 +115,4 @@
 <label class="full-label">Observação inicial / importada
     <textarea name="observacoes" rows="5" placeholder="Use este campo apenas para a primeira observação. Depois, registre novas anotações na tela de detalhes da proposta.">{{ proposta.observacoes or proposta['observacoes'] or '' }}</textarea>
 </label>
+

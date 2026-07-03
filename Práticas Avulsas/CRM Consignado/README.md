@@ -59,7 +59,6 @@ Se apagar o `database.db`, o sistema cria um banco vazio automaticamente ao inic
 
 - Adicionado campo **Banco digitado**.
 - Na importação da planilha de produção, a coluna **BANCO** agora entra como **Banco digitado**.
-- Para produtos de portabilidade/refinanciamento de portabilidade, se o Banco destino estiver vazio, o sistema usa o Banco digitado como Banco destino.
 - Os cards do funil passam a mostrar Banco digitado.
 - O topo de cada etapa do funil mostra a quantidade de propostas e a soma das comissões daquela etapa.
 
@@ -298,3 +297,4 @@ Também é possível:
 - Usar variáveis como `{nome}`, `{banco}`, `{parcela_antiga}`, `{parcela_nova}`, `{troco}`, `{valor}`, `{economia}` e `{atendente}`.
 
 Os modelos do gerador ficam salvos no banco de dados local e não são perdidos ao atualizar os arquivos do sistema, desde que `database.db` não seja substituído.
+

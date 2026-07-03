@@ -32,7 +32,7 @@
         {% else %}<p class="empty">Sem dados neste mês.</p>{% endfor %}
     </div>
     <div class="card stack">
-        <h2>Propostas por banco destino</h2>
+        <h2>Propostas por banco digitado</h2>
         {% for item in dados.por_banco %}
             <div class="bar-row"><span>{{ item.nome }}</span><div><b style="width: {{ item.percentual }}%"></b></div><small>{{ item.qtd }}</small></div>
         {% else %}<p class="empty">Sem dados neste mês.</p>{% endfor %}
@@ -45,3 +45,4 @@
     </div>
 </section>
 {% endblock %}
+
