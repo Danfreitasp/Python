@@ -45,7 +45,7 @@
                     <button class="btn btn-small" type="submit">Salvar</button>
                 </form>
 
-                <span>Encerrada em: {{ br_data_hora(p.data_atualizacao) }}</span>
+                <span>Encerrada em: {{ br_data_hora(p.data_encerramento or p.data_atualizacao) }}</span>
                 {% if p.observacoes %}<em>{{ p.observacoes[:90] }}{% if p.observacoes|length > 90 %}...{% endif %}</em>{% endif %}
             </article>
             {% else %}

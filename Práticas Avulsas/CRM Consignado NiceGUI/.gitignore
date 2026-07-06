@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.log
+.venv/
+database.db.broken
+database_fresh.db
+database_working.db
+tmpcopy.db
+test_write.db
+test_write2.db

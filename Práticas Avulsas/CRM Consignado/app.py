@@ -122,6 +122,7 @@ CAMPOS_PROPOSTA = [
     "telefone",
     "endereco",
     "dados_bancarios",
+    "data_encerramento",
     "proxima_acao",
     "data_retorno",
     "observacoes",
@@ -181,6 +182,7 @@ def init_db() -> None:
             dados_bancarios TEXT,
             data_criacao TEXT NOT NULL,
             data_atualizacao TEXT NOT NULL,
+            data_encerramento TEXT,
             proxima_acao TEXT,
             data_retorno TEXT,
             observacoes TEXT
@@ -303,6 +305,8 @@ def init_db() -> None:
         db.execute("ALTER TABLE propostas ADD COLUMN valor_sacado TEXT DEFAULT 'NÃO'")
     if "data_verificacao" not in colunas_propostas:
         db.execute("ALTER TABLE propostas ADD COLUMN data_verificacao TEXT")
+    if "data_encerramento" not in colunas_propostas:
+        db.execute("ALTER TABLE propostas ADD COLUMN data_encerramento TEXT")
     if "endereco" not in colunas_propostas:
         db.execute("ALTER TABLE propostas ADD COLUMN endereco TEXT")
     if "dados_bancarios" not in colunas_propostas:
@@ -328,6 +332,32 @@ def init_db() -> None:
         db.execute("UPDATE propostas SET status = ? WHERE status = ?", (novo, antigo))
         db.execute("UPDATE historico SET status_anterior = ? WHERE status_anterior = ?", (novo, antigo))
         db.execute("UPDATE historico SET status_novo = ? WHERE status_novo = ?", (novo, antigo))
+
+    db.execute(
+        """
+        UPDATE propostas
+        SET data_encerramento = COALESCE(
+            (
+                SELECT MAX(h.data_hora)
+                FROM historico h
+                WHERE h.proposta_id = propostas.id
+                  AND h.status_novo IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')
+            ),
+            data_atualizacao,
+            data_criacao
+        )
+        WHERE status IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')
+          AND COALESCE(TRIM(data_encerramento), '') = ''
+        """
+    )
+    db.execute(
+        """
+        UPDATE propostas
+        SET data_encerramento = NULL
+        WHERE status NOT IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')
+          AND COALESCE(TRIM(data_encerramento), '') <> ''
+        """
+    )
 
     for removido in ("Inserção", "Perdido", "Cancelado"):
         db.execute("DELETE FROM status_etapas WHERE nome = ?", (removido,))
@@ -884,6 +914,12 @@ def mes_atual() -> str:
 
 def status_encerrado(status: str) -> bool:
     return limpar_texto(status) in STATUS_ENCERRADOS
+
+
+def data_encerramento_para_status(status_anterior: str | None, status_novo: str | None, data_atual: Any = None) -> str | None:
+    if status_encerrado(status_novo or ""):
+        return limpar_texto(data_atual) or agora_iso()
+    return None
 
 
 def produto_portabilidade(produto: Any) -> bool:
@@ -2274,12 +2310,18 @@ def editar_proposta(proposta_id: int):
 
         status_anterior = proposta["status"]
         db = get_db()
+        data_encerramento = data_encerramento_para_status(
+            status_anterior,
+            dados["status"],
+            proposta["data_encerramento"] if "data_encerramento" in proposta.keys() else None,
+        )
+        atualizado_em = agora_iso()
         db.execute(
             """
             UPDATE propostas SET
                 cliente_id = ?, nome = ?, cpf = ?, nb_matricula = ?, numero_proposta = ?, numero_port_vinculada = ?, numero_refin_vinculada = ?, tipo_cliente = ?, banco_atual = ?,
                 banco_destino = ?, banco_digitado = ?, produto = ?, promotora = ?, beneficio_bloqueado = ?, valor_caiu_promotora = ?, valor_sacado = ?, parcela_atual = ?, nova_parcela = ?, troco = ?,
-                comissao_percentual = ?, comissao = ?, margem_apos = ?, status = ?, responsavel = ?, telefone = ?, endereco = ?, dados_bancarios = ?, data_atualizacao = ?,
+                comissao_percentual = ?, comissao = ?, margem_apos = ?, status = ?, responsavel = ?, telefone = ?, endereco = ?, dados_bancarios = ?, data_atualizacao = ?, data_encerramento = ?,
                 proxima_acao = ?, data_retorno = ?, observacoes = ?
             WHERE id = ?
             """,
@@ -2288,7 +2330,7 @@ def editar_proposta(proposta_id: int):
                 dados["numero_port_vinculada"], dados["numero_refin_vinculada"], dados["tipo_cliente"],
                 dados["banco_atual"], dados["banco_destino"], dados["banco_digitado"], dados["produto"],
                 dados["promotora"], dados["beneficio_bloqueado"], dados["valor_caiu_promotora"], dados["valor_sacado"], dados["parcela_atual"], dados["nova_parcela"], dados["troco"], dados["comissao_percentual"], dados["comissao"], dados["margem_apos"],
-                dados["status"], dados["responsavel"], dados["telefone"], dados["endereco"], dados["dados_bancarios"], agora_iso(),
+                dados["status"], dados["responsavel"], dados["telefone"], dados["endereco"], dados["dados_bancarios"], atualizado_em, data_encerramento,
                 dados["proxima_acao"], dados["data_retorno"], dados["observacoes"], proposta_id,
             ),
         )
@@ -2339,13 +2381,18 @@ def mudar_status(proposta_id: int):
             or sacado != (proposta["valor_sacado"] or "NÃO")
         )
         if mudou_algo:
+            data_encerramento = data_encerramento_para_status(
+                proposta["status"],
+                status_final,
+                proposta["data_encerramento"] if "data_encerramento" in proposta.keys() else None,
+            )
             get_db().execute(
                 """
                 UPDATE propostas
-                SET status = ?, valor_caiu_promotora = ?, valor_sacado = ?, data_atualizacao = ?
+                SET status = ?, valor_caiu_promotora = ?, valor_sacado = ?, data_atualizacao = ?, data_encerramento = ?
                 WHERE id = ?
                 """,
-                (status_final, caiu, sacado, agora_iso(), proposta_id),
+                (status_final, caiu, sacado, agora_iso(), data_encerramento, proposta_id),
             )
             get_db().commit()
             registrar_historico(proposta_id, proposta["status"], status_final, observacao)
@@ -2359,9 +2406,14 @@ def mudar_status(proposta_id: int):
             flash("Status inválido.", "erro")
             return redirect(request.referrer or url_for("index"))
         if novo_status != proposta["status"]:
+            data_encerramento = data_encerramento_para_status(
+                proposta["status"],
+                novo_status,
+                proposta["data_encerramento"] if "data_encerramento" in proposta.keys() else None,
+            )
             get_db().execute(
-                "UPDATE propostas SET status = ?, data_atualizacao = ? WHERE id = ?",
-                (novo_status, agora_iso(), proposta_id),
+                "UPDATE propostas SET status = ?, data_atualizacao = ?, data_encerramento = ? WHERE id = ?",
+                (novo_status, agora_iso(), data_encerramento, proposta_id),
             )
             get_db().commit()
             registrar_historico(proposta_id, proposta["status"], novo_status, observacao)
@@ -2504,8 +2556,8 @@ def encerradas():
         """
         SELECT * FROM propostas
         WHERE status IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')
-          AND substr(COALESCE(data_criacao, data_atualizacao), 1, 7) = ?
-        ORDER BY data_atualizacao DESC, id DESC
+          AND substr(COALESCE(data_encerramento, data_atualizacao, data_criacao), 1, 7) = ?
+        ORDER BY COALESCE(data_encerramento, data_atualizacao) DESC, id DESC
         """,
         (mes,),
     ).fetchall()
@@ -3122,4 +3174,3 @@ if __name__ == "__main__":
         garantir_modelos()
         criar_backup_automatico()
     app.run(host="0.0.0.0", port=5000, debug=False)
-
