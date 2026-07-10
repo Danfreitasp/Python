@@ -24,8 +24,8 @@ body {
     position: fixed;
     inset: 0 auto 0 0;
     width: 230px;
-    background: #111827;
-    color: #fff;
+    background: #f8fafc;
+    color: #1f2937;
     padding: 22px 16px;
 }
 
@@ -41,7 +41,7 @@ body {
     width: 48px;
     height: 48px;
     border-radius: 12px;
-    background: #1f2937;
+    background: #e5e7eb;
     color: #dbeafe;
     font-size: 14px;
     letter-spacing: .08em;
@@ -61,12 +61,12 @@ body {
 .nav-link {
     display: block;
     padding: 12px 14px;
-    color: #d1d5db;
+    color: #374151;
     text-decoration: none;
     border-radius: 10px;
     margin-bottom: 6px;
 }
-.nav-link:hover { background: #1f2937; color: #fff; }
+.nav-link:hover { background: #e5e7eb; color: #111827; }
 
 .main {
     margin-left: 230px;
@@ -969,8 +969,8 @@ html[data-theme="escuro"] .btn-danger {
 }
 
 html[data-theme="escuro"] .toast-copiado {
-    background: #e5e7eb;
-    color: #111827;
+    background: #e8f0fe;
+    color: #2563eb;
 }
 
 html[data-theme="escuro"] ::-webkit-scrollbar {
