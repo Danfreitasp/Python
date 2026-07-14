@@ -42,6 +42,7 @@ crm.bat
 *.md
 !README.md
 !readme.md
+!DESIGN_SYSTEM.md
 
 # VS Code
 .vscode/
