@@ -70,6 +70,13 @@ STATUS_LIST = [s["nome"] for s in DEFAULT_STATUS_ETAPAS]
 STATUS_VENDEDOR = STATUS_LIST
 STATUS_ADMINISTRATIVO = STATUS_LIST
 STATUS_ENCERRADOS = ["Pago", "Perdido / Cancelado"]
+STATUS_COMISSAO_PREVISTA = (
+    "Aguardando CIP",
+    "Refin da Port",
+    "Aguardando Averbação",
+    "Averbado",
+    "Aguardando Reapresentação",
+)
 
 TIPOS_CLIENTE = ["INSS", "SIAPE"]
 PRODUTOS = ["Portabilidade", "Refinanciamento", "Novo", "Cartão", "Saque Complementar", "Outro"]
@@ -3875,12 +3882,30 @@ def consulta_dashboard(mes: str) -> dict[str, Any]:
     propostas = db.execute(
         "SELECT * FROM propostas WHERE substr(data_criacao, 1, 7) = ? ORDER BY data_criacao DESC", (mes,)
     ).fetchall()
+    propostas_encerradas_mes = db.execute(
+        """
+        SELECT *
+        FROM propostas
+        WHERE status IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')
+          AND substr(COALESCE(data_encerramento, data_atualizacao, data_criacao), 1, 7) = ?
+        """,
+        (mes,),
+    ).fetchall()
+    placeholders_comissao_prevista = ", ".join("?" for _ in STATUS_COMISSAO_PREVISTA)
+    propostas_comissao_prevista = db.execute(
+        f"""
+        SELECT status, comissao
+        FROM propostas
+        WHERE status IN ({placeholders_comissao_prevista})
+        """,
+        STATUS_COMISSAO_PREVISTA,
+    ).fetchall()
     total = len(propostas)
-    pagas = [p for p in propostas if p["status"] == "Pago"]
-    perdidas = [p for p in propostas if p["status"] in ("Perdido", "Cancelado", "Perdido / Cancelado")]
+    pagas = [p for p in propostas_encerradas_mes if p["status"] == "Pago"]
+    perdidas = [p for p in propostas_encerradas_mes if p["status"] in ("Perdido", "Cancelado", "Perdido / Cancelado")]
     troco_previsto = sum(float(p["troco"] or 0) for p in propostas)
     troco_pago = sum(float(p["troco"] or 0) for p in pagas)
-    comissao_prevista = sum(float(p["comissao"] or 0) for p in propostas)
+    comissao_prevista = sum(float(p["comissao"] or 0) for p in propostas_comissao_prevista)
     comissao_paga = sum(float(p["comissao"] or 0) for p in pagas)
     valor_a_sacar = sum(float(p["comissao"] or 0) for p in pagas if (p["valor_caiu_promotora"] or "NÃO") == "SIM" and (p["valor_sacado"] or "NÃO") != "SIM")
     falta_cair_promotora = sum(float(p["comissao"] or 0) for p in pagas if (p["valor_caiu_promotora"] or "NÃO") != "SIM")
@@ -3908,6 +3933,7 @@ def consulta_dashboard(mes: str) -> dict[str, Any]:
         "troco_previsto": troco_previsto,
         "troco_pago": troco_pago,
         "comissao_prevista": comissao_prevista,
+        "comissao_prevista_status": STATUS_COMISSAO_PREVISTA,
         "comissao_paga": comissao_paga,
         "valor_a_sacar": valor_a_sacar,
         "falta_cair_promotora": falta_cair_promotora,

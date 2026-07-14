@@ -12,13 +12,22 @@
 </section>
 
 <section class="metrics">
-    <div class="metric-card"><small>Total no mês</small><strong>{{ dados.total }}</strong></div>
-    <div class="metric-card"><small>Pagas</small><strong>{{ dados.pagas }}</strong></div>
-    <div class="metric-card"><small>Perdidas/canceladas</small><strong>{{ dados.perdidas }}</strong></div>
+    <div class="metric-card"><small>Criadas no mês</small><strong>{{ dados.total }}</strong></div>
+    <div class="metric-card"><small>Pagas no mês</small><strong>{{ dados.pagas }}</strong></div>
+    <div class="metric-card"><small>Perdidas no mês</small><strong>{{ dados.perdidas }}</strong></div>
     <div class="metric-card"><small>Valor previsto</small><strong>{{ br_moeda(dados.troco_previsto) }}</strong></div>
-    <div class="metric-card"><small>Valor pago</small><strong>{{ br_moeda(dados.troco_pago) }}</strong></div>
-    <div class="metric-card"><small>Comissão prevista</small><strong>{{ br_moeda(dados.comissao_prevista) }}</strong></div>
-    <div class="metric-card"><small>Comissão paga</small><strong>{{ br_moeda(dados.comissao_paga) }}</strong></div>
+    <div class="metric-card"><small>Valor pago no mês</small><strong>{{ br_moeda(dados.troco_pago) }}</strong></div>
+    <div class="metric-card">
+        {% set ajuda_comissao_prevista = 'Comissão prevista: soma atual das comissões em ' ~ (dados.comissao_prevista_status | join(', ')) ~ '.' %}
+        <div class="metric-label-row">
+            <small>Comissão prevista</small>
+            <button type="button" class="metric-help-button" title="{{ ajuda_comissao_prevista }}" aria-label="Ajuda sobre comissão prevista">
+                <i class="bi bi-question-circle" aria-hidden="true"></i>
+            </button>
+        </div>
+        <strong>{{ br_moeda(dados.comissao_prevista) }}</strong>
+    </div>
+    <div class="metric-card"><small>Comissão paga no mês</small><strong>{{ br_moeda(dados.comissao_paga) }}</strong></div>
     <div class="metric-card highlight-card"><small>Valor a sacar</small><strong>{{ br_moeda(dados.valor_a_sacar) }}</strong></div>
     <div class="metric-card"><small>Falta cair na promotora</small><strong>{{ br_moeda(dados.falta_cair_promotora) }}</strong></div>
     <div class="metric-card"><small>Já sacado</small><strong>{{ br_moeda(dados.valor_ja_sacado) }}</strong></div>
