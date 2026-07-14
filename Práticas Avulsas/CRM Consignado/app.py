@@ -87,6 +87,10 @@ DIAS_PARADA_OPERACIONAL = 3
 TAREFA_STATUS = ("pendente", "concluida", "adiada", "cancelada")
 TAREFA_PRIORIDADES = ("baixa", "normal", "alta")
 TAREFA_CATEGORIAS = ("Ligação", "WhatsApp", "Conferência", "Retorno", "Pagamento", "Documentação", "Administrativo", "Outro")
+NOTIFICACOES_IMPORTANTES_OBSERVACOES = (
+    "Proposta criada%",
+    "Proposta importada%",
+)
 DESTINOS_INTERNOS_PREFIXOS = (
     "/propostas",
     "/funil",
@@ -229,6 +233,34 @@ def init_db() -> None:
             status_novo TEXT,
             observacao TEXT,
             FOREIGN KEY (proposta_id) REFERENCES propostas(id) ON DELETE CASCADE
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS notificacoes_importantes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            proposta_id INTEGER,
+            proposta_nome TEXT,
+            proposta_numero TEXT,
+            tipo TEXT NOT NULL,
+            titulo TEXT NOT NULL,
+            mensagem TEXT NOT NULL,
+            data_hora TEXT NOT NULL
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_notificacoes_importantes_data
+        ON notificacoes_importantes(data_hora DESC, id DESC)
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS notificacoes_leitura (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            lido_ate TEXT NOT NULL
         )
         """
     )
@@ -1167,6 +1199,149 @@ def registrar_historico(proposta_id: int, anterior: str | None, novo: str | None
     db.commit()
 
 
+def registrar_notificacao_importante(
+    *,
+    proposta_id: int | None,
+    proposta_nome: str | None,
+    proposta_numero: str | None,
+    tipo: str,
+    titulo: str,
+    mensagem: str,
+    data_hora: str | None = None,
+) -> None:
+    get_db().execute(
+        """
+        INSERT INTO notificacoes_importantes
+            (proposta_id, proposta_nome, proposta_numero, tipo, titulo, mensagem, data_hora)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (proposta_id, proposta_nome, proposta_numero, tipo, titulo, mensagem, data_hora or agora_iso()),
+    )
+    get_db().commit()
+
+
+def tipo_notificacao_historico(status_anterior: str | None, status_novo: str | None, observacao: str | None) -> tuple[str, str, str]:
+    anterior = limpar_texto(status_anterior)
+    novo = limpar_texto(status_novo)
+    texto_observacao = limpar_texto(observacao)
+    mudou_status = bool(anterior and novo and anterior != novo)
+
+    if texto_observacao.startswith("Proposta criada") or texto_observacao.startswith("Proposta importada"):
+        detalhe = f"{texto_observacao}. Status inicial: {novo}." if novo else texto_observacao
+        return "proposta_criada", "Proposta criada", detalhe or "Nova proposta adicionada ao CRM."
+    if novo == "Pago" and mudou_status:
+        return "paga", "Proposta marcada como paga", f"De {anterior} para {novo}."
+    if novo in {"Perdido / Cancelado", "Perdido", "Cancelado"} and mudou_status:
+        return "reprovada", "Proposta reprovada/perdida", f"De {anterior} para {novo}."
+    if novo == "Aguardando Reapresentação" and mudou_status:
+        return "reapresentacao", "Aguardando reapresentação", f"De {anterior} para {novo}."
+    if mudou_status:
+        return "etapa", "Etapa alterada", f"De {anterior} para {novo}."
+    return "alteracao", "Alteração importante", texto_observacao or "Proposta atualizada."
+
+
+def notificacoes_lidas_ate() -> str:
+    row = get_db().execute("SELECT lido_ate FROM notificacoes_leitura WHERE id = 1").fetchone()
+    return row["lido_ate"] if row else ""
+
+
+def marcar_todas_notificacoes_lidas() -> None:
+    db = get_db()
+    agora = agora_iso()
+    atualizado = db.execute("UPDATE notificacoes_leitura SET lido_ate = ? WHERE id = 1", (agora,))
+    if atualizado.rowcount == 0:
+        db.execute("INSERT INTO notificacoes_leitura (id, lido_ate) VALUES (1, ?)", (agora,))
+    db.commit()
+
+
+def carregar_notificacoes_importantes(limite: int = 8) -> list[dict[str, Any]]:
+    filtros_observacao = " OR ".join("h.observacao LIKE ?" for _ in NOTIFICACOES_IMPORTANTES_OBSERVACOES)
+    db = get_db()
+    lido_ate = notificacoes_lidas_ate()
+    historicos = db.execute(
+        f"""
+        SELECT
+            h.id,
+            h.proposta_id,
+            h.data_hora,
+            h.status_anterior,
+            h.status_novo,
+            h.observacao,
+            p.nome AS proposta_nome,
+            p.numero_proposta AS proposta_numero
+        FROM historico h
+        LEFT JOIN propostas p ON p.id = h.proposta_id
+        WHERE (
+            COALESCE(h.status_anterior, '') <> ''
+            AND COALESCE(h.status_novo, '') <> ''
+            AND h.status_anterior <> h.status_novo
+        )
+        OR ({filtros_observacao})
+        ORDER BY h.data_hora DESC, h.id DESC
+        LIMIT ?
+        """,
+        (*NOTIFICACOES_IMPORTANTES_OBSERVACOES, limite * 2),
+    ).fetchall()
+    notificacoes_salvas = db.execute(
+        """
+        SELECT
+            id,
+            proposta_id,
+            proposta_nome,
+            proposta_numero,
+            tipo,
+            titulo,
+            mensagem,
+            data_hora
+        FROM notificacoes_importantes
+        ORDER BY data_hora DESC, id DESC
+        LIMIT ?
+        """,
+        (limite * 2,),
+    ).fetchall()
+
+    notificacoes: list[dict[str, Any]] = []
+    for h in historicos:
+        tipo, titulo, mensagem = tipo_notificacao_historico(
+            h["status_anterior"],
+            h["status_novo"],
+            h["observacao"],
+        )
+        notificacoes.append(
+            {
+                "id": f"historico-{h['id']}",
+                "proposta_id": h["proposta_id"],
+                "proposta_nome": h["proposta_nome"],
+                "proposta_numero": h["proposta_numero"],
+                "tipo": tipo,
+                "titulo": titulo,
+                "mensagem": mensagem,
+                "data_hora": h["data_hora"],
+                "lida": bool(lido_ate and h["data_hora"] <= lido_ate),
+                "url": url_for("detalhe_proposta", proposta_id=h["proposta_id"], origem=url_origem_atual()),
+            }
+        )
+    for n in notificacoes_salvas:
+        url = url_for("detalhe_proposta", proposta_id=n["proposta_id"], origem=url_origem_atual()) if n["proposta_id"] else url_for("index")
+        notificacoes.append(
+            {
+                "id": f"notificacao-{n['id']}",
+                "proposta_id": n["proposta_id"],
+                "proposta_nome": n["proposta_nome"],
+                "proposta_numero": n["proposta_numero"],
+                "tipo": n["tipo"],
+                "titulo": n["titulo"],
+                "mensagem": n["mensagem"],
+                "data_hora": n["data_hora"],
+                "lida": bool(lido_ate and n["data_hora"] <= lido_ate),
+                "url": url,
+            }
+        )
+
+    notificacoes.sort(key=lambda item: (item["data_hora"], str(item["id"])), reverse=True)
+    return notificacoes[:limite]
+
+
 def registrar_anotacao(proposta_id: int, texto: str, data_hora: str | None = None) -> None:
     texto = limpar_texto(texto)
     if not texto:
@@ -1642,6 +1817,8 @@ def status_verificacao_texto(proposta: sqlite3.Row | dict[str, Any]) -> str:
 
 @app.context_processor
 def helpers() -> dict[str, Any]:
+    notificacoes = carregar_notificacoes_importantes()
+    total_nao_lidas = sum(1 for notificacao in notificacoes if not notificacao["lida"])
     return {
         "STATUS_LIST": nomes_status(),
         "STATUS_VENDEDOR": nomes_status("vendedor"),
@@ -1667,8 +1844,17 @@ def helpers() -> dict[str, Any]:
         "url_origem_atual": url_origem_atual,
         "url_retorno_padrao": url_retorno_padrao,
         "origem_eh_hoje": origem_eh_hoje,
+        "notificacoes_importantes": notificacoes,
+        "notificacoes_importantes_total": total_nao_lidas,
         "anexos_base_dir": str(ANEXOS_BASE_DIR),
     }
+
+
+@app.route("/notificacoes/marcar-lidas", methods=["POST"])
+def marcar_notificacoes_lidas():
+    marcar_todas_notificacoes_lidas()
+    destino = url_interna_segura(request.form.get("next") or request.referrer, "/propostas")
+    return redirect(destino)
 
 
 
@@ -2017,7 +2203,6 @@ def detalhe_proposta(proposta_id: int):
     ).fetchall()
     vinculadas = buscar_propostas_vinculadas(proposta)
     mensagens = montar_mensagens(proposta)
-    tarefas_pendentes = tarefas_vinculadas_pendentes(proposta_id)
     return render_template(
         "detalhe_proposta.html",
         proposta=proposta,
@@ -2025,7 +2210,6 @@ def detalhe_proposta(proposta_id: int):
         anotacoes=anotacoes,
         anexos=anexos,
         vinculadas=vinculadas,
-        tarefas_pendentes=tarefas_pendentes,
         pasta_anexos=pasta_cliente(proposta),
         mensagens=mensagens,
         modelos_mensagens=carregar_modelos(),
@@ -2899,6 +3083,14 @@ def excluir_proposta(proposta_id: int):
 
     db = get_db()
     anexos = db.execute("SELECT * FROM anexos WHERE proposta_id = ?", (proposta_id,)).fetchall()
+    registrar_notificacao_importante(
+        proposta_id=None,
+        proposta_nome=proposta["nome"],
+        proposta_numero=proposta["numero_proposta"],
+        tipo="lead_excluido",
+        titulo="Lead excluído",
+        mensagem=f"{proposta['nome']} foi removido do CRM.",
+    )
 
     # Remove arquivos físicos dos anexos, quando existirem.
     # Se algum arquivo estiver aberto/bloqueado pelo Windows, o registro ainda será removido do CRM.
@@ -3456,13 +3648,12 @@ def proxima_tarefa_hoje(origem: Any, excluir_proposta_id: int | None = None) -> 
 @app.route("/hoje")
 def hoje():
     contexto = contexto_hoje(filtros_hoje_de_args(request.args))
-    contexto.update(contexto_agenda(filtros_agenda_de_args(request.args)))
 
     return render_template(
         "hoje.html",
         **contexto,
-        titulo="Central de Operação",
-        subtitulo="Propostas que precisam de acompanhamento agora.",
+        titulo="Hoje",
+        subtitulo="Propostas que precisam de atenção agora.",
     )
 
 

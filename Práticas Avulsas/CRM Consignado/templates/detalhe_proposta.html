@@ -11,7 +11,6 @@
                 <p>{{ proposta.produto }} · Banco digitado: {{ banco_digitado_exibicao(proposta) or '-' }}</p>
             </div>
             <div class="detail-actions">
-                <a class="btn" href="{{ url_for('nova_tarefa', proposta_id=proposta.id, origem=url_retorno_padrao()) }}"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Criar tarefa</span></a>
                 <form method="post" action="{{ url_for('atualizar_verificacao', proposta_id=proposta.id) }}" class="compact-action-form">
                     <input type="hidden" name="origem" value="{{ url_retorno_padrao() }}">
                     {% if verificado_hoje(proposta) %}
@@ -173,29 +172,6 @@
                 </section>
             </div>
 
-            <section class="linked-box stack">
-                <div class="section-title-row">
-                    <div>
-                        <h2>Tarefas pendentes</h2>
-                        <small>Agenda manual vinculada a esta proposta.</small>
-                    </div>
-                    <small>{{ tarefas_pendentes|length }} tarefa(s)</small>
-                </div>
-                <div class="proposal-task-list">
-                    {% for tarefa in tarefas_pendentes %}
-                    <article class="proposal-task-item priority-{{ tarefa.prioridade }}">
-                        <div>
-                            <strong>{{ tarefa.titulo }}</strong>
-                            <small>{{ br_data(tarefa.data_tarefa) }}{% if tarefa.horario %} · {{ tarefa.horario }}{% endif %} · {{ tarefa.categoria }} · {{ tarefa.prioridade|capitalize }}</small>
-                        </div>
-                        <a class="mini-btn" href="{{ url_for('editar_tarefa', tarefa_id=tarefa.id, origem=url_retorno_padrao()) }}"><i class="bi bi-pencil" aria-hidden="true"></i><span>Editar</span></a>
-                    </article>
-                    {% else %}
-                        <p class="empty small">Nenhuma tarefa manual pendente para esta proposta.</p>
-                    {% endfor %}
-                </div>
-            </section>
-
             <details class="complete-data-box">
                 <summary>Ver dados completos da proposta</summary>
                 <div class="info-grid compact-info-grid">
@@ -254,17 +230,11 @@
                 <div class="actions form-actions-top">
                     <button class="btn btn-primary" type="submit" name="acao" value="salvar"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar alterações</span></button>
                     <button class="btn" type="submit" name="acao" value="salvar_voltar"><i class="bi bi-arrow-left" aria-hidden="true"></i><span>Salvar e voltar</span></button>
-                    {% if origem_eh_hoje() %}
-                        <button class="btn" type="submit" name="acao" value="salvar_abrir_proxima"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span>Salvar e abrir próxima</span></button>
-                    {% endif %}
                 </div>
                 {% include '_form.html' %}
                 <div class="actions">
                     <button class="btn btn-primary" type="submit" name="acao" value="salvar"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar alterações</span></button>
                     <button class="btn" type="submit" name="acao" value="salvar_voltar"><i class="bi bi-arrow-left" aria-hidden="true"></i><span>Salvar e voltar</span></button>
-                    {% if origem_eh_hoje() %}
-                        <button class="btn" type="submit" name="acao" value="salvar_abrir_proxima"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span>Salvar e abrir próxima</span></button>
-                    {% endif %}
                 </div>
             </form>
         </section>

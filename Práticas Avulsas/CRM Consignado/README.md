@@ -10,13 +10,13 @@ O sistema foi pensado para uso operacional em rede local: rápido, simples de ab
 - Funil Kanban com etapas configuráveis e movimentação por arrastar e soltar.
 - Tela de detalhes da proposta com resumo, edição rápida, anotações, anexos, mensagens e histórico.
 - Retorno inteligente para preservar a origem da navegação, como Funil, Encerradas, Hoje ou Propostas.
-- Botões de produtividade como `Salvar`, `Salvar e voltar` e, na página Hoje, `Salvar e abrir próxima`.
+- Botões de produtividade como `Salvar` e `Salvar e voltar`.
 - Toasts de confirmação para ações salvas sem bloquear a tela.
 - Destaque temporário do card ao voltar para o Funil ou para a página Hoje.
+- Sino de notificações com contador, leitura geral e avisos de etapas alteradas, propostas criadas, pagas, reprovadas, em reapresentação e leads excluídos.
 - Página Encerradas para propostas pagas, perdidas ou canceladas.
 - Dashboard mensal com indicadores de produção e comissão.
-- Página Hoje para acompanhamento operacional, tarefas e propostas que precisam de atenção.
-- Agenda manual de tarefas vinculadas ou não a propostas.
+- Página Hoje para acompanhamento de propostas que precisam de atenção.
 - Importação e exportação CSV/XLSX.
 - Simulador INSS para pré-atendimento.
 - Gerador de mensagens comerciais com modelos editáveis.
@@ -32,7 +32,7 @@ O sistema foi pensado para uso operacional em rede local: rápido, simples de ab
 - `Funil`: visão Kanban das propostas em andamento.
 - `Nova Proposta`: cadastro completo de uma proposta.
 - `Propostas`: lista pesquisável com filtros e importação/exportação.
-- `Hoje`: central diária de acompanhamento e tarefas.
+- `Hoje`: acompanhamento diário das propostas que precisam de atenção.
 - `Encerradas`: propostas pagas, perdidas ou canceladas.
 - `Dashboard`: visão mensal de produção.
 - `Simulador INSS`: cálculo estimado para pré-atendimento.
@@ -82,7 +82,9 @@ http://IP-DA-MAQUINA:5000
 
 ## Dados locais
 
-O CRM usa o arquivo `database.db` na raiz do projeto. Esse arquivo guarda propostas, clientes, histórico, anotações, tarefas, modelos e configurações criadas pelo uso do sistema.
+O CRM usa o arquivo `database.db` na raiz do projeto. Esse arquivo guarda propostas, clientes, histórico, anotações, modelos, notificações importantes e configurações criadas pelo uso do sistema.
+
+O sino de notificações usa o próprio banco local para registrar avisos importantes e controlar até quando as notificações foram marcadas como lidas. Como o CRM não possui usuários individuais, a ação `Marcar todos como lido` vale para o uso geral da instalação local.
 
 Arquivos e pastas locais que não devem ser enviados ao Git:
 

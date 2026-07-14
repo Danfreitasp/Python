@@ -52,6 +52,46 @@
                     <input id="quickSearchInput" type="search" placeholder="Pesquisar cliente, CPF ou telefone..." autocomplete="off">
                     <div id="quickSearchResults" class="quick-search-results" hidden></div>
                 </div>
+                <details class="notification-menu">
+                    <summary class="btn notification-button" title="Notificações importantes">
+                        <i class="bi bi-bell" aria-hidden="true"></i>
+                        {% if notificacoes_importantes_total %}
+                            <span class="notification-badge">{{ notificacoes_importantes_total }}</span>
+                        {% endif %}
+                    </summary>
+                    <div class="notification-panel">
+                        <div class="notification-panel-header">
+                            <div>
+                                <strong>Notificações</strong>
+                                <small>{{ notificacoes_importantes_total }} não lida(s)</small>
+                            </div>
+                            {% if notificacoes_importantes_total %}
+                                <form action="{{ url_for('marcar_notificacoes_lidas') }}" method="post">
+                                    <input type="hidden" name="next" value="{{ url_origem_atual() }}">
+                                    <button class="notification-read-all" type="submit">Marcar todos como lido</button>
+                                </form>
+                            {% endif %}
+                        </div>
+                        <div class="notification-list">
+                            {% for notificacao in notificacoes_importantes %}
+                                <a class="notification-item notification-{{ notificacao.tipo }} {% if notificacao.lida %}notification-read{% else %}notification-unread{% endif %}" href="{{ notificacao.url }}">
+                                    <strong>{{ notificacao.titulo }}</strong>
+                                    <div class="notification-meta">
+                                        <small>{{ br_data_hora(notificacao.data_hora) }}</small>
+                                        {% if not notificacao.lida %}<small class="notification-state">Nova</small>{% endif %}
+                                    </div>
+                                    <span>
+                                        {{ notificacao.proposta_nome or 'Proposta removida' }}
+                                        {% if notificacao.proposta_numero %} · Nº {{ notificacao.proposta_numero }}{% endif %}
+                                    </span>
+                                    <em><b>Alteração:</b> {{ notificacao.mensagem }}</em>
+                                </a>
+                            {% else %}
+                                <p class="notification-empty">Nenhuma alteração importante recente.</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </details>
                 <button type="button" id="themeToggle" class="btn theme-toggle" title="Alternar modo claro/escuro"><i class="bi bi-moon" aria-hidden="true"></i><span>Modo escuro</span></button>
                 <a class="btn btn-primary" href="{{ url_for('nova_proposta') }}"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Nova Proposta</span></a>
             </div>

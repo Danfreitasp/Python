@@ -1,4 +1,14 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const notificationMenu = document.querySelector('.notification-menu');
+    if (notificationMenu) {
+        document.addEventListener('click', (event) => {
+            if (!notificationMenu.contains(event.target)) notificationMenu.open = false;
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') notificationMenu.open = false;
+        });
+    }
+
     document.querySelectorAll('.cpf-mask').forEach((input) => {
         input.addEventListener('input', () => {
             let v = input.value.replace(/\D/g, '').slice(0, 11);
@@ -413,7 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
             empty.dataset.emptyMessage = 'true';
             empty.textContent = section.dataset.todaySection === 'verificar'
                 ? 'Nenhuma proposta para verificar.'
-                : 'Nenhuma tarefa nesta seção.';
+                : 'Nenhuma proposta nesta seção.';
             grid.appendChild(empty);
         }
     }
@@ -550,7 +560,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const empty = document.createElement('p');
             empty.className = 'empty small';
             empty.dataset.emptyMessage = 'true';
-            empty.textContent = 'Nenhuma tarefa nesta seção.';
+            empty.textContent = 'Nenhuma proposta nesta seção.';
             list.appendChild(empty);
         }
     }
