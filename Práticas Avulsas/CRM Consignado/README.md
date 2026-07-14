@@ -1,24 +1,65 @@
 # CRM Consignado Local
 
-> Atualização v45: menu lateral simplificado e layout do Gerador de mensagens ajustado.
+CRM local em Flask + SQLite para acompanhar propostas de crédito consignado, organizar o funil de atendimento e reduzir retrabalho no dia a dia.
 
-CRM local em Flask + SQLite para controle de propostas de consignado.
+O sistema foi pensado para uso operacional em rede local: rápido, simples de abrir, com dados salvos em banco SQLite local e interface focada em produtividade.
 
 ## Recursos principais
 
-- Cadastro, edição e consulta de propostas.
-- Funil Kanban com arrastar e soltar.
-- Funil principal mostra apenas propostas em andamento.
-- Propostas `Pago` e `Perdido / Cancelado` saem do funil principal e ficam no menu **Encerradas**.
-- Menu **Encerradas** com coluna verde para pagas e vermelha para perdidas.
-- Histórico automático de status.
-- Dashboard mensal.
+- Cadastro, edição, pesquisa e exclusão controlada de propostas.
+- Funil Kanban com etapas configuráveis e movimentação por arrastar e soltar.
+- Tela de detalhes da proposta com resumo, edição rápida, anotações, anexos, mensagens e histórico.
+- Retorno inteligente para preservar a origem da navegação, como Funil, Encerradas, Hoje ou Propostas.
+- Botões de produtividade como `Salvar`, `Salvar e voltar` e, na página Hoje, `Salvar e abrir próxima`.
+- Toasts de confirmação para ações salvas sem bloquear a tela.
+- Destaque temporário do card ao voltar para o Funil ou para a página Hoje.
+- Página Encerradas para propostas pagas, perdidas ou canceladas.
+- Dashboard mensal com indicadores de produção e comissão.
+- Página Hoje para acompanhamento operacional, tarefas e propostas que precisam de atenção.
+- Agenda manual de tarefas vinculadas ou não a propostas.
 - Importação e exportação CSV/XLSX.
-- Importação compatível com planilhas com colunas como DIA, NOME, STATUS, TELEFONE, CPF, BANCO, PRODUTO, VALOR, PONTOS, BLOQUEADO, PROMOTORA e MOTIVO.
-- Na importação, `PONTOS` vira `Comissão` e `MOTIVO` vira `Observações`.
-- Importação mensal: escolha o mês antes de importar. Para Excel com abas mensais, o sistema prioriza a aba do mês escolhido, como JUNHO.
+- Simulador INSS para pré-atendimento.
+- Gerador de mensagens comerciais com modelos editáveis.
+- Gerenciamento de modelos de mensagens da proposta.
+- Conversor de contatos.
+- Tema claro e modo escuro salvos no navegador.
+- Histórico automático de status e alterações relevantes.
+- Cadastro auxiliar de clientes alimentado a partir das propostas.
+- Vínculo manual e criação rápida de refinanciamento vinculado à portabilidade.
+
+## Telas principais
+
+- `Funil`: visão Kanban das propostas em andamento.
+- `Nova Proposta`: cadastro completo de uma proposta.
+- `Propostas`: lista pesquisável com filtros e importação/exportação.
+- `Hoje`: central diária de acompanhamento e tarefas.
+- `Encerradas`: propostas pagas, perdidas ou canceladas.
+- `Dashboard`: visão mensal de produção.
+- `Simulador INSS`: cálculo estimado para pré-atendimento.
+- `Gerador de Mensagens`: mensagens comerciais prontas para WhatsApp.
+- `Converter Contatos`: formatação de contatos para uso operacional.
+- `Editar Etapas`: configuração das etapas do funil.
+
+## Tecnologias
+
+- Python
+- Flask
+- SQLite
+- Jinja templates
+- HTML, CSS e JavaScript
+- Bootstrap Icons via CDN
+- OpenPyXL para arquivos XLSX
+
+Dependências atuais:
+
+```text
+Flask==3.0.3
+openpyxl==3.1.5
+```
 
 ## Como rodar no Windows
+
+No terminal, dentro da pasta do CRM:
 
 ```cmd
 python -m venv .venv
@@ -27,274 +68,112 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Acesse:
+Acesse no navegador:
 
 ```text
 http://127.0.0.1:5000
 ```
 
+Para acessar de outro computador na mesma rede, use o IP da máquina onde o CRM está rodando:
+
+```text
+http://IP-DA-MAQUINA:5000
+```
+
+## Dados locais
+
+O CRM usa o arquivo `database.db` na raiz do projeto. Esse arquivo guarda propostas, clientes, histórico, anotações, tarefas, modelos e configurações criadas pelo uso do sistema.
+
+Arquivos e pastas locais que não devem ser enviados ao Git:
+
+- `database.db`
+- `backups/`
+- `.venv/`
+- `__pycache__/`
+- anexos e documentos de clientes
+- arquivos `.env`
+- arquivos temporários ou logs
+
+O sistema cria o banco automaticamente se `database.db` não existir, mas isso inicia uma base vazia.
+
+## Backups
+
+Ao iniciar, o CRM cria backups automáticos do banco na pasta `backups/`, mantendo apenas os backups mais recentes configurados no código.
+
+Esses backups são dados locais e não devem ser versionados.
+
+## Anexos
+
+Os anexos são salvos em uma pasta local configurada no sistema.
+
+Para alterar a pasta base sem modificar o código, configure a variável de ambiente:
+
+```text
+CRM_ANEXOS_DIR
+```
+
 ## Como atualizar mantendo seus dados
 
-Substitua:
+Ao atualizar o sistema, substitua apenas os arquivos de código e interface:
 
 ```text
 app.py
 requirements.txt
 README.md
-templates
-static
-data
+templates/
+static/
+data/modelos_mensagens.json
 ```
 
 Não substitua:
 
 ```text
 database.db
-.venv
+backups/
+.venv/
 ```
 
-Se apagar o `database.db`, o sistema cria um banco vazio automaticamente ao iniciar.
-
-## Atualização v8
-
-- Adicionado campo **Banco digitado**.
-- Na importação da planilha de produção, a coluna **BANCO** agora entra como **Banco digitado**.
-- Os cards do funil passam a mostrar Banco digitado.
-- O topo de cada etapa do funil mostra a quantidade de propostas e a soma das comissões daquela etapa.
-
-## Atualização v9
-
-- Observações agora funcionam como **Anotações da proposta**, em formato de diário/log.
-- Cada nova anotação salva data e hora automaticamente.
-- Observações antigas/importadas são migradas automaticamente para a primeira anotação da proposta.
-- A tela de detalhes ganhou um formulário rápido para adicionar novas anotações sem apagar as anteriores.
-- O histórico de status continua separado, para mostrar mudanças de etapa e atualizações do fluxo.
-
-
-## v12
-
-- Adicionada área de **Anexos iniciais** na tela **Nova proposta**.
-- Agora é possível cadastrar a proposta e enviar documentos no mesmo formulário.
-- Ao salvar, o CRM cria automaticamente a pasta do cliente dentro da pasta base de anexos e registra os arquivos na proposta.
-- A área de anexos na tela de detalhes continua funcionando para novos envios depois do cadastro.
-
-
-## Versão 13
-
-- Adicionado botão **Excluir lead** na tela de detalhes da proposta.
-- Adicionado botão **Excluir lead** diretamente nos cards do funil.
-- A exclusão remove a proposta, histórico, anotações e registros de anexos.
-- Quando possível, os arquivos anexados também são apagados da pasta do cliente; se algum arquivo estiver aberto ou bloqueado pelo Windows, o CRM avisa.
-
-
-## v14
-
-- Removido o botão de exclusão dos cards do funil para evitar exclusões acidentais.
-- A exclusão de lead/proposta permanece disponível apenas na tela de detalhes da proposta.
-
-
-## v15
-
-- Adicionado campo **% comissão** no cadastro e edição da proposta.
-- Ao informar a porcentagem, o CRM calcula automaticamente a comissão com base no campo **Valor**.
-- O campo **Comissão** continua editável para ajustes manuais.
-- O banco antigo é atualizado automaticamente criando a coluna `comissao_percentual`.
-
-
-## Versão 17
-
-- Ajustado o botão de copiar CPF/mensagens para funcionar melhor em acesso por IP local, como `http://192.168.x.x:5000`.
-- Quando o navegador bloquear a API moderna de área de transferência, o sistema usa um método alternativo com campo temporário.
-
-## v18 - Vinculação manual de Portabilidade e Refinanciamento
-
-Esta versão adiciona campos para vincular manualmente propostas de portabilidade e refinanciamento por número de proposta.
-
-Novos campos:
-
-- Nº proposta: número da proposta atual.
-- Nº proposta da port vinculada: use no refinanciamento para informar a portabilidade relacionada.
-- Nº proposta do refin vinculado: use na portabilidade para informar o refinanciamento relacionado.
-
-Na tela de detalhes, o CRM mostra um bloco "Propostas vinculadas" com os vínculos encontrados.
-
-Exemplo de uso:
-
-1. Abra a proposta de Portabilidade e preencha o Nº proposta dela.
-2. Abra a proposta de Refinanciamento e preencha o Nº proposta da port vinculada.
-3. Ao abrir qualquer uma das duas, o bloco de propostas vinculadas mostrará a outra proposta.
-
-O banco antigo é atualizado automaticamente ao iniciar o sistema.
-
-
-## Correção v20
-
-- Corrigido erro ao salvar edição da proposta: quantidade incorreta de parâmetros no UPDATE do SQLite.
-
-
-## Novidade v21
-
-- Adicionado botão **Criar refin vinculado** dentro da proposta de Portabilidade.
-- O CRM usa o número da proposta da portabilidade e gera o número do refinanciamento como **número da port + 1**.
-- O refinanciamento criado copia dados principais do cliente, banco digitado, promotora, telefone, CPF e responsável.
-- A portabilidade recebe automaticamente o número do refin vinculado e o refin recebe o número da port vinculada.
-- Se já existir uma proposta com o número do refinanciamento, o CRM apenas cria o vínculo e abre a proposta existente.
-
-
-## v22 - Mensagens preservadas
-
-A partir desta versão, as mensagens padrão editadas no CRM são salvas no `database.db`. Assim, ao atualizar o sistema substituindo as pastas `templates`, `static` e `data`, as mensagens personalizadas não são perdidas. O arquivo `data/modelos_mensagens.json` fica apenas como fallback/backup legível.
-
-
-## v23 - Modo escuro
-
-- Adicionado botão no topo para alternar entre modo claro e modo escuro.
-- A preferência fica salva no navegador usando `localStorage`.
-- Não altera o banco de dados e não exige nova dependência.
-
-### Atualização
-
-Substitua `app.py`, `requirements.txt`, `README.md`, `templates`, `static` e `data`.
-
-Não substitua `database.db`, `.venv` nem a pasta `backups`.
-
-
-## Identidade visual da aba
-
-A versão atual usa o nome **CRM Consig** no título do navegador e inclui um favicon próprio em `static/favicon.svg`.
-
-Isso ajuda a identificar rapidamente a aba do sistema quando há várias abas abertas no navegador.
-
-
-## v25 - Linha de etapas na proposta
-
-- Adicionada uma linha visual de etapas dentro da tela de detalhes da proposta.
-- Cada etapa aparece como um círculo clicável.
-- Ao clicar em uma etapa, a proposta muda diretamente para aquele status.
-- Etapas anteriores ficam em verde claro e a etapa atual fica em verde destacado.
-- Funciona também no modo escuro.
-
-
-## v26
-
-Ajustes de interface na tela de detalhes da proposta:
-
-- Removida a linha visual de etapas, que estava deixando a tela poluída;
-- Adicionada a seção recolhível **Editar dados desta proposta** dentro da própria proposta;
-- A edição completa continua disponível pelo botão **Editar**, mas agora também pode ser feita sem sair da tela de detalhes.
-
-## Atualização v27
-
-- Reorganiza a tela de detalhes da proposta em abas internas: Resumo, Editar dados, Anotações, Anexos, Mensagens e Histórico.
-- Restaura a linha visual de etapas clicável dentro da proposta.
-- Remove o formulário tradicional de mudança de status para reduzir poluição visual.
-- Mantém a edição rápida dos dados dentro da própria proposta.
-- Move informações menos usadas para a área recolhível de dados completos.
-
-
-## Atualização v30
-
-- Adicionada área de **Anotações recentes** no resumo da proposta, abaixo de Valor e Comissão.
-- A aba **Anotações** continua disponível para visualizar o histórico completo e adicionar novos registros.
-
-## Atualização v31
-
-- Adicionado campo **Endereço do cliente**.
-- Adicionado campo **Dados bancários do cliente**.
-- Os novos campos ficam em **Dados completos da proposta** e também podem ser editados na aba **Editar dados**.
-- Os campos foram incluídos na criação, edição, importação, exportação e migração automática do banco.
-
-## Atualização v32
-
-- Adicionada base de **Clientes** separada das propostas.
-- O cliente é identificado por **CPF + NB/Matrícula**.
-- Ao criar ou editar uma proposta, o CRM cria/atualiza automaticamente o cadastro do cliente.
-- Ao digitar um CPF na tela de cadastro/edição, o CRM consulta matrículas já cadastradas.
-- Se houver clientes encontrados, o campo de matrícula mostra opções como:
-  - Matrícula 1
-  - Matrícula 2
-  - Cadastrar nova matrícula
-- Ao selecionar uma matrícula cadastrada, o CRM preenche automaticamente:
-  - Nome
-  - Telefone
-  - Tipo de cliente
-  - Endereço
-  - Dados bancários
-- O campo **Benefício bloqueado** não é reaproveitado do cliente, porque pode mudar de uma proposta para outra.
-- A importação de planilhas também alimenta a base de clientes automaticamente.
-- Propostas antigas são migradas automaticamente para a tabela de clientes ao iniciar o sistema.
-
-
-## Atualização v34
-
-- Cards do funil simplificados para reduzir altura e melhorar a visualização.
-- Cards exibem apenas nome, CPF, valor, comissão e previsão de saldo.
-- Informações de banco, promotora, benefício bloqueado e anotações continuam disponíveis dentro da proposta, mas não ocupam espaço no funil.
-
-## Simulador INSS
-
-O CRM possui uma área **Simulador INSS** no menu lateral.
-
-Essa tela funciona como uma calculadora simples de valores, usando como base apenas a aba INSS do arquivo de simulação.
-
-A tela foi mantida propositalmente limpa, sem cadastro de cliente. Ela não exige CPF, telefone, matrícula, banco digitado ou promotora.
-
-Recursos disponíveis:
-
-- Empréstimo novo com cálculo automático entre valor e parcela/margem;
-- Ao digitar o valor desejado, o sistema calcula a parcela estimada;
-- Ao digitar a parcela/margem disponível, o sistema calcula o valor estimado;
-- Prazos selecionáveis;
-- Resumo para copiar.
-
-Resultados exibidos:
-
-- Valor estimado;
-- Parcela estimada;
-- Coeficiente usado.
-
-Observação: o simulador é uma ferramenta de pré-atendimento. Os valores são estimativos e devem ser confirmados na análise final do banco.
-
-
-## Ajuste v39
-
-- O Simulador INSS foi simplificado para remover a opção de cartão.
-- Os campos monetários agora interpretam `5000` como R$ 5.000,00, evitando conversão indevida para R$ 50,00.
-
-## Ajuste v40
-
-- O Simulador INSS foi simplificado para remover a parte de comissão.
-- A comissão permanece no cadastro da proposta, pois depende do banco/promotora escolhido depois.
-
-## Ajuste v41
-
-- O Simulador INSS não usa mais seletor de tipo de cálculo.
-- O sistema identifica automaticamente o cálculo conforme o campo digitado:
-  - digitando **Valor desejado**, calcula a **Parcela estimada**;
-  - digitando **Parcela/Margem disponível**, calcula o **Valor estimado**.
-
-## Gerador de mensagens comercial
-
-O CRM possui uma área separada no menu lateral chamada **Gerador de mensagens**.
-
-Essa tela centraliza o antigo gerador desktop de mensagens e permite preencher dados comerciais simples, como:
-
-- Nome do cliente;
-- Banco;
-- Parcela antiga;
-- Nova parcela;
-- Valor/troco liberado;
-- Atendente.
-
-O sistema calcula automaticamente a economia mensal e gera uma mensagem pronta para copiar e enviar no WhatsApp.
-
-Também é possível:
-
-- Selecionar modelos salvos;
-- Adicionar novos modelos;
-- Editar modelos existentes;
-- Excluir modelos;
-- Usar variáveis como `{nome}`, `{banco}`, `{parcela_antiga}`, `{parcela_nova}`, `{troco}`, `{valor}`, `{economia}` e `{atendente}`.
-
-Os modelos do gerador ficam salvos no banco de dados local e não são perdidos ao atualizar os arquivos do sistema, desde que `database.db` não seja substituído.
-
+Os modelos editados pelo CRM ficam salvos no banco. O arquivo `data/modelos_mensagens.json` funciona como fallback legível.
+
+## Estrutura do projeto
+
+```text
+CRM Consignado/
+├─ app.py
+├─ requirements.txt
+├─ README.md
+├─ data/
+│  └─ modelos_mensagens.json
+├─ static/
+│  ├─ favicon.svg
+│  ├─ script.js
+│  └─ style.css
+└─ templates/
+   ├─ base.html
+   ├─ _form.html
+   ├─ detalhe_proposta.html
+   ├─ funil.html
+   ├─ hoje.html
+   └─ ...
+```
+
+## Rotas úteis
+
+- `/funil`
+- `/propostas`
+- `/nova`
+- `/hoje`
+- `/encerradas`
+- `/dashboard`
+- `/simulador-inss`
+- `/gerador-mensagens`
+- `/converter-contatos`
+- `/configuracoes/status`
+
+## Observações para desenvolvimento
+
+- Preserve `database.db` em qualquer atualização.
+- Evite mudanças diretas no banco sem migração segura.
+- Não versionar bancos reais, backups, anexos ou arquivos locais de ferramenta.
+- Antes de alterar fluxos importantes, validar Funil, Propostas, Hoje, Encerradas, Dashboard e edição de proposta.
+- O histórico detalhado de versões deve ficar no Git, não no README.
