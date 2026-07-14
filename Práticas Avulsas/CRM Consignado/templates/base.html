@@ -52,6 +52,21 @@
                     <input id="quickSearchInput" type="search" placeholder="Pesquisar cliente, CPF ou telefone..." autocomplete="off">
                     <div id="quickSearchResults" class="quick-search-results" hidden></div>
                 </div>
+                {% if request.endpoint == 'funil' %}
+                    {% set ajuda_pagina = 'Funil em andamento: aqui aparecem apenas propostas abertas. Ao mover para Pago ou Perdido / Cancelado, o card sai deste funil e aparece em Encerradas.' %}
+                    {% set ajuda_rotulo = 'Ajuda sobre o Funil em andamento' %}
+                {% elif request.endpoint == 'encerradas' %}
+                    {% set ajuda_pagina = 'Encerradas: propostas pagas ficam separadas entre falta cair na promotora, disponível para saque e já sacado. Perdidas ficam em uma coluna própria.' %}
+                    {% set ajuda_rotulo = 'Ajuda sobre as propostas encerradas' %}
+                {% elif request.endpoint == 'configurar_status' %}
+                    {% set ajuda_pagina = 'Editor visual de funil: ajuste a ordem, renomeie etapas e ative/desative colunas sem mexer no código. Arraste os cards para reordenar e clique em Salvar alterações uma única vez.' %}
+                    {% set ajuda_rotulo = 'Ajuda sobre o Editor visual de funil' %}
+                {% endif %}
+                {% if ajuda_pagina %}
+                    <button type="button" class="btn notification-button" title="{{ ajuda_pagina }}" aria-label="{{ ajuda_rotulo }}">
+                        <i class="bi bi-question-circle" aria-hidden="true"></i>
+                    </button>
+                {% endif %}
                 <details class="notification-menu">
                     <summary class="btn notification-button" title="Notificações importantes">
                         <i class="bi bi-bell" aria-hidden="true"></i>

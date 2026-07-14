@@ -1,9 +1,5 @@
 {% extends 'base.html' %}
 {% block content %}
-<section class="card module-help">
-    <p><strong>Funil em andamento:</strong> aqui aparecem apenas propostas abertas. Ao mover para <strong>Pago</strong> ou <strong>Perdido / Cancelado</strong>, o card sai deste funil e aparece em <strong>Encerradas</strong>.</p>
-</section>
-
 <section class="kanban" data-modulo="funil">
     {% for status, itens in por_status.items() %}
     <div class="kanban-column" data-status="{{ status }}">
