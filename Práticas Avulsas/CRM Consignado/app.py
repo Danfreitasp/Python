@@ -9,6 +9,7 @@ import sqlite3
 from datetime import datetime, date
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from flask import (
     Flask,
@@ -72,6 +73,35 @@ STATUS_ENCERRADOS = ["Pago", "Perdido / Cancelado"]
 
 TIPOS_CLIENTE = ["INSS", "SIAPE"]
 PRODUTOS = ["Portabilidade", "Refinanciamento", "Novo", "Cartão", "Saque Complementar", "Outro"]
+TAREFAS_HOJE_PRIORIDADE = ("paradas", "cip", "averbacao", "pagamento", "reapresentacao", "bloqueado", "acompanhamento")
+TAREFAS_HOJE_INFO = {
+    "paradas": {"titulo": "Sem interação recente", "vazia": "Nenhuma proposta sem interação recente."},
+    "cip": {"titulo": "Aguardando CIP", "vazia": "Nenhuma proposta aguardando CIP."},
+    "averbacao": {"titulo": "Aguardando Averbação", "vazia": "Nenhuma proposta aguardando averbação."},
+    "pagamento": {"titulo": "Aguardando Pagamento", "vazia": "Nenhuma proposta aguardando pagamento."},
+    "reapresentacao": {"titulo": "Reapresentação", "vazia": "Nenhuma proposta em reapresentação."},
+    "bloqueado": {"titulo": "Benefício bloqueado", "vazia": "Nenhuma proposta com benefício bloqueado."},
+    "acompanhamento": {"titulo": "Demais em acompanhamento", "vazia": "Nenhuma proposta em acompanhamento geral."},
+}
+DIAS_PARADA_OPERACIONAL = 3
+TAREFA_STATUS = ("pendente", "concluida", "adiada", "cancelada")
+TAREFA_PRIORIDADES = ("baixa", "normal", "alta")
+TAREFA_CATEGORIAS = ("Ligação", "WhatsApp", "Conferência", "Retorno", "Pagamento", "Documentação", "Administrativo", "Outro")
+DESTINOS_INTERNOS_PREFIXOS = (
+    "/propostas",
+    "/funil",
+    "/hoje",
+    "/tarefas",
+    "/encerradas",
+    "/dashboard",
+    "/nova",
+    "/simulador-inss",
+    "/gerador-mensagens",
+    "/converter-contatos",
+    "/mensagens",
+    "/configuracoes/status",
+    "/proposta/",
+)
 
 # Coeficientes extraídos da aba INSS do arquivo "SIMULADOR 05.06.2026.xlsx".
 # Novo por valor: parcela = valor * coeficiente.
@@ -279,6 +309,26 @@ def init_db() -> None:
         """
     )
 
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tarefas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            titulo TEXT NOT NULL,
+            descricao TEXT,
+            data_tarefa TEXT NOT NULL,
+            horario TEXT,
+            prioridade TEXT NOT NULL DEFAULT 'normal',
+            status TEXT NOT NULL DEFAULT 'pendente',
+            categoria TEXT NOT NULL DEFAULT 'Retorno',
+            proposta_id INTEGER,
+            criado_em TEXT NOT NULL,
+            concluido_em TEXT,
+            atualizado_em TEXT NOT NULL,
+            FOREIGN KEY (proposta_id) REFERENCES propostas(id) ON DELETE SET NULL
+        )
+        """
+    )
+
     # Migrações incrementais: adiciona colunas em bancos criados nas versões anteriores.
     colunas_propostas = {row["name"] for row in db.execute("PRAGMA table_info(propostas)").fetchall()}
     if "cliente_id" not in colunas_propostas:
@@ -311,6 +361,33 @@ def init_db() -> None:
         db.execute("ALTER TABLE propostas ADD COLUMN endereco TEXT")
     if "dados_bancarios" not in colunas_propostas:
         db.execute("ALTER TABLE propostas ADD COLUMN dados_bancarios TEXT")
+
+    colunas_tarefas = {row["name"] for row in db.execute("PRAGMA table_info(tarefas)").fetchall()}
+    if "titulo" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN titulo TEXT NOT NULL DEFAULT 'Tarefa'")
+    if "descricao" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN descricao TEXT")
+    if "data_tarefa" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN data_tarefa TEXT NOT NULL DEFAULT ''")
+    if "horario" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN horario TEXT")
+    if "prioridade" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN prioridade TEXT NOT NULL DEFAULT 'normal'")
+    if "status" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN status TEXT NOT NULL DEFAULT 'pendente'")
+    if "categoria" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN categoria TEXT NOT NULL DEFAULT 'Retorno'")
+    if "proposta_id" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN proposta_id INTEGER")
+    if "criado_em" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN criado_em TEXT NOT NULL DEFAULT ''")
+    if "concluido_em" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN concluido_em TEXT")
+    if "atualizado_em" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN atualizado_em TEXT NOT NULL DEFAULT ''")
+
+    db.execute("CREATE INDEX IF NOT EXISTS idx_tarefas_data_status ON tarefas(data_tarefa, status)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_tarefas_proposta ON tarefas(proposta_id)")
 
     qtd_status = db.execute("SELECT COUNT(*) AS total FROM status_etapas").fetchone()["total"]
     if qtd_status == 0:
@@ -617,6 +694,44 @@ def limpar_texto(valor: Any) -> str:
     if valor is None:
         return ""
     return str(valor).strip()
+
+
+def url_interna_segura(valor: Any, fallback: str | None = None) -> str:
+    destino = limpar_texto(valor)
+    if destino:
+        partes = urlsplit(destino)
+        caminho_conhecido = partes.path == "/" or any(partes.path.startswith(prefixo) for prefixo in DESTINOS_INTERNOS_PREFIXOS)
+        if (
+            caminho_conhecido
+            and partes.path.startswith("/")
+            and not partes.path.startswith("//")
+            and not partes.scheme
+            and not partes.netloc
+        ):
+            return destino
+    return fallback or "/propostas"
+
+
+def url_interna_com_parametros(valor: Any, fallback: str | None = None, **parametros: Any) -> str:
+    destino = url_interna_segura(valor, fallback)
+    partes = urlsplit(destino)
+    query = dict(parse_qsl(partes.query, keep_blank_values=True))
+    for chave, valor_parametro in parametros.items():
+        if valor_parametro is not None and limpar_texto(valor_parametro) != "":
+            query[chave] = str(valor_parametro)
+    return urlunsplit(("", "", partes.path, urlencode(query), partes.fragment))
+
+
+def url_origem_atual() -> str:
+    return url_interna_segura(request.full_path.rstrip("?"), "/propostas")
+
+
+def url_retorno_padrao() -> str:
+    return url_interna_segura(request.values.get("origem") or request.values.get("next"), "/propostas")
+
+
+def origem_eh_hoje() -> bool:
+    return urlsplit(url_retorno_padrao()).path == "/hoje"
 
 
 def nome_pasta_cliente(nome: str) -> str:
@@ -937,6 +1052,51 @@ def banco_digitado_exibicao(proposta: Any) -> str:
 
 def status_ativos() -> list[str]:
     return [status for status in nomes_status() if status not in STATUS_ENCERRADOS]
+
+
+def resumo_coluna_funil(status: str) -> dict[str, Any]:
+    row = get_db().execute(
+        """
+        SELECT COUNT(*) AS quantidade, COALESCE(SUM(comissao), 0) AS comissao
+        FROM propostas
+        WHERE status = ?
+        """,
+        (status,),
+    ).fetchone()
+    comissao = float(row["comissao"] or 0) if row else 0.0
+    return {
+        "quantidade": int(row["quantidade"] or 0) if row else 0,
+        "comissao": br_moeda(comissao),
+    }
+
+
+def resposta_status_json(
+    sucesso: bool,
+    mensagem: str,
+    proposta_id: int | None = None,
+    etapa_origem: str | None = None,
+    etapa_destino: str | None = None,
+    status_http: int = 200,
+):
+    payload: dict[str, Any] = {
+        "success": sucesso,
+        "ok": sucesso,
+        "message": mensagem,
+    }
+    if not sucesso:
+        payload["erro"] = mensagem
+    if proposta_id is not None:
+        payload["proposta_id"] = proposta_id
+    if etapa_origem is not None:
+        payload["etapa_origem"] = etapa_origem
+    if etapa_destino is not None:
+        payload["etapa_destino"] = etapa_destino
+    if etapa_origem is not None and etapa_destino is not None:
+        payload["colunas"] = {
+            "origem": resumo_coluna_funil(etapa_origem),
+            "destino": resumo_coluna_funil(etapa_destino),
+        }
+    return jsonify(payload), status_http
 
 
 def mes_nome_para_numero(nome: str) -> int | None:
@@ -1488,6 +1648,9 @@ def helpers() -> dict[str, Any]:
         "STATUS_ADMINISTRATIVO": nomes_status("administrativo"),
         "TIPOS_CLIENTE": TIPOS_CLIENTE,
         "PRODUTOS": PRODUTOS,
+        "TAREFA_STATUS": TAREFA_STATUS,
+        "TAREFA_PRIORIDADES": TAREFA_PRIORIDADES,
+        "TAREFA_CATEGORIAS": TAREFA_CATEGORIAS,
         "br_moeda": br_moeda,
         "br_percentual": br_percentual,
         "br_data": br_data,
@@ -1501,6 +1664,9 @@ def helpers() -> dict[str, Any]:
         "status_verificacao_texto": status_verificacao_texto,
         "pode_criar_refin_vinculado": pode_criar_refin_vinculado,
         "incrementar_numero_proposta": incrementar_numero_proposta,
+        "url_origem_atual": url_origem_atual,
+        "url_retorno_padrao": url_retorno_padrao,
+        "origem_eh_hoje": origem_eh_hoje,
         "anexos_base_dir": str(ANEXOS_BASE_DIR),
     }
 
@@ -1690,6 +1856,7 @@ def simulador_inss_criar_proposta():
 
 
 @app.route("/")
+@app.route("/propostas")
 def index():
     sql, params, filtros = filtros_sql()
     propostas = get_db().execute(
@@ -1850,6 +2017,7 @@ def detalhe_proposta(proposta_id: int):
     ).fetchall()
     vinculadas = buscar_propostas_vinculadas(proposta)
     mensagens = montar_mensagens(proposta)
+    tarefas_pendentes = tarefas_vinculadas_pendentes(proposta_id)
     return render_template(
         "detalhe_proposta.html",
         proposta=proposta,
@@ -1857,6 +2025,7 @@ def detalhe_proposta(proposta_id: int):
         anotacoes=anotacoes,
         anexos=anexos,
         vinculadas=vinculadas,
+        tarefas_pendentes=tarefas_pendentes,
         pasta_anexos=pasta_cliente(proposta),
         mensagens=mensagens,
         modelos_mensagens=carregar_modelos(),
@@ -2050,9 +2219,13 @@ def adicionar_anotacao(proposta_id: int):
 @app.route("/proposta/<int:proposta_id>/verificacao", methods=["POST"])
 def atualizar_verificacao(proposta_id: int):
     proposta = buscar_proposta(proposta_id)
+    is_fetch = request.headers.get("X-Requested-With") == "fetch"
     if not proposta:
+        if is_fetch:
+            return jsonify({"success": False, "message": "Proposta não encontrada.", "proposta_id": proposta_id}), 404
         flash("Proposta não encontrada.", "erro")
         return redirect(url_for("index"))
+    origem = url_retorno_padrao()
     verificado = normalizar_sim_nao(request.form.get("verificado"))
     data_verificacao = hoje_iso() if verificado == "SIM" else None
     get_db().execute(
@@ -2066,8 +2239,225 @@ def atualizar_verificacao(proposta_id: int):
         proposta["status"],
         "Proposta marcada como verificada hoje" if verificado == "SIM" else "Verificação diária removida",
     )
+    if is_fetch:
+        return jsonify({
+            "success": True,
+            "message": "Verificação diária atualizada.",
+            "proposta_id": proposta_id,
+            "verificado": verificado == "SIM",
+            "status_texto": "Verificado hoje" if verificado == "SIM" else "Não verificado hoje",
+        })
     flash("Verificação diária atualizada.", "ok")
-    return redirect(url_for("detalhe_proposta", proposta_id=proposta_id))
+    return redirect(url_for("detalhe_proposta", proposta_id=proposta_id, origem=origem))
+
+
+@app.route("/proposta/<int:proposta_id>/contatado-hoje", methods=["POST"])
+def marcar_contatado_hoje(proposta_id: int):
+    proposta = buscar_proposta(proposta_id)
+    is_fetch = request.headers.get("X-Requested-With") == "fetch"
+    if not proposta:
+        if is_fetch:
+            return jsonify({"success": False, "message": "Proposta não encontrada.", "proposta_id": proposta_id}), 404
+        flash("Proposta não encontrada.", "erro")
+        return redirect(url_for("index"))
+
+    registrar_historico(proposta_id, proposta["status"], proposta["status"], "Contato realizado hoje")
+    if is_fetch:
+        return jsonify({
+            "success": True,
+            "message": "Contato registrado.",
+            "proposta_id": proposta_id,
+            "ultima_interacao": "Hoje",
+        })
+    flash("Contato registrado.", "ok")
+    return redirect(url_interna_segura(request.form.get("next") or request.referrer, "/hoje"))
+
+
+@app.route("/tarefas/nova", methods=["GET", "POST"])
+def nova_tarefa():
+    origem = url_retorno_padrao()
+    proposta = None
+    proposta_id_txt = limpar_texto(request.values.get("proposta_id"))
+    if proposta_id_txt.isdigit():
+        proposta = buscar_proposta(int(proposta_id_txt))
+
+    if request.method == "POST":
+        dados, erros = dados_formulario_tarefa()
+        proposta = buscar_proposta(dados["proposta_id"]) if dados.get("proposta_id") else None
+        if erros:
+            for erro in erros:
+                flash(erro, "erro")
+            return render_template(
+                "tarefa_form.html",
+                tarefa=dados,
+                proposta_vinculada=proposta,
+                modo="nova",
+                next_url=origem,
+                titulo="Nova tarefa",
+                subtitulo="Crie uma tarefa manual para a agenda.",
+            )
+
+        agora = agora_iso()
+        cursor = get_db().execute(
+            """
+            INSERT INTO tarefas (
+                titulo, descricao, data_tarefa, horario, prioridade, status, categoria,
+                proposta_id, criado_em, concluido_em, atualizado_em
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                dados["titulo"], dados["descricao"], dados["data_tarefa"], dados["horario"],
+                dados["prioridade"], dados["status"], dados["categoria"], dados["proposta_id"],
+                agora, agora if dados["status"] == "concluida" else None, agora,
+            ),
+        )
+        get_db().commit()
+        flash("Tarefa criada com sucesso.", "ok")
+        return redirect(origem)
+
+    tarefa = tarefa_vazia(proposta)
+    return render_template(
+        "tarefa_form.html",
+        tarefa=tarefa,
+        proposta_vinculada=proposta,
+        modo="nova",
+        next_url=origem,
+        titulo="Nova tarefa",
+        subtitulo="Crie uma tarefa manual para a agenda.",
+    )
+
+
+@app.route("/tarefas/<int:tarefa_id>/editar", methods=["GET", "POST"])
+def editar_tarefa(tarefa_id: int):
+    tarefa = buscar_tarefa(tarefa_id)
+    if not tarefa:
+        flash("Tarefa não encontrada.", "erro")
+        return redirect(url_for("hoje"))
+
+    origem = url_retorno_padrao()
+    proposta = buscar_proposta(tarefa["proposta_id"]) if tarefa["proposta_id"] else None
+    if request.method == "POST":
+        dados, erros = dados_formulario_tarefa()
+        proposta = buscar_proposta(dados["proposta_id"]) if dados.get("proposta_id") else None
+        if erros:
+            for erro in erros:
+                flash(erro, "erro")
+            return render_template(
+                "tarefa_form.html",
+                tarefa={**dict(tarefa), **dados},
+                proposta_vinculada=proposta,
+                modo="editar",
+                next_url=origem,
+                titulo="Editar tarefa",
+                subtitulo="Atualize a tarefa manual.",
+            )
+
+        concluido_em = tarefa["concluido_em"]
+        if dados["status"] == "concluida" and not concluido_em:
+            concluido_em = agora_iso()
+        if dados["status"] != "concluida":
+            concluido_em = None
+        get_db().execute(
+            """
+            UPDATE tarefas
+            SET titulo = ?, descricao = ?, data_tarefa = ?, horario = ?, prioridade = ?,
+                status = ?, categoria = ?, proposta_id = ?, concluido_em = ?, atualizado_em = ?
+            WHERE id = ?
+            """,
+            (
+                dados["titulo"], dados["descricao"], dados["data_tarefa"], dados["horario"],
+                dados["prioridade"], dados["status"], dados["categoria"], dados["proposta_id"],
+                concluido_em, agora_iso(), tarefa_id,
+            ),
+        )
+        get_db().commit()
+        flash("Tarefa atualizada.", "ok")
+        return redirect(origem)
+
+    return render_template(
+        "tarefa_form.html",
+        tarefa=tarefa,
+        proposta_vinculada=proposta,
+        modo="editar",
+        next_url=origem,
+        titulo="Editar tarefa",
+        subtitulo="Atualize a tarefa manual.",
+    )
+
+
+@app.route("/tarefas/<int:tarefa_id>/concluir", methods=["POST"])
+def concluir_tarefa(tarefa_id: int):
+    tarefa = buscar_tarefa(tarefa_id)
+    if not tarefa:
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"success": False, "message": "Tarefa não encontrada.", "tarefa_id": tarefa_id}), 404
+        flash("Tarefa não encontrada.", "erro")
+        return redirect(url_for("hoje"))
+    agora = agora_iso()
+    get_db().execute(
+        "UPDATE tarefas SET status = 'concluida', concluido_em = ?, atualizado_em = ? WHERE id = ?",
+        (agora, agora, tarefa_id),
+    )
+    get_db().commit()
+    return resposta_tarefa(tarefa_id, "Tarefa concluída.")
+
+
+@app.route("/tarefas/<int:tarefa_id>/adiar", methods=["POST"])
+def adiar_tarefa(tarefa_id: int):
+    tarefa = buscar_tarefa(tarefa_id)
+    if not tarefa:
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"success": False, "message": "Tarefa não encontrada.", "tarefa_id": tarefa_id}), 404
+        flash("Tarefa não encontrada.", "erro")
+        return redirect(url_for("hoje"))
+    nova_data = parse_data_iso(request.form.get("nova_data"))
+    if not nova_data:
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"success": False, "message": "Informe uma nova data.", "tarefa_id": tarefa_id}), 400
+        flash("Informe uma nova data.", "erro")
+        return redirect(request.form.get("next") or url_for("hoje"))
+    get_db().execute(
+        """
+        UPDATE tarefas
+        SET data_tarefa = ?, status = 'adiada', concluido_em = NULL, atualizado_em = ?
+        WHERE id = ?
+        """,
+        (nova_data, agora_iso(), tarefa_id),
+    )
+    get_db().commit()
+    return resposta_tarefa(tarefa_id, "Tarefa adiada.")
+
+
+@app.route("/tarefas/<int:tarefa_id>/cancelar", methods=["POST"])
+def cancelar_tarefa(tarefa_id: int):
+    tarefa = buscar_tarefa(tarefa_id)
+    if not tarefa:
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"success": False, "message": "Tarefa não encontrada.", "tarefa_id": tarefa_id}), 404
+        flash("Tarefa não encontrada.", "erro")
+        return redirect(url_for("hoje"))
+    get_db().execute(
+        "UPDATE tarefas SET status = 'cancelada', concluido_em = NULL, atualizado_em = ? WHERE id = ?",
+        (agora_iso(), tarefa_id),
+    )
+    get_db().commit()
+    return resposta_tarefa(tarefa_id, "Tarefa cancelada.")
+
+
+@app.route("/tarefas/<int:tarefa_id>/excluir", methods=["POST"])
+def excluir_tarefa(tarefa_id: int):
+    tarefa = buscar_tarefa(tarefa_id)
+    if not tarefa:
+        if request.headers.get("X-Requested-With") == "fetch":
+            return jsonify({"success": False, "message": "Tarefa não encontrada.", "tarefa_id": tarefa_id}), 404
+        flash("Tarefa não encontrada.", "erro")
+        return redirect(url_for("hoje"))
+    get_db().execute("DELETE FROM tarefas WHERE id = ?", (tarefa_id,))
+    get_db().commit()
+    if request.headers.get("X-Requested-With") == "fetch":
+        return jsonify({"success": True, "message": "Tarefa excluída.", "tarefa_id": tarefa_id, "status": "excluida"})
+    flash("Tarefa excluída.", "ok")
+    return redirect(url_interna_segura(request.form.get("next") or request.referrer, "/hoje"))
 
 
 @app.route("/mensagens")
@@ -2304,6 +2694,7 @@ def editar_proposta(proposta_id: int):
 
     if request.method == "POST":
         dados = dados_formulario()
+        origem = url_retorno_padrao()
         if not dados["nome"]:
             flash("Informe o nome do cliente.", "erro")
             return render_template("editar_proposta.html", proposta={**dict(proposta), **dados})
@@ -2342,8 +2733,20 @@ def editar_proposta(proposta_id: int):
         observacao_antiga = limpar_texto(proposta["observacoes"])
         if dados.get("observacoes") and dados["observacoes"] != observacao_antiga:
             registrar_anotacao(proposta_id, dados["observacoes"])
-        flash("Proposta atualizada com sucesso.", "ok")
-        return redirect(url_for("detalhe_proposta", proposta_id=proposta_id))
+        acao = request.form.get("acao")
+        if acao == "salvar_abrir_proxima" and urlsplit(origem).path == "/hoje":
+            proxima = proxima_tarefa_hoje(origem, excluir_proposta_id=proposta_id)
+            if proxima:
+                flash("Proposta salva com sucesso.", "ok")
+                return redirect(url_for("detalhe_proposta", proposta_id=proxima["id"], origem=origem))
+            flash("Todas as tarefas da fila foram concluídas.", "ok")
+            return redirect(url_interna_com_parametros(origem, "/hoje", destaque_proposta=proposta_id))
+        flash("Proposta salva com sucesso.", "ok")
+        if acao == "salvar_voltar":
+            if urlsplit(origem).path in {"/funil", "/hoje"}:
+                return redirect(url_interna_com_parametros(origem, "/propostas", destaque_proposta=proposta_id))
+            return redirect(origem)
+        return redirect(url_for("detalhe_proposta", proposta_id=proposta_id, origem=origem))
 
     return render_template("editar_proposta.html", proposta=proposta)
 
@@ -2363,12 +2766,16 @@ def mapear_status_encerradas(rotulo: str) -> dict[str, str] | None:
 @app.route("/proposta/<int:proposta_id>/status", methods=["POST"])
 def mudar_status(proposta_id: int):
     proposta = buscar_proposta(proposta_id)
+    is_fetch = request.headers.get("X-Requested-With") == "fetch"
     if not proposta:
+        if is_fetch:
+            return resposta_status_json(False, "Proposta não encontrada.", proposta_id=proposta_id, status_http=404)
         flash("Proposta não encontrada.", "erro")
         return redirect(url_for("index"))
     novo_status = limpar_texto(request.form.get("status"))
     observacao = limpar_texto(request.form.get("observacao")) or "Status atualizado"
     origem = limpar_texto(request.form.get("origem")) or "index"
+    status_anterior = proposta["status"]
 
     dados_encerrada = mapear_status_encerradas(novo_status)
     if dados_encerrada:
@@ -2396,13 +2803,19 @@ def mudar_status(proposta_id: int):
             )
             get_db().commit()
             registrar_historico(proposta_id, proposta["status"], status_final, observacao)
-        if request.headers.get("X-Requested-With") == "fetch":
-            return jsonify({"ok": True, "status": novo_status})
+        if is_fetch:
+            return resposta_status_json(
+                True,
+                "Proposta movida com sucesso",
+                proposta_id=proposta_id,
+                etapa_origem=status_anterior,
+                etapa_destino=status_final,
+            )
         flash("Situação da encerrada atualizada.", "ok")
     else:
         if not status_valido(novo_status):
-            if request.headers.get("X-Requested-With") == "fetch":
-                return jsonify({"ok": False, "erro": "Status inválido."}), 400
+            if is_fetch:
+                return resposta_status_json(False, "Status inválido.", proposta_id=proposta_id, status_http=400)
             flash("Status inválido.", "erro")
             return redirect(request.referrer or url_for("index"))
         if novo_status != proposta["status"]:
@@ -2417,11 +2830,23 @@ def mudar_status(proposta_id: int):
             )
             get_db().commit()
             registrar_historico(proposta_id, proposta["status"], novo_status, observacao)
-            if request.headers.get("X-Requested-With") == "fetch":
-                return jsonify({"ok": True, "status": novo_status})
+            if is_fetch:
+                return resposta_status_json(
+                    True,
+                    "Proposta movida com sucesso",
+                    proposta_id=proposta_id,
+                    etapa_origem=status_anterior,
+                    etapa_destino=novo_status,
+                )
             flash("Status atualizado.", "ok")
-        elif request.headers.get("X-Requested-With") == "fetch":
-            return jsonify({"ok": True, "status": novo_status})
+        elif is_fetch:
+            return resposta_status_json(
+                True,
+                "Proposta já estava nesta etapa",
+                proposta_id=proposta_id,
+                etapa_origem=status_anterior,
+                etapa_destino=novo_status,
+            )
     if origem == "funil":
         return redirect(url_for("funil"))
     if origem == "encerradas":
@@ -2546,6 +2971,498 @@ def funil():
         "Funil em andamento",
         "Mostra apenas propostas abertas. Pagas e perdidas ficam no menu Encerradas.",
         "geral",
+    )
+
+
+def normalizar_status_tarefa(valor: Any) -> str:
+    status = limpar_texto(valor).lower()
+    return status if status in TAREFA_STATUS else "pendente"
+
+
+def normalizar_prioridade_tarefa(valor: Any) -> str:
+    prioridade = limpar_texto(valor).lower()
+    return prioridade if prioridade in TAREFA_PRIORIDADES else "normal"
+
+
+def normalizar_categoria_tarefa(valor: Any) -> str:
+    categoria = limpar_texto(valor)
+    return categoria if categoria in TAREFA_CATEGORIAS else "Outro"
+
+
+def normalizar_horario(valor: Any) -> str:
+    texto = limpar_texto(valor)
+    if not texto:
+        return ""
+    try:
+        return datetime.strptime(texto[:5], "%H:%M").strftime("%H:%M")
+    except ValueError:
+        return ""
+
+
+def tarefa_vazia(proposta: sqlite3.Row | None = None) -> dict[str, Any]:
+    return {
+        "titulo": "",
+        "descricao": "",
+        "data_tarefa": hoje_iso(),
+        "horario": "",
+        "prioridade": "normal",
+        "status": "pendente",
+        "categoria": "Retorno",
+        "proposta_id": proposta["id"] if proposta else "",
+    }
+
+
+def buscar_tarefa(tarefa_id: int) -> sqlite3.Row | None:
+    return get_db().execute(
+        """
+        SELECT t.*, p.nome AS proposta_nome, p.cpf AS proposta_cpf, p.telefone AS proposta_telefone,
+               p.numero_proposta AS proposta_numero, p.status AS proposta_status
+        FROM tarefas t
+        LEFT JOIN propostas p ON p.id = t.proposta_id
+        WHERE t.id = ?
+        """,
+        (tarefa_id,),
+    ).fetchone()
+
+
+def dados_formulario_tarefa() -> tuple[dict[str, Any], list[str]]:
+    titulo = limpar_texto(request.form.get("titulo"))
+    data_tarefa = parse_data_iso(request.form.get("data_tarefa"))
+    prioridade = normalizar_prioridade_tarefa(request.form.get("prioridade"))
+    status = normalizar_status_tarefa(request.form.get("status"))
+    categoria = normalizar_categoria_tarefa(request.form.get("categoria"))
+    proposta_id_txt = limpar_texto(request.form.get("proposta_id"))
+    proposta_id = int(proposta_id_txt) if proposta_id_txt.isdigit() else None
+    erros = []
+    if not titulo:
+        erros.append("Informe o título da tarefa.")
+    if not data_tarefa:
+        erros.append("Informe uma data válida.")
+    if proposta_id and not buscar_proposta(proposta_id):
+        erros.append("A proposta vinculada não foi encontrada.")
+        proposta_id = None
+    return {
+        "titulo": titulo,
+        "descricao": limpar_texto(request.form.get("descricao")),
+        "data_tarefa": data_tarefa or hoje_iso(),
+        "horario": normalizar_horario(request.form.get("horario")),
+        "prioridade": prioridade,
+        "status": status,
+        "categoria": categoria,
+        "proposta_id": proposta_id,
+    }, erros
+
+
+def filtros_agenda_de_args(args: Any) -> dict[str, str]:
+    return {
+        "data": parse_data_iso(args.get("agenda_data")) if args.get("agenda_data") else "",
+        "status": normalizar_status_tarefa(args.get("agenda_status")) if args.get("agenda_status") else "",
+        "prioridade": normalizar_prioridade_tarefa(args.get("agenda_prioridade")) if args.get("agenda_prioridade") else "",
+        "categoria": normalizar_categoria_tarefa(args.get("agenda_categoria")) if args.get("agenda_categoria") else "",
+        "vinculo": limpar_texto(args.get("agenda_vinculo")),
+    }
+
+
+def prioridade_ordem_sql() -> str:
+    return "CASE prioridade WHEN 'alta' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END"
+
+
+def carregar_tarefas_agenda(filtros: dict[str, str]) -> list[sqlite3.Row]:
+    where = []
+    params: list[Any] = []
+    if filtros["data"]:
+        where.append("t.data_tarefa = ?")
+        params.append(filtros["data"])
+    if filtros["status"]:
+        where.append("t.status = ?")
+        params.append(filtros["status"])
+    if filtros["prioridade"]:
+        where.append("t.prioridade = ?")
+        params.append(filtros["prioridade"])
+    if filtros["categoria"]:
+        where.append("t.categoria = ?")
+        params.append(filtros["categoria"])
+    if filtros["vinculo"] == "com_proposta":
+        where.append("t.proposta_id IS NOT NULL")
+    if filtros["vinculo"] == "sem_proposta":
+        where.append("t.proposta_id IS NULL")
+    sql = "WHERE " + " AND ".join(where) if where else ""
+    return get_db().execute(
+        f"""
+        SELECT t.*, p.nome AS proposta_nome, p.cpf AS proposta_cpf, p.telefone AS proposta_telefone,
+               p.numero_proposta AS proposta_numero, p.status AS proposta_status
+        FROM tarefas t
+        LEFT JOIN propostas p ON p.id = t.proposta_id
+        {sql}
+        ORDER BY {prioridade_ordem_sql()}, COALESCE(NULLIF(t.horario, ''), '99:99') ASC, t.data_tarefa ASC, t.id ASC
+        """,
+        params,
+    ).fetchall()
+
+
+def tarefas_vinculadas_pendentes(proposta_id: int) -> list[sqlite3.Row]:
+    return get_db().execute(
+        f"""
+        SELECT *
+        FROM tarefas
+        WHERE proposta_id = ?
+          AND status IN ('pendente', 'adiada')
+        ORDER BY data_tarefa ASC, {prioridade_ordem_sql()}, COALESCE(NULLIF(horario, ''), '99:99') ASC, id ASC
+        """,
+        (proposta_id,),
+    ).fetchall()
+
+
+def contexto_agenda(filtros: dict[str, str]) -> dict[str, Any]:
+    hoje_data = hoje_iso()
+    tarefas = carregar_tarefas_agenda(filtros)
+    ativas = [tarefa for tarefa in tarefas if tarefa["status"] in ("pendente", "adiada")]
+    concluidas_hoje = [
+        tarefa for tarefa in tarefas
+        if tarefa["status"] == "concluida" and limpar_texto(tarefa["concluido_em"])[:10] == hoje_data
+    ]
+    secoes = [
+        {
+            "key": "agenda_atrasadas",
+            "titulo": "Atrasadas",
+            "vazia": "Nenhuma tarefa manual atrasada.",
+            "tarefas": [tarefa for tarefa in ativas if tarefa["data_tarefa"] < hoje_data],
+        },
+        {
+            "key": "agenda_hoje",
+            "titulo": "Hoje",
+            "vazia": "Nenhuma tarefa manual para hoje.",
+            "tarefas": [tarefa for tarefa in ativas if tarefa["data_tarefa"] == hoje_data],
+        },
+        {
+            "key": "agenda_proximas",
+            "titulo": "Próximas",
+            "vazia": "Nenhuma próxima tarefa manual.",
+            "tarefas": [tarefa for tarefa in ativas if tarefa["data_tarefa"] > hoje_data],
+        },
+        {
+            "key": "agenda_concluidas",
+            "titulo": "Concluídas hoje",
+            "vazia": "Nenhuma tarefa concluída hoje.",
+            "tarefas": concluidas_hoje,
+        },
+    ]
+    contadores = {
+        "atrasadas": len(secoes[0]["tarefas"]),
+        "hoje": len(secoes[1]["tarefas"]),
+        "proximas": len(secoes[2]["tarefas"]),
+        "concluidas_hoje": len(concluidas_hoje),
+    }
+    return {
+        "agenda_secoes": secoes,
+        "agenda_contadores": contadores,
+        "agenda_filtros": filtros,
+    }
+
+
+def tarefa_json(tarefa_id: int, mensagem: str) -> dict[str, Any]:
+    tarefa = buscar_tarefa(tarefa_id)
+    return {
+        "success": True,
+        "message": mensagem,
+        "tarefa_id": tarefa_id,
+        "status": tarefa["status"] if tarefa else "",
+        "data_tarefa": tarefa["data_tarefa"] if tarefa else "",
+        "concluido_em": tarefa["concluido_em"] if tarefa else "",
+    }
+
+
+def resposta_tarefa(tarefa_id: int, mensagem: str, destino: str | None = None):
+    if request.headers.get("X-Requested-With") == "fetch":
+        return jsonify(tarefa_json(tarefa_id, mensagem))
+    flash(mensagem, "ok")
+    return redirect(url_interna_segura(destino or request.form.get("next") or request.referrer, "/hoje"))
+
+
+def data_retorno_curta(proposta: sqlite3.Row) -> str:
+    return limpar_texto(proposta["data_retorno"])[:10]
+
+
+def data_operacional(valor: Any) -> date | None:
+    texto = limpar_texto(valor)
+    if not texto:
+        return None
+    for formato in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(texto[:19], formato).date()
+        except ValueError:
+            continue
+    return None
+
+
+def dias_desde(valor: Any) -> int | None:
+    data = data_operacional(valor)
+    if not data:
+        return None
+    return max(0, (date.today() - data).days)
+
+
+def data_mais_recente(*valores: Any) -> str:
+    datas = []
+    for valor in valores:
+        data = data_operacional(valor)
+        if data:
+            datas.append((data, limpar_texto(valor)))
+    if not datas:
+        return ""
+    return max(datas, key=lambda item: item[0])[1]
+
+
+def texto_dias_operacionais(dias: int | None) -> str:
+    if dias is None:
+        return "Sem registro"
+    if dias == 0:
+        return "Hoje"
+    if dias == 1:
+        return "Ontem"
+    return f"{dias} dias"
+
+
+def interacao_hoje(proposta: sqlite3.Row | dict[str, Any]) -> bool:
+    return dias_desde(proposta.get("ultima_interacao_data") if isinstance(proposta, dict) else None) == 0
+
+
+def carregar_propostas_abertas_hoje() -> list[sqlite3.Row]:
+    status_visiveis = status_ativos()
+    placeholders = ",".join("?" for _ in status_visiveis)
+    return get_db().execute(
+        f"""
+        SELECT * FROM propostas
+        WHERE status IN ({placeholders})
+        ORDER BY
+            CASE WHEN COALESCE(data_retorno, '') = '' THEN 1 ELSE 0 END,
+            data_retorno ASC,
+            data_atualizacao ASC,
+            id ASC
+        """,
+        status_visiveis,
+    ).fetchall()
+
+
+def carregar_propostas_operacao() -> list[dict[str, Any]]:
+    status_visiveis = status_ativos()
+    placeholders = ",".join("?" for _ in status_visiveis)
+    rows = get_db().execute(
+        f"""
+        SELECT p.*,
+               (
+                   SELECT MAX(h.data_hora)
+                   FROM historico h
+                   WHERE h.proposta_id = p.id
+                     AND h.status_novo = p.status
+               ) AS data_entrada_etapa,
+               (
+                   SELECT MAX(a.data_hora)
+                   FROM anotacoes a
+                   WHERE a.proposta_id = p.id
+               ) AS ultima_anotacao,
+               (
+                   SELECT MAX(h.data_hora)
+                   FROM historico h
+                   WHERE h.proposta_id = p.id
+               ) AS ultimo_historico
+        FROM propostas p
+        WHERE p.status IN ({placeholders})
+        """,
+        status_visiveis,
+    ).fetchall()
+    propostas = [preparar_proposta_operacao(row) for row in rows]
+    return sorted(
+        propostas,
+        key=lambda p: (
+            -int(p.get("dias_sem_interacao") or 0),
+            -int(p.get("dias_etapa") or 0),
+            limpar_texto(p.get("nome")),
+            int(p.get("id") or 0),
+        ),
+    )
+
+
+def preparar_proposta_operacao(row: sqlite3.Row) -> dict[str, Any]:
+    proposta = dict(row)
+    entrada_etapa = (
+        proposta.get("data_entrada_etapa")
+        or proposta.get("data_criacao")
+        or proposta.get("data_atualizacao")
+    )
+    ultima_interacao = data_mais_recente(
+        proposta.get("ultima_anotacao"),
+        proposta.get("ultimo_historico"),
+        proposta.get("data_verificacao"),
+        proposta.get("data_atualizacao"),
+        proposta.get("data_criacao"),
+    )
+    dias_etapa = dias_desde(entrada_etapa)
+    dias_interacao = dias_desde(ultima_interacao)
+    proposta["dias_etapa"] = dias_etapa if dias_etapa is not None else 0
+    proposta["dias_sem_interacao"] = dias_interacao if dias_interacao is not None else 0
+    proposta["entrada_etapa_data"] = entrada_etapa
+    proposta["ultima_interacao_data"] = ultima_interacao
+    proposta["ultima_interacao_texto"] = texto_dias_operacionais(dias_interacao)
+    proposta["dias_etapa_texto"] = texto_dias_operacionais(dias_etapa)
+    proposta["banco_operacao"] = banco_digitado_exibicao(proposta) or limpar_texto(proposta.get("banco_atual")) or "-"
+    return proposta
+
+
+def filtros_hoje_de_args(args: Any) -> dict[str, str]:
+    return {
+        "tipo_tarefa": limpar_texto(args.get("tipo_tarefa")),
+        "etapa": limpar_texto(args.get("etapa")),
+        "banco": limpar_texto(args.get("banco")),
+        "verificacao": limpar_texto(args.get("verificacao")),
+    }
+
+
+def filtros_hoje_de_url(origem: Any) -> dict[str, str]:
+    partes = urlsplit(url_interna_segura(origem, "/hoje"))
+    return filtros_hoje_de_args(dict(parse_qsl(partes.query, keep_blank_values=True)))
+
+
+def aplicar_filtros_hoje(propostas: list[sqlite3.Row], filtros: dict[str, str]) -> list[sqlite3.Row]:
+    filtradas = []
+    for proposta in propostas:
+        banco = proposta.get("banco_operacao") if isinstance(proposta, dict) else banco_digitado_exibicao(proposta) or limpar_texto(proposta["banco_atual"])
+        contato_hoje = interacao_hoje(proposta) if isinstance(proposta, dict) else verificado_hoje(proposta)
+        if filtros["etapa"] and proposta["status"] != filtros["etapa"]:
+            continue
+        if filtros["banco"] and banco != filtros["banco"]:
+            continue
+        if filtros["verificacao"] == "pendente" and contato_hoje:
+            continue
+        if filtros["verificacao"] == "verificada" and not contato_hoje:
+            continue
+        filtradas.append(proposta)
+    return filtradas
+
+
+def classificar_bloco_operacao(proposta: dict[str, Any]) -> str:
+    status = limpar_texto(proposta.get("status"))
+    if int(proposta.get("dias_sem_interacao") or 0) >= DIAS_PARADA_OPERACIONAL:
+        return "paradas"
+    if status == "Aguardando CIP":
+        return "cip"
+    if status == "Aguardando Averbação":
+        return "averbacao"
+    if status == "Aguardando Pagamento":
+        return "pagamento"
+    if status == "Aguardando Reapresentação":
+        return "reapresentacao"
+    if normalizar_sim_nao(proposta.get("beneficio_bloqueado")) == "SIM":
+        return "bloqueado"
+    return "acompanhamento"
+
+
+def indicadores_bloco(propostas: list[dict[str, Any]]) -> dict[str, Any]:
+    tempos = [int(proposta.get("dias_etapa") or 0) for proposta in propostas]
+    media = round(sum(tempos) / len(tempos), 1) if tempos else 0
+    return {
+        "quantidade": len(propostas),
+        "tempo_medio": media,
+        "maior_tempo": max(tempos, default=0),
+    }
+
+
+def secoes_hoje(propostas: list[dict[str, Any]], filtros: dict[str, str], motivos_atencao: dict[int, list[str]] | None = None) -> list[dict[str, Any]]:
+    agrupadas = {key: [] for key in TAREFAS_HOJE_PRIORIDADE}
+    for proposta in propostas:
+        agrupadas[classificar_bloco_operacao(proposta)].append(proposta)
+
+    secoes = []
+    for key in TAREFAS_HOJE_PRIORIDADE:
+        info = TAREFAS_HOJE_INFO[key]
+        propostas_bloco = agrupadas[key]
+        if not propostas_bloco and filtros["tipo_tarefa"] != key:
+            continue
+        secoes.append({
+            "key": key,
+            "titulo": info["titulo"],
+            "vazia": info["vazia"],
+            "propostas": propostas_bloco,
+            "indicadores": indicadores_bloco(propostas_bloco),
+        })
+    if filtros["tipo_tarefa"]:
+        return [secao for secao in secoes if secao["key"] == filtros["tipo_tarefa"]]
+    return secoes
+
+
+def fila_hoje(
+    propostas: list[sqlite3.Row],
+    filtros: dict[str, str],
+    motivos_atencao: dict[int, list[str]],
+    excluir_proposta_id: int | None = None,
+) -> list[sqlite3.Row]:
+    prioridades = [filtros["tipo_tarefa"]] if filtros["tipo_tarefa"] in TAREFAS_HOJE_PRIORIDADE else list(TAREFAS_HOJE_PRIORIDADE)
+    fila = []
+    vistos: set[int] = set()
+    for key in prioridades:
+        for proposta in propostas:
+            proposta_id = int(proposta["id"])
+            if proposta_id == excluir_proposta_id or proposta_id in vistos:
+                continue
+            if classificar_bloco_operacao(proposta) != key:
+                continue
+            vistos.add(proposta_id)
+            fila.append(proposta)
+    return fila
+
+
+def contexto_hoje(filtros: dict[str, str], excluir_proposta_id: int | None = None) -> dict[str, Any]:
+    propostas_base = carregar_propostas_operacao()
+    bancos = sorted({
+        proposta.get("banco_operacao") or "-"
+        for proposta in propostas_base
+        if proposta.get("banco_operacao") and proposta.get("banco_operacao") != "-"
+    })
+    propostas = aplicar_filtros_hoje(propostas_base, filtros)
+    secoes_todas = secoes_hoje(propostas, {"tipo_tarefa": "", "etapa": "", "banco": "", "verificacao": ""}, {})
+    secoes = secoes_hoje(propostas, filtros, {})
+    fila = fila_hoje(propostas, filtros, {}, excluir_proposta_id)
+    primeira_proposta = fila[0] if fila else None
+    interacoes_hoje = sum(1 for proposta in fila if interacao_hoje(proposta))
+
+    contadores = {
+        "paradas": len(next((secao["propostas"] for secao in secoes_todas if secao["key"] == "paradas"), [])),
+        "cip": len(next((secao["propostas"] for secao in secoes_todas if secao["key"] == "cip"), [])),
+        "averbacao": len(next((secao["propostas"] for secao in secoes_todas if secao["key"] == "averbacao"), [])),
+        "pagamento": len(next((secao["propostas"] for secao in secoes_todas if secao["key"] == "pagamento"), [])),
+        "total": len(fila),
+        "interacoes_hoje": interacoes_hoje,
+        "pendentes": max(0, len(fila) - interacoes_hoje),
+    }
+    return {
+        "secoes": secoes,
+        "secoes_todas": secoes_todas,
+        "contadores": contadores,
+        "filtros": filtros,
+        "bancos": bancos,
+        "status_opcoes": status_ativos(),
+        "motivos_atencao": {},
+        "primeira_proposta": primeira_proposta,
+        "fila": fila,
+    }
+
+
+def proxima_tarefa_hoje(origem: Any, excluir_proposta_id: int | None = None) -> sqlite3.Row | None:
+    filtros = filtros_hoje_de_url(origem)
+    contexto = contexto_hoje(filtros, excluir_proposta_id)
+    return contexto["primeira_proposta"]
+
+
+@app.route("/hoje")
+def hoje():
+    contexto = contexto_hoje(filtros_hoje_de_args(request.args))
+    contexto.update(contexto_agenda(filtros_agenda_de_args(request.args)))
+
+    return render_template(
+        "hoje.html",
+        **contexto,
+        titulo="Central de Operação",
+        subtitulo="Propostas que precisam de acompanhamento agora.",
     )
 
 

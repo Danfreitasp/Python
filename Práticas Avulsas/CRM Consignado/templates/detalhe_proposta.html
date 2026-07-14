@@ -11,13 +11,15 @@
                 <p>{{ proposta.produto }} · Banco digitado: {{ banco_digitado_exibicao(proposta) or '-' }}</p>
             </div>
             <div class="detail-actions">
+                <a class="btn" href="{{ url_for('nova_tarefa', proposta_id=proposta.id, origem=url_retorno_padrao()) }}"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Criar tarefa</span></a>
                 <form method="post" action="{{ url_for('atualizar_verificacao', proposta_id=proposta.id) }}" class="compact-action-form">
+                    <input type="hidden" name="origem" value="{{ url_retorno_padrao() }}">
                     {% if verificado_hoje(proposta) %}
                         <input type="hidden" name="verificado" value="NÃO">
-                        <button class="btn" type="submit">Marcar não verificada</button>
+                        <button class="btn" type="submit"><i class="bi bi-x-circle" aria-hidden="true"></i><span>Marcar não verificada</span></button>
                     {% else %}
                         <input type="hidden" name="verificado" value="SIM">
-                        <button class="btn btn-primary" type="submit">Verificada hoje</button>
+                        <button class="btn btn-primary" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Verificada hoje</span></button>
                     {% endif %}
                 </form>
                 <div class="quick-close-actions" aria-label="Marcar proposta como paga ou perdida">
@@ -25,22 +27,22 @@
                     <form method="post" action="{{ url_for('mudar_status', proposta_id=proposta.id) }}" onsubmit="return confirm('Marcar esta proposta como PAGO?');">
                         <input type="hidden" name="status" value="Pago">
                         <input type="hidden" name="observacao" value="Marcada como paga pela tela da proposta">
-                        <button class="btn btn-success" type="submit">Pago</button>
+                        <button class="btn btn-success" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Pago</span></button>
                     </form>
                     <form method="post" action="{{ url_for('mudar_status', proposta_id=proposta.id) }}" onsubmit="return confirm('Marcar esta proposta como PERDIDA?');">
                         <input type="hidden" name="status" value="Perdido / Cancelado">
                         <input type="hidden" name="observacao" value="Marcada como perdida pela tela da proposta">
-                        <button class="btn btn-danger" type="submit">Perdido</button>
+                        <button class="btn btn-danger" type="submit"><i class="bi bi-x-circle" aria-hidden="true"></i><span>Perdido</span></button>
                     </form>
                 </div>
                 {% if pode_criar_refin_vinculado(proposta) %}
                     <form method="post" action="{{ url_for('criar_refin_vinculado', proposta_id=proposta.id) }}" onsubmit="return confirm('Criar refinanciamento vinculado com nº {{ incrementar_numero_proposta(proposta.numero_proposta) }}?');">
-                        <button class="btn btn-primary" type="submit">Criar refin vinculado</button>
+                        <button class="btn btn-primary" type="submit"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Criar refin vinculado</span></button>
                     </form>
                 {% endif %}
                 <form method="post" action="{{ url_for('excluir_proposta', proposta_id=proposta.id) }}" onsubmit="return confirm('Excluir definitivamente este lead/proposta? Esta ação remove também anotações, histórico e anexos cadastrados no CRM.');">
-                    <input type="hidden" name="next" value="{{ url_for('index') }}">
-                    <button class="btn btn-danger" type="submit">Excluir lead</button>
+                    <input type="hidden" name="next" value="{{ url_retorno_padrao() }}">
+                    <button class="btn btn-danger" type="submit"><i class="bi bi-trash" aria-hidden="true"></i><span>Excluir lead</span></button>
                 </form>
             </div>
         </div>
@@ -88,12 +90,12 @@
                 <div class="summary-card highlight-summary">
                     <small>CPF</small>
                     <strong>{{ proposta.cpf or '-' }}</strong>
-                    {% if proposta.cpf %}<button class="mini-btn copy-btn" type="button" data-copy="{{ proposta.cpf }}">Copiar CPF</button>{% endif %}
+                    {% if proposta.cpf %}<button class="mini-btn copy-btn" type="button" data-copy="{{ proposta.cpf }}"><i class="bi bi-clipboard" aria-hidden="true"></i><span>Copiar CPF</span></button>{% endif %}
                 </div>
                 <div class="summary-card">
                     <small>Telefone</small>
                     <strong>{{ proposta.telefone or '-' }}</strong>
-                    {% if proposta.telefone %}<button class="mini-btn copy-btn" type="button" data-copy="{{ proposta.telefone }}">Copiar telefone</button>{% endif %}
+                    {% if proposta.telefone %}<button class="mini-btn copy-btn" type="button" data-copy="{{ proposta.telefone }}"><i class="bi bi-clipboard" aria-hidden="true"></i><span>Copiar telefone</span></button>{% endif %}
                 </div>
                 <div class="summary-card">
                     <small>Banco digitado</small>
@@ -124,7 +126,7 @@
                     </div>
                     <div class="linked-list">
                         {% for vinculada in vinculadas %}
-                            <a class="linked-item" href="{{ url_for('detalhe_proposta', proposta_id=vinculada.id) }}">
+                            <a class="linked-item" href="{{ url_for('detalhe_proposta', proposta_id=vinculada.id, origem=url_retorno_padrao()) }}">
                                 <div>
                                     <strong>{{ vinculada.produto or 'Proposta' }} · {{ vinculada.status }}</strong>
                                     <small>{{ vinculada.nome }}{% if vinculada.numero_proposta %} · Nº {{ vinculada.numero_proposta }}{% endif %}</small>
@@ -171,6 +173,29 @@
                 </section>
             </div>
 
+            <section class="linked-box stack">
+                <div class="section-title-row">
+                    <div>
+                        <h2>Tarefas pendentes</h2>
+                        <small>Agenda manual vinculada a esta proposta.</small>
+                    </div>
+                    <small>{{ tarefas_pendentes|length }} tarefa(s)</small>
+                </div>
+                <div class="proposal-task-list">
+                    {% for tarefa in tarefas_pendentes %}
+                    <article class="proposal-task-item priority-{{ tarefa.prioridade }}">
+                        <div>
+                            <strong>{{ tarefa.titulo }}</strong>
+                            <small>{{ br_data(tarefa.data_tarefa) }}{% if tarefa.horario %} · {{ tarefa.horario }}{% endif %} · {{ tarefa.categoria }} · {{ tarefa.prioridade|capitalize }}</small>
+                        </div>
+                        <a class="mini-btn" href="{{ url_for('editar_tarefa', tarefa_id=tarefa.id, origem=url_retorno_padrao()) }}"><i class="bi bi-pencil" aria-hidden="true"></i><span>Editar</span></a>
+                    </article>
+                    {% else %}
+                        <p class="empty small">Nenhuma tarefa manual pendente para esta proposta.</p>
+                    {% endfor %}
+                </div>
+            </section>
+
             <details class="complete-data-box">
                 <summary>Ver dados completos da proposta</summary>
                 <div class="info-grid compact-info-grid">
@@ -212,7 +237,7 @@
                         <option value="SIM" {% if proposta.valor_sacado == 'SIM' %}selected{% endif %}>SIM</option>
                     </select>
                 </label>
-                <button class="btn btn-primary" type="submit">Atualizar financeiro</button>
+                <button class="btn btn-primary" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Atualizar financeiro</span></button>
             </form>
             {% endif %}
         </section>
@@ -225,9 +250,21 @@
                 </div>
             </div>
             <form method="post" action="{{ url_for('editar_proposta', proposta_id=proposta.id) }}" class="stack quick-edit-form">
+                <input type="hidden" name="origem" value="{{ url_retorno_padrao() }}">
+                <div class="actions form-actions-top">
+                    <button class="btn btn-primary" type="submit" name="acao" value="salvar"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar alterações</span></button>
+                    <button class="btn" type="submit" name="acao" value="salvar_voltar"><i class="bi bi-arrow-left" aria-hidden="true"></i><span>Salvar e voltar</span></button>
+                    {% if origem_eh_hoje() %}
+                        <button class="btn" type="submit" name="acao" value="salvar_abrir_proxima"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span>Salvar e abrir próxima</span></button>
+                    {% endif %}
+                </div>
                 {% include '_form.html' %}
                 <div class="actions">
-                    <button class="btn btn-primary" type="submit">Salvar alterações</button>
+                    <button class="btn btn-primary" type="submit" name="acao" value="salvar"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar alterações</span></button>
+                    <button class="btn" type="submit" name="acao" value="salvar_voltar"><i class="bi bi-arrow-left" aria-hidden="true"></i><span>Salvar e voltar</span></button>
+                    {% if origem_eh_hoje() %}
+                        <button class="btn" type="submit" name="acao" value="salvar_abrir_proxima"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span>Salvar e abrir próxima</span></button>
+                    {% endif %}
                 </div>
             </form>
         </section>
@@ -241,7 +278,7 @@
                 <label>Nova anotação
                     <textarea name="texto" rows="3" placeholder="Ex.: Cliente já solicitou, aguardando atualizar no INSS"></textarea>
                 </label>
-                <button class="btn btn-primary" type="submit">Adicionar anotação</button>
+                <button class="btn btn-primary" type="submit"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Adicionar anotação</span></button>
             </form>
             <div class="annotation-list">
                 {% for anotacao in anotacoes %}
@@ -267,7 +304,7 @@
                 <label>Enviar documentos
                     <input type="file" name="arquivos" multiple>
                 </label>
-                <button class="btn btn-primary" type="submit">Enviar anexos</button>
+                <button class="btn btn-primary" type="submit"><i class="bi bi-upload" aria-hidden="true"></i><span>Enviar anexos</span></button>
             </form>
             <div class="attachment-list">
                 {% for anexo in anexos %}
@@ -277,9 +314,9 @@
                             <small>{{ br_data_hora(anexo.data_upload) }}{% if tamanho_arquivo(anexo.caminho) %} · {{ tamanho_arquivo(anexo.caminho) }}{% endif %}</small>
                         </div>
                         <div class="attachment-actions">
-                            <a class="mini-btn" href="{{ url_for('baixar_anexo', anexo_id=anexo.id) }}">Baixar</a>
+                            <a class="mini-btn" href="{{ url_for('baixar_anexo', anexo_id=anexo.id) }}"><i class="bi bi-download" aria-hidden="true"></i><span>Baixar</span></a>
                             <form method="post" action="{{ url_for('excluir_anexo', anexo_id=anexo.id) }}" onsubmit="return confirm('Remover este anexo?')">
-                                <button class="mini-btn danger" type="submit">Excluir</button>
+                                <button class="mini-btn danger" type="submit"><i class="bi bi-trash" aria-hidden="true"></i><span>Excluir</span></button>
                             </form>
                         </div>
                     </article>
@@ -311,7 +348,7 @@
                         <article class="selected-message-item {% if not loop.first %}hidden{% endif %}" data-message-index="{{ loop.index0 }}">
                             <div class="message-top">
                                 <span>{{ nome }}</span>
-                                <button class="mini-btn copy-btn" type="button" data-copy="{{ texto|e }}">Copiar mensagem</button>
+                                <button class="mini-btn copy-btn" type="button" data-copy="{{ texto|e }}"><i class="bi bi-clipboard" aria-hidden="true"></i><span>Copiar mensagem</span></button>
                             </div>
                             <p>{{ texto }}</p>
                         </article>
@@ -322,7 +359,7 @@
             </div>
 
             <div class="message-management-link">
-                <a class="btn" href="{{ url_for('modelos_mensagens_page') }}">Gerenciar modelos de mensagens</a>
+                <a class="btn" href="{{ url_for('modelos_mensagens_page') }}"><i class="bi bi-pencil" aria-hidden="true"></i><span>Gerenciar modelos de mensagens</span></a>
                 <small>Os modelos são cadastrados em uma tela separada no menu lateral.</small>
             </div>
         </section>

@@ -10,8 +10,8 @@
         <div class="column-title">
             <span>{{ status }}</span>
             <div class="column-meta">
-                <small>{{ itens|length }} proposta(s)</small>
-                <small>{{ br_moeda(totais_status[status].comissao) }}</small>
+                <small data-column-count>{{ itens|length }} proposta(s)</small>
+                <small data-column-commission>{{ br_moeda(totais_status[status].comissao) }}</small>
             </div>
         </div>
         <div class="kanban-cards" data-status="{{ status }}">
@@ -19,9 +19,9 @@
             <article class="kanban-card" draggable="true" data-proposta-id="{{ p.id }}">
                 <div class="card-topline">
                     <span class="verification-dot {% if verificado_hoje(p) %}dot-ok{% else %}dot-pending{% endif %}" title="{{ status_verificacao_texto(p) }}"></span>
-                    <a href="{{ url_for('detalhe_proposta', proposta_id=p.id) }}">{{ p.nome }}</a>
+                    <a href="{{ url_for('detalhe_proposta', proposta_id=p.id, origem=url_origem_atual()) }}">{{ p.nome }}</a>
                 </div>
-                {% if p.cpf %}<small>CPF: {{ p.cpf }} <button class="mini-btn copy-btn card-copy" type="button" data-copy="{{ p.cpf }}">Copiar</button></small>{% endif %}
+                {% if p.cpf %}<small>CPF: {{ p.cpf }} <button class="mini-btn copy-btn card-copy" type="button" data-copy="{{ p.cpf }}"><i class="bi bi-clipboard" aria-hidden="true"></i><span>Copiar</span></button></small>{% endif %}
                 <div class="card-values compact-card-values">
                     <span><small>Valor</small><strong>{{ br_moeda(p.troco) }}</strong></span>
                     <span><small>Comissão</small><strong>{{ br_moeda(p.comissao) }}</strong></span>
@@ -29,7 +29,7 @@
                 <span class="card-date-line">Previsão de saldo: {{ br_data(p.data_retorno) or 'sem data' }}</span>
             </article>
             {% else %}
-            <p class="empty small">Sem propostas.</p>
+            <p class="empty small" data-empty-message>Sem propostas.</p>
             {% endfor %}
         </div>
     </div>

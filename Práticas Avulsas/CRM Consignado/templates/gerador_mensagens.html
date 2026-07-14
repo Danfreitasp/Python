@@ -49,8 +49,8 @@
         </div>
 
         <div class="inline-actions generator-actions">
-            <button type="button" class="btn btn-primary" id="gerarMensagemBtn">Gerar mensagem</button>
-            <button type="button" class="btn" id="limparGeradorBtn">Limpar campos</button>
+            <button type="button" class="btn btn-primary" id="gerarMensagemBtn"><i class="bi bi-chat-left-text" aria-hidden="true"></i><span>Gerar mensagem</span></button>
+            <button type="button" class="btn" id="limparGeradorBtn"><i class="bi bi-x-circle" aria-hidden="true"></i><span>Limpar campos</span></button>
         </div>
     </div>
 
@@ -60,7 +60,7 @@
                 <h2>Mensagem gerada</h2>
                 <small>Revise antes de enviar. Os valores são estimativos.</small>
             </div>
-            <button type="button" class="btn btn-primary copy-btn" id="copiarGeradorBtn" data-copy="">Copiar mensagem</button>
+            <button type="button" class="btn btn-primary copy-btn" id="copiarGeradorBtn" data-copy=""><i class="bi bi-clipboard" aria-hidden="true"></i><span>Copiar mensagem</span></button>
         </div>
         <textarea id="gerMensagemResultado" class="generator-output" rows="18" placeholder="A mensagem aparecerá aqui após preencher os campos."></textarea>
     </div>
@@ -80,7 +80,7 @@
         <label>Texto do modelo
             <textarea name="texto_modelo" rows="8" placeholder="Olá, {nome}. Tenho uma proposta para seu contrato do banco {banco}..." required></textarea>
         </label>
-        <button class="btn btn-primary" type="submit">Adicionar modelo</button>
+        <button class="btn btn-primary" type="submit"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Adicionar modelo</span></button>
     </form>
 </section>
 
@@ -105,12 +105,12 @@
                         <textarea name="texto_modelo" rows="7" required>{{ modelo }}</textarea>
                     </label>
                     <div class="inline-actions">
-                        <button class="btn btn-primary" type="submit">Salvar alterações</button>
+                        <button class="btn btn-primary" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar alterações</span></button>
                     </div>
                 </form>
                 <form method="post" action="{{ url_for('excluir_modelo_gerador') }}" onsubmit="return confirm('Excluir este modelo do gerador?');" class="model-delete-form">
                     <input type="hidden" name="nome_modelo" value="{{ nome }}">
-                    <button class="btn btn-danger" type="submit">Excluir modelo</button>
+                    <button class="btn btn-danger" type="submit"><i class="bi bi-trash" aria-hidden="true"></i><span>Excluir modelo</span></button>
                 </form>
             </article>
         {% else %}

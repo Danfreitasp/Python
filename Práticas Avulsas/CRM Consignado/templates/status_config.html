@@ -28,7 +28,7 @@
         <label>Nome da etapa
             <input name="nome" placeholder="Ex.: Saldo do dia">
         </label>
-        <button class="btn btn-primary" type="submit">Adicionar etapa</button>
+        <button class="btn btn-primary" type="submit"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Adicionar etapa</span></button>
     </form>
 </section>
 
@@ -38,16 +38,16 @@
         <div class="section-title-row sticky-actions-row">
             <div>
                 <h2>Etapas cadastradas</h2>
-                <p class="muted">Use o marcador ☰ para arrastar. Depois salve tudo de uma vez.</p>
+                <p class="muted">Use o marcador de arrastar. Depois salve tudo de uma vez.</p>
             </div>
-            <button class="btn btn-primary" type="submit">Salvar alterações</button>
+            <button class="btn btn-primary" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar alterações</span></button>
         </div>
 
         <div class="status-editor-list" id="statusEditorList">
             {% for etapa in etapas %}
             <article class="status-editor-card" draggable="true" data-status-card="true" data-etapa-id="{{ etapa.id }}">
                 <input type="hidden" name="etapa_id" value="{{ etapa.id }}">
-                <div class="drag-handle" title="Arraste para reordenar">☰</div>
+                <div class="drag-handle" title="Arraste para reordenar"><i class="bi bi-grip-vertical" aria-hidden="true"></i></div>
 
                 <label class="status-order-field">Ordem
                     <input type="number" name="ordem" value="{{ loop.index }}" min="1" title="Ordem" readonly>
@@ -72,7 +72,7 @@
         </div>
 
         <div class="form-actions bulk-save-bottom">
-            <button class="btn btn-primary" type="submit">Salvar alterações</button>
+            <button class="btn btn-primary" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar alterações</span></button>
         </div>
     </form>
 </section>
@@ -98,7 +98,7 @@
                 {% endfor %}
             </select>
         </label>
-        <button class="btn danger" type="submit">Excluir etapa</button>
+        <button class="btn danger" type="submit"><i class="bi bi-trash" aria-hidden="true"></i><span>Excluir etapa</span></button>
     </form>
 </section>
 {% endblock %}

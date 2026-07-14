@@ -9,8 +9,8 @@
         <label class="compact-label">Mês das encerradas
             <input type="month" name="mes" value="{{ mes }}">
         </label>
-        <button class="btn btn-primary" type="submit">Filtrar mês</button>
-        <a class="btn" href="{{ url_for('encerradas') }}">Mês atual</a>
+        <button class="btn btn-primary" type="submit"><i class="bi bi-filter" aria-hidden="true"></i><span>Filtrar mês</span></button>
+        <a class="btn" href="{{ url_for('encerradas') }}"><i class="bi bi-arrow-return-left" aria-hidden="true"></i><span>Mês atual</span></a>
         <span class="filter-hint">Filtro usado para levantamentos mensais das propostas pagas e perdidas.</span>
     </form>
 </section>
@@ -28,7 +28,7 @@
         <div class="kanban-cards" data-status="{{ status }}">
             {% for p in itens %}
             <article class="kanban-card encerrada-card {% if p.status == 'Pago' %}card-paid{% else %}card-lost{% endif %}" draggable="true" data-proposta-id="{{ p.id }}">
-                <a href="{{ url_for('detalhe_proposta', proposta_id=p.id) }}">{{ p.nome }}</a>
+                <a href="{{ url_for('detalhe_proposta', proposta_id=p.id, origem=url_origem_atual()) }}">{{ p.nome }}</a>
                 <p>{{ p.produto or 'Produto não informado' }}</p>
                 <small>Banco digitado: {{ banco_digitado_exibicao(p) or '-' }}</small>
                 <small>Promotora: {{ p.promotora or '-' }}</small>
@@ -42,7 +42,7 @@
                         <input type="text" name="comissao" value="{{ br_moeda(p.comissao) }}">
                     </label>
                     <small>% comissão: {{ br_percentual(p.comissao_percentual) }}</small>
-                    <button class="btn btn-small" type="submit">Salvar</button>
+                    <button class="btn btn-small" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar</span></button>
                 </form>
 
                 <span>Encerrada em: {{ br_data_hora(p.data_encerramento or p.data_atualizacao) }}</span>

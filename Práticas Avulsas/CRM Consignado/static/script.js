@@ -206,13 +206,24 @@ document.addEventListener('DOMContentLoaded', () => {
         trocoInput.addEventListener('blur', () => calcularComissaoNoEscopo(form));
     });
 
-    function mostrarAvisoCopiado(mensagem) {
+    function mostrarAvisoCopiado(mensagem, tipo = 'ok') {
         const aviso = document.createElement('div');
         aviso.textContent = mensagem;
-        aviso.className = 'toast-copiado';
+        aviso.className = `crm-toast toast-copiado ${tipo === 'erro' ? 'toast-erro' : 'toast-ok'}`;
         document.body.appendChild(aviso);
-        setTimeout(() => aviso.remove(), 1800);
+        setTimeout(() => aviso.remove(), tipo === 'erro' ? 3200 : 1800);
     }
+
+    document.querySelectorAll('[data-toast="true"]').forEach((alerta, index) => {
+        alerta.classList.add('crm-toast');
+        document.body.appendChild(alerta);
+        alerta.style.marginTop = `${index * 58}px`;
+        setTimeout(() => alerta.remove(), 3200);
+    });
+
+    document.querySelectorAll('.alerts').forEach((alerts) => {
+        if (!alerts.querySelector('.alert')) alerts.remove();
+    });
 
     function copiarTextoFallback(texto, button = null) {
         const campoTemporario = document.createElement('textarea');
@@ -231,9 +242,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const copiou = document.execCommand('copy');
             if (copiou) {
                 if (button) {
-                    const original = button.textContent;
-                    button.textContent = 'Copiado';
-                    setTimeout(() => button.textContent = original, 1300);
+                    const original = button.innerHTML;
+                    button.innerHTML = '<i class="bi bi-check-circle" aria-hidden="true"></i><span>Copiado</span>';
+                    setTimeout(() => button.innerHTML = original, 1300);
                 }
                 mostrarAvisoCopiado('Copiado!');
             } else {
@@ -256,9 +267,9 @@ document.addEventListener('DOMContentLoaded', () => {
             navigator.clipboard.writeText(texto)
                 .then(() => {
                     if (button) {
-                        const original = button.textContent;
-                        button.textContent = 'Copiado';
-                        setTimeout(() => button.textContent = original, 1300);
+                        const original = button.innerHTML;
+                        button.innerHTML = '<i class="bi bi-check-circle" aria-hidden="true"></i><span>Copiado</span>';
+                        setTimeout(() => button.innerHTML = original, 1300);
                     }
                     mostrarAvisoCopiado('Copiado!');
                 })
@@ -276,9 +287,489 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     let draggedCard = null;
+    const funilContextKey = 'crmFunilContext';
+
+    function funilUrlSemDestaque() {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('destaque_proposta');
+        return `${url.pathname}${url.search}`;
+    }
+
+    function limparDestaqueDaUrl() {
+        const url = new URL(window.location.href);
+        if (!url.searchParams.has('destaque_proposta')) return;
+        url.searchParams.delete('destaque_proposta');
+        const limpa = `${url.pathname}${url.search}${url.hash}`;
+        window.history.replaceState({}, '', limpa);
+    }
+
+    function salvarContextoFunil(card = null) {
+        const kanban = document.querySelector('.kanban[data-modulo="funil"]');
+        if (!kanban) return;
+
+        const colunas = {};
+        kanban.querySelectorAll('.kanban-cards[data-status]').forEach((area) => {
+            colunas[area.dataset.status] = area.scrollTop || 0;
+        });
+
+        try {
+            sessionStorage.setItem(funilContextKey, JSON.stringify({
+                url: funilUrlSemDestaque(),
+                at: Date.now(),
+                pageX: window.scrollX || 0,
+                pageY: window.scrollY || 0,
+                kanbanX: kanban.scrollLeft || 0,
+                colunas,
+                propostaId: card?.dataset.propostaId || '',
+            }));
+        } catch (error) {
+            // Se o navegador bloquear sessionStorage, o CRM apenas segue sem restaurar posição.
+        }
+    }
+
+    function destacarCardRecemSalvo(card) {
+        if (!card) return;
+        card.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        card.classList.add('card-recently-saved');
+        setTimeout(() => card.classList.remove('card-recently-saved'), 3500);
+    }
+
+    function propostaSelector(propostaId) {
+        const seguro = String(propostaId || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        return `[data-proposta-id="${seguro}"]`;
+    }
+
+    function destacarCardDaPaginaAtual() {
+        const params = new URLSearchParams(window.location.search);
+        const destaqueId = params.get('destaque_proposta');
+        if (!destaqueId) return;
+        const card = document.querySelector(`.today-card${propostaSelector(destaqueId)}`) || document.querySelector(propostaSelector(destaqueId));
+        if (card) destacarCardRecemSalvo(card);
+        limparDestaqueDaUrl();
+    }
+
+    function restaurarContextoFunil() {
+        const kanban = document.querySelector('.kanban[data-modulo="funil"]');
+        if (!kanban) return;
+
+        const params = new URLSearchParams(window.location.search);
+        const destaqueId = params.get('destaque_proposta');
+        let estado = null;
+
+        try {
+            estado = JSON.parse(sessionStorage.getItem(funilContextKey) || 'null');
+        } catch (error) {
+            estado = null;
+        }
+
+        const estadoRecente = estado && (Date.now() - Number(estado.at || 0)) < 30 * 60 * 1000;
+        const mesmaUrl = estadoRecente && estado.url === funilUrlSemDestaque();
+
+        if (mesmaUrl) {
+            requestAnimationFrame(() => {
+                window.scrollTo(estado.pageX || 0, estado.pageY || 0);
+                kanban.scrollLeft = estado.kanbanX || 0;
+                kanban.querySelectorAll('.kanban-cards[data-status]').forEach((area) => {
+                    area.scrollTop = estado.colunas?.[area.dataset.status] || 0;
+                });
+            });
+            try { sessionStorage.removeItem(funilContextKey); } catch (error) {}
+        }
+
+        if (destaqueId) {
+            const card = kanban.querySelector(`.kanban-card${propostaSelector(destaqueId)}`);
+            if (card) {
+                setTimeout(() => destacarCardRecemSalvo(card), mesmaUrl ? 120 : 0);
+            }
+            limparDestaqueDaUrl();
+        }
+    }
+
+    document.querySelectorAll('.kanban[data-modulo="funil"] .kanban-card a[href]').forEach((link) => {
+        link.addEventListener('click', () => {
+            salvarContextoFunil(link.closest('.kanban-card'));
+        });
+    });
+
+    restaurarContextoFunil();
+    destacarCardDaPaginaAtual();
+
+    function updateTodayCount(name, delta) {
+        document.querySelectorAll(`[data-today-count="${name}"]`).forEach((el) => {
+            const current = Number(el.textContent || 0);
+            el.textContent = String(Math.max(0, current + delta));
+        });
+    }
+
+    function refreshTodaySection(section) {
+        if (!section) return;
+        const count = section.querySelectorAll('.today-card').length;
+        const countEl = section.querySelector('[data-section-count]');
+        if (countEl) countEl.textContent = String(count);
+        const grid = section.querySelector('.today-card-grid');
+        if (grid && count === 0 && !grid.querySelector('[data-empty-message]')) {
+            const empty = document.createElement('p');
+            empty.className = 'empty small';
+            empty.dataset.emptyMessage = 'true';
+            empty.textContent = section.dataset.todaySection === 'verificar'
+                ? 'Nenhuma proposta para verificar.'
+                : 'Nenhuma tarefa nesta seção.';
+            grid.appendChild(empty);
+        }
+    }
+
+    function setTodayCardVerified(card, statusText) {
+        const dot = card.querySelector('.verification-dot');
+        if (dot) {
+            dot.classList.remove('dot-pending');
+            dot.classList.add('dot-ok');
+            dot.title = statusText || 'Verificado hoje';
+        }
+        const form = card.querySelector('.today-verify-form');
+        if (form) {
+            const label = document.createElement('span');
+            label.className = 'today-verified-label';
+            label.textContent = statusText || 'Verificada hoje';
+            form.replaceWith(label);
+        }
+    }
+
+    document.querySelectorAll('.today-verify-form').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const button = form.querySelector('button');
+            if (button) button.disabled = true;
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'fetch' },
+                    body: new FormData(form),
+                });
+                const payload = await response.json();
+                if (!response.ok || payload.success === false) {
+                    throw new Error(payload.message || 'Não foi possível marcar como verificada.');
+                }
+
+                const params = new URLSearchParams(window.location.search);
+                const somentePendentes = params.get('verificacao') === 'pendente';
+                let removidasVerificar = 0;
+                const cardsDaProposta = Array.from(document.querySelectorAll(propostaSelector(payload.proposta_id)));
+                cardsDaProposta.forEach((card) => {
+                    setTodayCardVerified(card, payload.status_texto);
+                    if (somentePendentes || card.dataset.section === 'verificar') {
+                        const section = card.closest('[data-today-section]');
+                        if (card.dataset.section === 'verificar') removidasVerificar += 1;
+                        card.remove();
+                        refreshTodaySection(section);
+                    }
+                });
+                const aindaVisivel = Boolean(document.querySelector(propostaSelector(payload.proposta_id)));
+                if (removidasVerificar) {
+                    updateTodayCount('verificar', -removidasVerificar);
+                }
+                if (!aindaVisivel) {
+                    updateTodayCount('total', -1);
+                }
+                if (cardsDaProposta.length) {
+                    updateTodayCount('verificadas', 1);
+                    updateTodayCount('pendentes', -1);
+                }
+                mostrarAvisoCopiado(payload.message || 'Verificação diária atualizada.');
+            } catch (error) {
+                console.error(error);
+                if (button) button.disabled = false;
+                mostrarAvisoCopiado(error.message || 'Não foi possível marcar como verificada.', 'erro');
+            }
+        });
+    });
+
+    document.querySelectorAll('.today-contact-form').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const button = form.querySelector('button');
+            const card = form.closest('.today-card');
+            const section = card?.closest('[data-today-section]');
+            if (button) button.disabled = true;
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'fetch' },
+                    body: new FormData(form),
+                });
+                const payload = await response.json();
+                if (!response.ok || payload.success === false) {
+                    throw new Error(payload.message || 'Não foi possível registrar o contato.');
+                }
+
+                const lastInteraction = card?.querySelector('[data-last-interaction]');
+                if (lastInteraction) lastInteraction.textContent = `Última interação: ${payload.ultima_interacao || 'Hoje'}`;
+
+                const label = document.createElement('span');
+                label.className = 'today-verified-label';
+                label.textContent = 'Contatado hoje';
+                form.replaceWith(label);
+
+                updateTodayCount('interacoes_hoje', 1);
+                updateTodayCount('pendentes', -1);
+
+                const params = new URLSearchParams(window.location.search);
+                const somentePendentes = params.get('verificacao') === 'pendente';
+                if (card && (somentePendentes || card.dataset.section === 'paradas')) {
+                    const sectionKey = card.dataset.section;
+                    card.remove();
+                    refreshTodaySection(section);
+                    updateTodayCount('total', -1);
+                    if (sectionKey === 'paradas') updateTodayCount('paradas', -1);
+                }
+
+                mostrarAvisoCopiado(payload.message || 'Contato registrado.');
+            } catch (error) {
+                console.error(error);
+                if (button) button.disabled = false;
+                mostrarAvisoCopiado(error.message || 'Não foi possível registrar o contato.', 'erro');
+            }
+        });
+    });
+
+    function updateAgendaCount(name, delta) {
+        document.querySelectorAll(`[data-agenda-count="${name}"]`).forEach((el) => {
+            const current = Number(el.textContent || 0);
+            el.textContent = String(Math.max(0, current + delta));
+        });
+    }
+
+    function refreshAgendaSection(section) {
+        if (!section) return;
+        const count = section.querySelectorAll('.agenda-item').length;
+        const countEl = section.querySelector('[data-agenda-section-count]');
+        if (countEl) countEl.textContent = String(count);
+        const list = section.querySelector('.agenda-list');
+        if (list && count === 0 && !list.querySelector('[data-empty-message]')) {
+            const empty = document.createElement('p');
+            empty.className = 'empty small';
+            empty.dataset.emptyMessage = 'true';
+            empty.textContent = 'Nenhuma tarefa nesta seção.';
+            list.appendChild(empty);
+        }
+    }
+
+    function agendaCountName(sectionKey) {
+        if (sectionKey === 'agenda_atrasadas') return 'atrasadas';
+        if (sectionKey === 'agenda_hoje') return 'hoje';
+        if (sectionKey === 'agenda_proximas') return 'proximas';
+        if (sectionKey === 'agenda_concluidas') return 'concluidas_hoje';
+        return '';
+    }
+
+    document.querySelectorAll('.agenda-action-form, .agenda-delay-form').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const item = form.closest('.agenda-item');
+            const section = item?.closest('[data-agenda-section]');
+            const button = form.querySelector('button');
+            if (button) button.disabled = true;
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'fetch' },
+                    body: new FormData(form),
+                });
+                const payload = await response.json();
+                if (!response.ok || payload.success === false) {
+                    throw new Error(payload.message || 'Não foi possível atualizar a tarefa.');
+                }
+                if (item) item.remove();
+                refreshAgendaSection(section);
+                const countName = agendaCountName(section?.dataset.agendaSection || '');
+                if (countName) updateAgendaCount(countName, -1);
+                if (payload.status === 'concluida') updateAgendaCount('concluidas_hoje', 1);
+                mostrarAvisoCopiado(payload.message || 'Tarefa atualizada.');
+            } catch (error) {
+                console.error(error);
+                if (button) button.disabled = false;
+                mostrarAvisoCopiado(error.message || 'Não foi possível atualizar a tarefa.', 'erro');
+            }
+        });
+    });
+
+    document.querySelectorAll('.agenda-delete-form').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            if (!window.confirm('Excluir esta tarefa?')) return;
+            const item = form.closest('.agenda-item');
+            const section = item?.closest('[data-agenda-section]');
+            const button = form.querySelector('button');
+            if (button) button.disabled = true;
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'fetch' },
+                    body: new FormData(form),
+                });
+                const payload = await response.json();
+                if (!response.ok || payload.success === false) {
+                    throw new Error(payload.message || 'Não foi possível excluir a tarefa.');
+                }
+                if (item) item.remove();
+                refreshAgendaSection(section);
+                const countName = agendaCountName(section?.dataset.agendaSection || '');
+                if (countName) updateAgendaCount(countName, -1);
+                mostrarAvisoCopiado(payload.message || 'Tarefa excluída.');
+            } catch (error) {
+                console.error(error);
+                if (button) button.disabled = false;
+                mostrarAvisoCopiado(error.message || 'Não foi possível excluir a tarefa.', 'erro');
+            }
+        });
+    });
+
+    const taskLinkBox = document.querySelector('.task-link-box');
+    if (taskLinkBox) {
+        const searchInput = document.getElementById('taskProposalSearch');
+        const results = document.getElementById('taskProposalResults');
+        const propostaInput = document.getElementById('taskPropostaId');
+        const selected = document.getElementById('taskSelectedProposal');
+        const clearButton = document.getElementById('clearTaskProposal');
+        const searchUrl = taskLinkBox.dataset.propostaSearchUrl;
+        let timer = null;
+
+        function escapeHtmlTask(value) {
+            return String(value || '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        function hideTaskResults() {
+            if (!results) return;
+            results.hidden = true;
+            results.innerHTML = '';
+        }
+
+        function selectTaskProposal(item) {
+            if (propostaInput) propostaInput.value = item.id || '';
+            if (selected) selected.textContent = `${item.nome || 'Proposta'}${item.cpf ? ' · ' + item.cpf : ''}`;
+            hideTaskResults();
+        }
+
+        if (clearButton) {
+            clearButton.addEventListener('click', () => {
+                if (propostaInput) propostaInput.value = '';
+                if (selected) selected.textContent = 'Nenhuma proposta vinculada.';
+                if (searchInput) searchInput.value = '';
+                hideTaskResults();
+            });
+        }
+
+        if (searchInput && results && searchUrl) {
+            searchInput.addEventListener('input', () => {
+                clearTimeout(timer);
+                const q = searchInput.value.trim();
+                if (q.length < 2) {
+                    hideTaskResults();
+                    return;
+                }
+                timer = setTimeout(async () => {
+                    try {
+                        const response = await fetch(`${searchUrl}?q=${encodeURIComponent(q)}`);
+                        if (!response.ok) throw new Error('Falha ao buscar proposta.');
+                        const items = await response.json();
+                        if (!items.length) {
+                            results.innerHTML = '<div class="quick-search-empty">Nenhuma proposta encontrada.</div>';
+                            results.hidden = false;
+                            return;
+                        }
+                        results.innerHTML = items.map((item) => `
+                            <button type="button" class="task-proposal-result" data-proposta='${escapeHtmlTask(JSON.stringify(item))}'>
+                                <strong>${escapeHtmlTask(item.nome)}</strong>
+                                <small>${escapeHtmlTask(item.cpf || 'CPF não informado')} · ${escapeHtmlTask(item.status || '')}</small>
+                                <span>${escapeHtmlTask(item.match_campo || 'Resultado')}: ${escapeHtmlTask(item.match_valor || '')}</span>
+                            </button>
+                        `).join('');
+                        results.hidden = false;
+                    } catch (error) {
+                        console.error(error);
+                        hideTaskResults();
+                    }
+                }, 180);
+            });
+
+            results.addEventListener('click', (event) => {
+                const button = event.target.closest('.task-proposal-result');
+                if (!button) return;
+                try {
+                    selectTaskProposal(JSON.parse(button.dataset.proposta || '{}'));
+                } catch (error) {
+                    hideTaskResults();
+                }
+            });
+        }
+    }
+
+    function getColumn(cardsArea) {
+        return cardsArea?.closest('.kanban-column') || null;
+    }
+
+    function refreshEmptyState(cardsArea) {
+        if (!cardsArea) return;
+        const empty = cardsArea.querySelector('[data-empty-message]');
+        const hasCards = Boolean(cardsArea.querySelector('.kanban-card'));
+        if (hasCards && empty) {
+            empty.remove();
+        } else if (!hasCards && !empty) {
+            const message = document.createElement('p');
+            message.className = 'empty small';
+            message.dataset.emptyMessage = 'true';
+            message.textContent = 'Sem propostas.';
+            cardsArea.appendChild(message);
+        }
+    }
+
+    function appendCard(cardsArea, card) {
+        const empty = cardsArea.querySelector('[data-empty-message]');
+        if (empty) empty.remove();
+        cardsArea.appendChild(card);
+    }
+
+    function restoreCard(card, sourceArea, nextSibling) {
+        if (nextSibling && nextSibling.parentElement === sourceArea) {
+            sourceArea.insertBefore(card, nextSibling);
+        } else {
+            sourceArea.appendChild(card);
+        }
+    }
+
+    function updateColumnCounter(column, dados = null) {
+        if (!column) return;
+        const countEl = column.querySelector('[data-column-count]') || column.querySelector('.column-title small');
+        const commissionEl = column.querySelector('[data-column-commission]');
+        if (countEl) {
+            const count = dados ? dados.quantidade : column.querySelectorAll('.kanban-card').length;
+            countEl.textContent = `${count} proposta(s)`;
+        }
+        if (commissionEl && dados?.comissao) {
+            commissionEl.textContent = dados.comissao;
+        }
+    }
+
+    function restoreScroll(kanban, scrollLeft, sourceArea, sourceScrollTop, targetArea, targetScrollTop) {
+        requestAnimationFrame(() => {
+            if (kanban) kanban.scrollLeft = scrollLeft;
+            if (sourceArea) sourceArea.scrollTop = sourceScrollTop;
+            if (targetArea) targetArea.scrollTop = targetScrollTop;
+        });
+    }
 
     document.querySelectorAll('.kanban-card[draggable="true"]').forEach((card) => {
         card.addEventListener('dragstart', (event) => {
+            if (card.dataset.busy === 'true') {
+                event.preventDefault();
+                return;
+            }
             draggedCard = card;
             card.classList.add('dragging');
             event.dataTransfer.effectAllowed = 'move';
@@ -312,15 +803,33 @@ document.addEventListener('DOMContentLoaded', () => {
             const novoStatus = cardsArea.dataset.status;
             const card = draggedCard || document.querySelector(`.kanban-card[data-proposta-id="${propostaId}"]`);
 
-            if (!propostaId || !novoStatus || !card) return;
+            if (!propostaId || !novoStatus || !card || card.dataset.busy === 'true') return;
 
-            const statusAtual = card.closest('.kanban-cards')?.dataset.status;
-            if (statusAtual === novoStatus) return;
+            const sourceArea = card.closest('.kanban-cards');
+            const statusAtual = sourceArea?.dataset.status;
+            if (!sourceArea || statusAtual === novoStatus) return;
+
+            const sourceColumn = getColumn(sourceArea);
+            const targetColumn = getColumn(cardsArea);
+            const nextSibling = card.nextElementSibling;
+            const kanban = cardsArea.closest('.kanban');
+            const kanbanScrollLeft = kanban?.scrollLeft || 0;
+            const sourceScrollTop = sourceArea.scrollTop;
+            const targetScrollTop = cardsArea.scrollTop;
+            const modulo = kanban?.dataset.modulo || 'funil';
 
             const formData = new URLSearchParams();
             formData.append('status', novoStatus);
-            formData.append('origem', 'funil');
+            formData.append('origem', modulo);
             formData.append('observacao', 'Movido no funil por arrastar e soltar');
+
+            card.dataset.busy = 'true';
+            card.classList.add('is-processing');
+            card.setAttribute('draggable', 'false');
+            appendCard(cardsArea, card);
+            refreshEmptyState(sourceArea);
+            refreshEmptyState(cardsArea);
+            restoreScroll(kanban, kanbanScrollLeft, sourceArea, sourceScrollTop, cardsArea, targetScrollTop);
 
             try {
                 const response = await fetch(`/proposta/${propostaId}/status`, {
@@ -339,30 +848,40 @@ document.addEventListener('DOMContentLoaded', () => {
                     payload = await response.json();
                 }
 
-                if (!response.ok || (payload && payload.ok === false)) {
-                    const msg = payload?.erro || `Falha ao mover proposta. Código: ${response.status}`;
+                const success = payload ? (payload.success ?? payload.ok) : response.ok;
+                if (!response.ok || success === false) {
+                    const msg = payload?.message || payload?.erro || `Falha ao mover proposta. Código: ${response.status}`;
                     throw new Error(msg);
                 }
 
-                cardsArea.appendChild(card);
-                const oldColumn = document.querySelector(`.kanban-cards[data-status="${statusAtual}"]`)?.closest('.kanban-column');
-                const newColumn = cardsArea.closest('.kanban-column');
-                updateColumnCounter(oldColumn);
-                updateColumnCounter(newColumn);
+                if (modulo === 'funil' && payload?.colunas) {
+                    updateColumnCounter(sourceColumn, payload.colunas.origem);
+                    updateColumnCounter(targetColumn, payload.colunas.destino);
+                } else {
+                    updateColumnCounter(sourceColumn);
+                    updateColumnCounter(targetColumn);
+                }
+                card.classList.add('move-success');
+                mostrarAvisoCopiado(payload?.message || 'Proposta movida com sucesso');
+                setTimeout(() => card.classList.remove('move-success'), 1400);
             } catch (error) {
                 console.error(error);
-                alert(error.message || 'Não foi possível mover o card. Recarregue a página e tente novamente.');
+                restoreCard(card, sourceArea, nextSibling);
+                refreshEmptyState(sourceArea);
+                refreshEmptyState(cardsArea);
+                updateColumnCounter(sourceColumn);
+                updateColumnCounter(targetColumn);
+                card.classList.add('move-error');
+                mostrarAvisoCopiado(error.message || 'Não foi possível mover a proposta', 'erro');
+                setTimeout(() => card.classList.remove('move-error'), 1800);
+            } finally {
+                card.dataset.busy = 'false';
+                card.classList.remove('is-processing');
+                card.setAttribute('draggable', 'true');
+                restoreScroll(kanban, kanbanScrollLeft, sourceArea, sourceScrollTop, cardsArea, targetScrollTop);
             }
         });
     });
-
-    function updateColumnCounter(column) {
-        if (!column) return;
-        const counter = column.querySelector('.column-title small');
-        if (!counter) return;
-        const count = column.querySelectorAll('.kanban-card').length;
-        counter.textContent = `${count} proposta(s)`;
-    }
 
 });
 
@@ -391,7 +910,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         results.innerHTML = lastItems.map((item) => `
-            <a class="quick-search-item" href="${item.url}">
+            <a class="quick-search-item" href="${appendOrigin(item.url)}">
                 <strong>${escapeHtml(item.nome)}</strong>
                 <small>${escapeHtml(item.cpf || 'CPF não informado')} · ${escapeHtml(item.status || '')}</small>
                 <span>${escapeHtml(item.produto || '')}${item.banco ? ' · Banco: ' + escapeHtml(item.banco) : ''}</span>
@@ -408,6 +927,12 @@ document.addEventListener('DOMContentLoaded', () => {
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#039;');
+    }
+
+    function appendOrigin(url) {
+        const separator = String(url || '').includes('?') ? '&' : '?';
+        const origem = window.location.pathname + window.location.search;
+        return `${url}${separator}origem=${encodeURIComponent(origem || '/propostas')}`;
     }
 
     input.addEventListener('input', () => {
@@ -432,7 +957,7 @@ document.addEventListener('DOMContentLoaded', () => {
     input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' && lastItems.length) {
             event.preventDefault();
-            window.location.href = lastItems[0].url;
+            window.location.href = appendOrigin(lastItems[0].url);
         }
         if (event.key === 'Escape') hideResults();
     });
@@ -450,7 +975,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function aplicarTema(tema) {
         document.documentElement.setAttribute('data-theme', tema);
         localStorage.setItem('crmTema', tema);
-        botaoTema.textContent = tema === 'escuro' ? '☀️ Modo claro' : '🌙 Modo escuro';
+        botaoTema.innerHTML = tema === 'escuro'
+            ? '<i class="bi bi-sun" aria-hidden="true"></i><span>Modo claro</span>'
+            : '<i class="bi bi-moon" aria-hidden="true"></i><span>Modo escuro</span>';
         botaoTema.title = tema === 'escuro' ? 'Alternar para modo claro' : 'Alternar para modo escuro';
     }
 

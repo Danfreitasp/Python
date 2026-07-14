@@ -43,22 +43,22 @@
             <option value="SIM" {% if filtros.valor_sacado == 'SIM' %}selected{% endif %}>SIM</option>
             <option value="NÃO" {% if filtros.valor_sacado == 'NÃO' %}selected{% endif %}>NÃO</option>
         </select>
-        <button class="btn btn-primary" type="submit">Filtrar</button>
-        <a class="btn" href="{{ url_for('index') }}">Limpar</a>
+        <button class="btn btn-primary" type="submit"><i class="bi bi-filter" aria-hidden="true"></i><span>Filtrar</span></button>
+        <a class="btn" href="{{ url_for('index') }}"><i class="bi bi-x-circle" aria-hidden="true"></i><span>Limpar</span></a>
     </form>
 </section>
 
 <section class="toolbar card">
     <div>
-        <a class="btn" href="{{ url_for('exportar_csv') }}">Exportar CSV</a>
-        <a class="btn" href="{{ url_for('exportar_xlsx') }}">Exportar Excel</a>
+        <a class="btn" href="{{ url_for('exportar_csv') }}"><i class="bi bi-download" aria-hidden="true"></i><span>Exportar CSV</span></a>
+        <a class="btn" href="{{ url_for('exportar_xlsx') }}"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i><span>Exportar Excel</span></a>
     </div>
     <form action="{{ url_for('importar') }}" method="post" enctype="multipart/form-data" class="import-form">
         <label class="compact-label">Mês da importação
             <input type="month" name="mes_importacao" value="{{ mes_atual() }}">
         </label>
         <input type="file" name="arquivo" accept=".csv,.xlsx" required>
-        <button class="btn" type="submit">Importar</button>
+        <button class="btn" type="submit"><i class="bi bi-upload" aria-hidden="true"></i><span>Importar</span></button>
     </form>
 </section>
 
@@ -90,7 +90,7 @@
                 {% for p in propostas %}
                 <tr>
                     <td>{{ p.nome }}</td>
-                    <td>{{ p.cpf }}{% if p.cpf %}<button class="mini-btn copy-btn table-copy" type="button" data-copy="{{ p.cpf }}">Copiar</button>{% endif %}</td>
+                    <td>{{ p.cpf }}{% if p.cpf %}<button class="mini-btn copy-btn table-copy" type="button" data-copy="{{ p.cpf }}"><i class="bi bi-clipboard" aria-hidden="true"></i><span>Copiar</span></button>{% endif %}</td>
                     <td>{{ p.tipo_cliente }}</td>
                     <td>{{ p.banco_atual }}</td>
                     <td>{{ banco_digitado_exibicao(p) }}</td>
@@ -106,8 +106,8 @@
                     <td>{{ br_data(p.data_criacao) }}</td>
                     <td>{{ br_data(p.data_retorno) }}</td>
                     <td class="row-actions">
-                        <a class="mini-btn" href="{{ url_for('detalhe_proposta', proposta_id=p.id) }}">Ver</a>
-                        <a class="mini-btn" href="{{ url_for('editar_proposta', proposta_id=p.id) }}">Editar</a>
+                        <a class="mini-btn" href="{{ url_for('detalhe_proposta', proposta_id=p.id, origem=url_origem_atual()) }}"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span>Ver</span></a>
+                        <a class="mini-btn" href="{{ url_for('editar_proposta', proposta_id=p.id, origem=url_origem_atual()) }}"><i class="bi bi-pencil" aria-hidden="true"></i><span>Editar</span></a>
                         <form method="post" action="{{ url_for('mudar_status', proposta_id=p.id) }}" class="inline-form">
                             <select name="status" onchange="this.form.submit()">
                                 {% for status in STATUS_LIST %}
@@ -116,7 +116,7 @@
                             </select>
                         </form>
                         <form method="post" action="{{ url_for('excluir_proposta', proposta_id=p.id) }}" class="inline-form" onsubmit="return confirm('Excluir esta proposta?')">
-                            <button class="mini-btn danger" type="submit">Excluir</button>
+                            <button class="mini-btn danger" type="submit"><i class="bi bi-trash" aria-hidden="true"></i><span>Excluir</span></button>
                         </form>
                     </td>
                 </tr>

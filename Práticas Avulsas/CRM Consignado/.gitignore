@@ -3,6 +3,10 @@
 venv/
 env/
 
+# Ferramentas locais
+.agents/
+.codex/
+
 # Banco de dados local
 database.db
 *.db
@@ -11,6 +15,7 @@ database.db
 
 # Backups
 backups/
+*.bak
 
 # Anexos e documentos
 uploads/
@@ -23,16 +28,32 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Configurações locais
 .env
+.env.*
 instance/
+crm.bat
+
+# Documentação local
+*.md
+!README.md
+!readme.md
 
 # VS Code
 .vscode/
+
+# Logs e temporários
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
 
 # Sistema operacional
 .DS_Store
 Thumbs.db
 desktop.ini
-crm.bat

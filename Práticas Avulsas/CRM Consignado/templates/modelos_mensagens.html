@@ -23,7 +23,7 @@
         <label>Texto do modelo
             <textarea name="texto_modelo" rows="7" placeholder="Olá, {nome}. Tenho uma proposta para seu contrato do banco {banco_atual}..." required></textarea>
         </label>
-        <button class="btn btn-primary" type="submit">Adicionar modelo</button>
+        <button class="btn btn-primary" type="submit"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Adicionar modelo</span></button>
     </form>
 </section>
 
@@ -49,13 +49,13 @@
                         <textarea name="texto_modelo" rows="7" required>{{ modelo }}</textarea>
                     </label>
                     <div class="inline-actions">
-                        <button class="btn btn-primary" type="submit">Salvar alterações</button>
+                        <button class="btn btn-primary" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar alterações</span></button>
                     </div>
                 </form>
                 <form method="post" action="{{ url_for('excluir_modelo_mensagem') }}" onsubmit="return confirm('Excluir este modelo de mensagem?');" class="model-delete-form">
                     <input type="hidden" name="next" value="{{ url_for('modelos_mensagens_page') }}">
                     <input type="hidden" name="nome_modelo" value="{{ nome }}">
-                    <button class="btn btn-danger" type="submit">Excluir modelo</button>
+                    <button class="btn btn-danger" type="submit"><i class="bi bi-trash" aria-hidden="true"></i><span>Excluir modelo</span></button>
                 </form>
             </article>
         {% else %}

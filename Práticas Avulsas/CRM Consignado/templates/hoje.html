@@ -1,0 +1,261 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="operation-toolbar">
+    <div class="operation-metrics">
+        <article class="metric-card operation-metric">
+            <small>Propostas em atenção</small>
+            <strong data-today-count="total">{{ contadores.total }}</strong>
+        </article>
+        <article class="metric-card operation-metric">
+            <small>Sem interação recente</small>
+            <strong data-today-count="paradas">{{ contadores.paradas }}</strong>
+        </article>
+        <article class="metric-card operation-metric">
+            <small>CIP / Averbação</small>
+            <strong>{{ contadores.cip + contadores.averbacao }}</strong>
+        </article>
+        <article class="metric-card operation-metric">
+            <small>Contatadas hoje</small>
+            <strong data-today-count="interacoes_hoje">{{ contadores.interacoes_hoje }}</strong>
+        </article>
+    </div>
+    <div class="operation-summary">
+        {% if contadores.total %}
+            <strong>{{ contadores.pendentes }} proposta(s) ainda sem contato hoje</strong>
+            <small>Central priorizada por atenção operacional, não por horário.</small>
+        {% else %}
+            <strong>Nenhuma proposta pedindo atenção agora</strong>
+            <small>Os filtros atuais não encontraram propostas abertas.</small>
+        {% endif %}
+    </div>
+    <div class="operation-actions">
+        {% if primeira_proposta %}
+            <a class="btn btn-primary" href="{{ url_for('detalhe_proposta', proposta_id=primeira_proposta.id, origem=url_origem_atual()) }}"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span>Abrir próxima proposta</span></a>
+        {% else %}
+            <button class="btn" type="button" disabled><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span>Abrir próxima proposta</span></button>
+        {% endif %}
+        <a class="btn" href="{{ url_for('nova_tarefa', origem=url_origem_atual()) }}"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Nova tarefa manual</span></a>
+    </div>
+</section>
+
+<section class="card filters-card">
+    <div class="section-title-row">
+        <div>
+            <h2>Central de Operação</h2>
+            <small>Propostas abertas que precisam de acompanhamento agora.</small>
+        </div>
+    </div>
+    <form method="get" class="filters operation-filters">
+        <input type="hidden" name="agenda_data" value="{{ agenda_filtros.data }}">
+        <input type="hidden" name="agenda_status" value="{{ agenda_filtros.status }}">
+        <input type="hidden" name="agenda_prioridade" value="{{ agenda_filtros.prioridade }}">
+        <input type="hidden" name="agenda_categoria" value="{{ agenda_filtros.categoria }}">
+        <input type="hidden" name="agenda_vinculo" value="{{ agenda_filtros.vinculo }}">
+        <label>Grupo
+            <select name="tipo_tarefa">
+                <option value="">Todos os grupos</option>
+                {% for secao in secoes_todas %}
+                    <option value="{{ secao.key }}" {% if filtros.tipo_tarefa == secao.key %}selected{% endif %}>{{ secao.titulo }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Etapa
+            <select name="etapa">
+                <option value="">Todas as etapas</option>
+                {% for status in status_opcoes %}
+                    <option value="{{ status }}" {% if filtros.etapa == status %}selected{% endif %}>{{ status }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Banco
+            <select name="banco">
+                <option value="">Todos os bancos</option>
+                {% for banco in bancos %}
+                    <option value="{{ banco }}" {% if filtros.banco == banco %}selected{% endif %}>{{ banco }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Contato
+            <select name="verificacao">
+                <option value="">Todos</option>
+                <option value="pendente" {% if filtros.verificacao == 'pendente' %}selected{% endif %}>Sem contato hoje</option>
+                <option value="verificada" {% if filtros.verificacao == 'verificada' %}selected{% endif %}>Contatadas hoje</option>
+            </select>
+        </label>
+        <button class="btn btn-primary" type="submit"><i class="bi bi-filter" aria-hidden="true"></i><span>Filtrar</span></button>
+        <a class="btn" href="{{ url_for('hoje') }}"><i class="bi bi-x-circle" aria-hidden="true"></i><span>Limpar</span></a>
+    </form>
+</section>
+
+{% if contadores.total == 0 %}
+<section class="card operation-all-clear">
+    <h2>Central sem pendências visíveis.</h2>
+    <p>Nenhuma proposta aberta foi encontrada com os filtros atuais.</p>
+</section>
+{% endif %}
+
+<section class="operation-sections">
+    {% for secao in secoes %}
+    <section class="operation-section" data-today-section="{{ secao.key }}">
+        <div class="operation-section-head">
+            <div>
+                <h2>{{ secao.titulo }}</h2>
+                <small><span data-section-count>{{ secao.indicadores.quantidade }}</span> proposta(s)</small>
+            </div>
+            <div class="operation-indicators">
+                <span><small>Tempo médio parado</small><strong>{{ secao.indicadores.tempo_medio }} dia(s)</strong></span>
+                <span><small>Maior tempo parado</small><strong>{{ secao.indicadores.maior_tempo }} dia(s)</strong></span>
+            </div>
+        </div>
+
+        <div class="operation-card-grid today-card-grid">
+            {% for p in secao.propostas %}
+            <article class="kanban-card operation-card today-card" data-proposta-id="{{ p.id }}" data-section="{{ secao.key }}">
+                <div class="operation-card-title">
+                    <a href="{{ url_for('detalhe_proposta', proposta_id=p.id, origem=url_origem_atual()) }}">{{ p.nome }}</a>
+                    <span>{{ p.status }}</span>
+                </div>
+                <div class="operation-card-meta">
+                    <small>Banco: {{ p.banco_operacao }}</small>
+                    <small>Produto: {{ p.produto or 'Não informado' }}</small>
+                    <small>Etapa atual: {{ p.status }}</small>
+                    <small>Dias na etapa: {{ p.dias_etapa_texto }}</small>
+                    <small data-last-interaction>Última interação: {{ p.ultima_interacao_texto }}</small>
+                </div>
+                <div class="card-values compact-card-values">
+                    <span><small>Valor</small><strong>{{ br_moeda(p.troco) }}</strong></span>
+                    <span><small>Comissão</small><strong>{{ br_moeda(p.comissao) }}</strong></span>
+                </div>
+                <div class="operation-card-actions today-card-actions">
+                    <a class="mini-btn" href="{{ url_for('detalhe_proposta', proposta_id=p.id, origem=url_origem_atual()) }}"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span>Abrir</span></a>
+                    <form method="post" action="{{ url_for('marcar_contatado_hoje', proposta_id=p.id) }}" class="today-contact-form">
+                        <input type="hidden" name="next" value="{{ url_origem_atual() }}">
+                        <button class="mini-btn" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Contatado hoje</span></button>
+                    </form>
+                    <a class="mini-btn" href="{{ url_for('nova_tarefa', proposta_id=p.id, origem=url_origem_atual()) }}"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Tarefa</span></a>
+                </div>
+            </article>
+            {% else %}
+                <p class="empty small" data-empty-message>{{ secao.vazia }}</p>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+</section>
+
+<section class="manual-tasks-panel">
+    <details>
+        <summary>
+            <span>Tarefas Manuais</span>
+            <small>{{ agenda_contadores.atrasadas + agenda_contadores.hoje + agenda_contadores.proximas }} pendente(s)</small>
+        </summary>
+
+        <section class="card filters-card manual-task-filters">
+            <form method="get" class="filters agenda-filters">
+                <input type="hidden" name="tipo_tarefa" value="{{ filtros.tipo_tarefa }}">
+                <input type="hidden" name="etapa" value="{{ filtros.etapa }}">
+                <input type="hidden" name="banco" value="{{ filtros.banco }}">
+                <input type="hidden" name="verificacao" value="{{ filtros.verificacao }}">
+                <label>Data
+                    <input type="date" name="agenda_data" value="{{ agenda_filtros.data }}">
+                </label>
+                <label>Status
+                    <select name="agenda_status">
+                        <option value="">Todos</option>
+                        {% for status in TAREFA_STATUS %}
+                            <option value="{{ status }}" {% if agenda_filtros.status == status %}selected{% endif %}>{{ status|capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Prioridade
+                    <select name="agenda_prioridade">
+                        <option value="">Todas</option>
+                        {% for prioridade in TAREFA_PRIORIDADES %}
+                            <option value="{{ prioridade }}" {% if agenda_filtros.prioridade == prioridade %}selected{% endif %}>{{ prioridade|capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Categoria
+                    <select name="agenda_categoria">
+                        <option value="">Todas</option>
+                        {% for categoria in TAREFA_CATEGORIAS %}
+                            <option value="{{ categoria }}" {% if agenda_filtros.categoria == categoria %}selected{% endif %}>{{ categoria }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Vínculo
+                    <select name="agenda_vinculo">
+                        <option value="">Com e sem proposta</option>
+                        <option value="com_proposta" {% if agenda_filtros.vinculo == 'com_proposta' %}selected{% endif %}>Com proposta</option>
+                        <option value="sem_proposta" {% if agenda_filtros.vinculo == 'sem_proposta' %}selected{% endif %}>Sem proposta</option>
+                    </select>
+                </label>
+                <button class="btn btn-primary" type="submit"><i class="bi bi-filter" aria-hidden="true"></i><span>Filtrar tarefas</span></button>
+                <a class="btn" href="{{ url_for('hoje') }}"><i class="bi bi-x-circle" aria-hidden="true"></i><span>Limpar</span></a>
+            </form>
+        </section>
+
+        <section class="agenda-board compact-agenda-board">
+            {% for secao in agenda_secoes %}
+            <section class="agenda-section" data-agenda-section="{{ secao.key }}">
+                <div class="section-title-row compact-row">
+                    <div>
+                        <h2>{{ secao.titulo }}</h2>
+                        <small><span data-agenda-section-count>{{ secao.tarefas|length }}</span> tarefa(s)</small>
+                    </div>
+                </div>
+                <div class="agenda-list">
+                    {% for tarefa in secao.tarefas %}
+                    <article class="agenda-item priority-{{ tarefa.prioridade }}" data-tarefa-id="{{ tarefa.id }}" data-status="{{ tarefa.status }}">
+                        <div class="agenda-time">
+                            <strong>{{ tarefa.horario or '--:--' }}</strong>
+                            <small>{{ br_data(tarefa.data_tarefa) }}</small>
+                        </div>
+                        <div class="agenda-main">
+                            <div class="agenda-title-line">
+                                <span class="agenda-category">{{ tarefa.categoria[:1] }}</span>
+                                <strong>{{ tarefa.titulo }}</strong>
+                                <small>{{ tarefa.prioridade|capitalize }} · {{ tarefa.status|capitalize }}</small>
+                            </div>
+                            {% if tarefa.descricao %}
+                                <p>{{ tarefa.descricao }}</p>
+                            {% endif %}
+                            {% if tarefa.proposta_id %}
+                                <a class="agenda-linked-proposal" href="{{ url_for('detalhe_proposta', proposta_id=tarefa.proposta_id, origem=url_origem_atual()) }}">
+                                    {{ tarefa.proposta_nome or 'Proposta vinculada' }}{% if tarefa.proposta_numero %} · Nº {{ tarefa.proposta_numero }}{% endif %}
+                                </a>
+                            {% endif %}
+                        </div>
+                        <div class="agenda-actions">
+                            {% if tarefa.status != 'concluida' and tarefa.status != 'cancelada' %}
+                            <form method="post" action="{{ url_for('concluir_tarefa', tarefa_id=tarefa.id) }}" class="agenda-action-form">
+                                <input type="hidden" name="next" value="{{ url_origem_atual() }}">
+                                <button class="mini-btn" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Concluir</span></button>
+                            </form>
+                            <form method="post" action="{{ url_for('adiar_tarefa', tarefa_id=tarefa.id) }}" class="agenda-delay-form">
+                                <input type="hidden" name="next" value="{{ url_origem_atual() }}">
+                                <input type="date" name="nova_data" value="{{ hoje_iso() }}" aria-label="Nova data">
+                                <button class="mini-btn" type="submit"><i class="bi bi-calendar-plus" aria-hidden="true"></i><span>Adiar</span></button>
+                            </form>
+                            <form method="post" action="{{ url_for('cancelar_tarefa', tarefa_id=tarefa.id) }}" class="agenda-action-form">
+                                <input type="hidden" name="next" value="{{ url_origem_atual() }}">
+                                <button class="mini-btn danger" type="submit"><i class="bi bi-x-circle" aria-hidden="true"></i><span>Cancelar</span></button>
+                            </form>
+                            {% endif %}
+                            <a class="mini-btn" href="{{ url_for('editar_tarefa', tarefa_id=tarefa.id, origem=url_origem_atual()) }}"><i class="bi bi-pencil" aria-hidden="true"></i><span>Editar</span></a>
+                            <form method="post" action="{{ url_for('excluir_tarefa', tarefa_id=tarefa.id) }}" class="agenda-delete-form">
+                                <input type="hidden" name="next" value="{{ url_origem_atual() }}">
+                                <button class="mini-btn danger" type="submit"><i class="bi bi-trash" aria-hidden="true"></i><span>Excluir</span></button>
+                            </form>
+                        </div>
+                    </article>
+                    {% else %}
+                        <p class="empty small" data-empty-message>{{ secao.vazia }}</p>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endfor %}
+        </section>
+    </details>
+</section>
+{% endblock %}
