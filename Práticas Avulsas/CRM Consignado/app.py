@@ -77,6 +77,7 @@ STATUS_COMISSAO_PREVISTA = (
     "Averbado",
     "Aguardando Reapresentação",
 )
+INSS_PRAZO_PADRAO = "108_carencia"
 
 TIPOS_CLIENTE = ["INSS", "SIAPE"]
 PRODUTOS = ["Portabilidade", "Refinanciamento", "Novo", "Cartão", "Saque Complementar", "Outro"]
@@ -1865,11 +1866,44 @@ def marcar_notificacoes_lidas():
 
 
 
+def prazos_simulador_inss(prazos_json: str | None = None) -> dict[str, dict[str, Any]]:
+    prazos = {codigo: dict(info) for codigo, info in INSS_NOVO_COEFICIENTES.items()}
+    if not prazos_json:
+        return prazos
+    try:
+        enviados = json.loads(prazos_json)
+    except json.JSONDecodeError:
+        return prazos
+    if not isinstance(enviados, dict):
+        return prazos
+
+    for codigo, info in enviados.items():
+        codigo_limpo = re.sub(r"[^a-zA-Z0-9_-]", "", str(codigo or ""))[:40]
+        if not codigo_limpo or not isinstance(info, dict):
+            continue
+        label = limpar_texto(info.get("label"))[:80]
+        if not label:
+            continue
+        try:
+            coeficiente = float(info.get("coeficiente") or 0)
+        except (TypeError, ValueError):
+            continue
+        if coeficiente <= 0 or coeficiente > 1:
+            continue
+        idade = limpar_texto(info.get("idade"))[:80]
+        prazos[codigo_limpo] = {
+            "label": label,
+            "coeficiente": coeficiente,
+            "idade": idade,
+        }
+    return prazos
+
+
 def dados_simulador_inss() -> dict[str, Any]:
     tipo_operacao = limpar_texto(request.form.get("tipo_operacao")) or "novo_valor"
     if tipo_operacao not in {"novo_valor", "novo_margem"}:
         tipo_operacao = "novo_valor"
-    prazo = limpar_texto(request.form.get("prazo")) or "84"
+    prazo = limpar_texto(request.form.get("prazo")) or INSS_PRAZO_PADRAO
     faixa_cartao = limpar_texto(request.form.get("faixa_cartao")) or "ate_74"
     valor_base = parse_moeda(request.form.get("valor_base"))
     margem = parse_moeda(request.form.get("margem"))
@@ -1883,6 +1917,7 @@ def dados_simulador_inss() -> dict[str, Any]:
         "tipo_operacao": tipo_operacao,
         "prazo": prazo,
         "faixa_cartao": faixa_cartao,
+        "prazos_json": request.form.get("prazos_json") or "",
         "valor_base": valor_base,
         "margem": margem,
         "observacoes": limpar_texto(request.form.get("observacoes")),
@@ -1891,9 +1926,10 @@ def dados_simulador_inss() -> dict[str, Any]:
 
 def calcular_simulador_inss(dados: dict[str, Any]) -> dict[str, Any]:
     tipo = dados.get("tipo_operacao") or "novo_valor"
-    prazo = dados.get("prazo") or "84"
+    prazo = dados.get("prazo") or INSS_PRAZO_PADRAO
     faixa_cartao = dados.get("faixa_cartao") or "ate_74"
-    coef_info = INSS_NOVO_COEFICIENTES.get(prazo) or INSS_NOVO_COEFICIENTES["84"]
+    prazos = prazos_simulador_inss(dados.get("prazos_json"))
+    coef_info = prazos.get(prazo) or prazos[INSS_PRAZO_PADRAO]
     coeficiente = float(coef_info["coeficiente"])
     valor = float(dados.get("valor_base") or 0)
     parcela = 0.0
@@ -1967,18 +2003,19 @@ def converter_contatos():
 def simulador_inss():
     dados = {
         "nome": "", "cpf": "", "telefone": "", "nb_matricula": "", "banco_digitado": "", "promotora": "",
-        "tipo_operacao": "novo_valor", "prazo": "84", "faixa_cartao": "ate_74", "valor_base": 0,
-        "margem": 0, "observacoes": "",
+        "tipo_operacao": "novo_valor", "prazo": INSS_PRAZO_PADRAO, "faixa_cartao": "ate_74", "valor_base": 0,
+        "margem": 0, "observacoes": "", "prazos_json": "",
     }
     resultado = None
     if request.method == "POST":
         dados = dados_simulador_inss()
         resultado = calcular_simulador_inss(dados)
+    prazos = prazos_simulador_inss(dados.get("prazos_json"))
     return render_template(
         "simulador_inss.html",
         dados=dados,
         resultado=resultado,
-        prazos=INSS_NOVO_COEFICIENTES
+        prazos=prazos
     )
 
 

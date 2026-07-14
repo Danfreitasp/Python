@@ -12,15 +12,19 @@
 
     <form method="post" class="stack simulator-form" id="simuladorInssForm">
         <input type="hidden" name="tipo_operacao" id="simTipoOperacao" value="{{ dados.tipo_operacao or 'novo_valor' }}">
+        <input type="hidden" name="prazos_json" id="simPrazosJson" value="{{ dados.prazos_json|e }}">
 
         <div class="form-grid form-grid-three">
-            <label>Prazo
-                <select name="prazo" id="simPrazo">
-                    {% for codigo, item in prazos.items() %}
-                        <option value="{{ codigo }}" data-coef="{{ item.coeficiente }}" data-label="{{ item.label }}" {% if dados.prazo == codigo %}selected{% endif %}>{{ item.label }}</option>
-                    {% endfor %}
-                </select>
-            </label>
+            <div class="simulator-prazo-field">
+                <label>Prazo
+                    <select name="prazo" id="simPrazo">
+                        {% for codigo, item in prazos.items() %}
+                            <option value="{{ codigo }}" data-coef="{{ item.coeficiente }}" data-label="{{ item.label }}" {% if dados.prazo == codigo %}selected{% endif %}>{{ item.label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <button class="btn" type="button" id="simAdicionarPrazo"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Adicionar prazo</span></button>
+            </div>
             <label>Valor desejado
                 <input name="valor_base" id="simValorBase" class="money-mask" value="{{ br_moeda(dados.valor_base) }}" placeholder="Ex.: 5000">
                 <small>Digite aqui para calcular a parcela.</small>
@@ -41,8 +45,24 @@
                 <strong id="simParcelaEstimativa">{{ br_moeda(resultado.parcela_estimativa if resultado else 0) }}</strong>
             </div>
             <div class="summary-card">
-                <small>Coeficiente</small>
+                <div class="simulator-coef-header">
+                    <small>Coeficiente</small>
+                    <button class="mini-btn" type="button" id="simEditarCoeficiente"><i class="bi bi-pencil-square" aria-hidden="true"></i><span>Editar</span></button>
+                </div>
                 <strong id="simCoeficiente">{{ '%.6f'|format(resultado.coeficiente) if resultado else '-' }}</strong>
+            </div>
+        </section>
+
+        <section class="simulator-rate-editor hidden" id="simPrazoEditor">
+            <label>Nome do prazo
+                <input type="text" id="simPrazoLabel" placeholder="Ex.: 120x com carência 90d">
+            </label>
+            <label>Coeficiente
+                <input type="text" id="simPrazoCoeficiente" inputmode="decimal" placeholder="Ex.: 0.024088">
+            </label>
+            <div class="actions">
+                <button class="btn btn-primary" type="button" id="simSalvarPrazo"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar prazo</span></button>
+                <button class="btn" type="button" id="simCancelarPrazo"><i class="bi bi-x-circle" aria-hidden="true"></i><span>Cancelar</span></button>
             </div>
         </section>
 

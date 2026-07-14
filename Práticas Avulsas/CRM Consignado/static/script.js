@@ -1146,8 +1146,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const valorOut = document.getElementById('simValorEstimado');
     const parcelaOut = document.getElementById('simParcelaEstimativa');
     const coefOut = document.getElementById('simCoeficiente');
+    const prazosJson = document.getElementById('simPrazosJson');
+    const adicionarPrazo = document.getElementById('simAdicionarPrazo');
+    const editarCoeficiente = document.getElementById('simEditarCoeficiente');
+    const prazoEditor = document.getElementById('simPrazoEditor');
+    const prazoLabelInput = document.getElementById('simPrazoLabel');
+    const prazoCoefInput = document.getElementById('simPrazoCoeficiente');
+    const salvarPrazo = document.getElementById('simSalvarPrazo');
+    const cancelarPrazo = document.getElementById('simCancelarPrazo');
     const resumoTexto = document.getElementById('simResumoTexto');
     const copiarResumo = form.querySelector('[data-copy]');
+    const storageKey = 'crmSimuladorInssPrazos';
+    let prazoEmEdicao = null;
 
     function parseBR(value) {
         const text = String(value || '').replace('%', '').trim();
@@ -1160,6 +1170,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function brl(value) {
         return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function parseCoeficiente(value) {
+        return Number(String(value || '').trim().replace(',', '.')) || 0;
+    }
+
+    function sincronizarPrazos() {
+        if (prazosJson) prazosJson.value = JSON.stringify(dados.novo || {});
+        try { localStorage.setItem(storageKey, JSON.stringify(dados.novo || {})); } catch (e) {}
+    }
+
+    function aplicarPrazosSalvos() {
+        try {
+            const salvos = JSON.parse(localStorage.getItem(storageKey) || '{}');
+            if (salvos && typeof salvos === 'object') {
+                dados.novo = { ...(dados.novo || {}), ...salvos };
+            }
+        } catch (e) {}
+    }
+
+    function atualizarOpcoesPrazo(valorSelecionado = null) {
+        if (!prazo) return;
+        const atual = valorSelecionado || prazo.value;
+        Object.entries(dados.novo || {}).forEach(([codigo, item]) => {
+            let option = prazo.querySelector(`option[value="${CSS.escape(codigo)}"]`);
+            if (!option) {
+                option = document.createElement('option');
+                option.value = codigo;
+                prazo.appendChild(option);
+            }
+            option.textContent = item.label || codigo;
+            option.dataset.label = item.label || codigo;
+            option.dataset.coef = item.coeficiente || '';
+        });
+        if (atual && prazo.querySelector(`option[value="${CSS.escape(atual)}"]`)) {
+            prazo.value = atual;
+        }
+        sincronizarPrazos();
     }
 
     function prazoLabel() {
@@ -1186,7 +1234,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (campoOrigem === valorBase) tipo.value = 'novo_valor';
         if (campoOrigem === margem) tipo.value = 'novo_margem';
 
-        const item = dados.novo[prazo.value] || dados.novo['84'] || {};
+        const item = dados.novo[prazo.value] || dados.novo['108_carencia'] || {};
         const coef = Number(item.coeficiente || 0);
         let valor = 0;
         let parcela = 0;
@@ -1214,6 +1262,37 @@ document.addEventListener('DOMContentLoaded', () => {
         atualizarResumo(montarMensagem(valor, parcela, descricao));
     }
 
+    function abrirEditor(modo) {
+        if (!prazoEditor || !prazoLabelInput || !prazoCoefInput) return;
+        prazoEmEdicao = modo === 'novo' ? null : (prazo ? prazo.value : null);
+        const item = prazoEmEdicao ? (dados.novo[prazoEmEdicao] || {}) : {};
+        prazoLabelInput.value = item.label || '';
+        prazoCoefInput.value = item.coeficiente ? Number(item.coeficiente).toFixed(6) : '';
+        prazoEditor.classList.remove('hidden');
+        prazoLabelInput.focus();
+    }
+
+    function fecharEditor() {
+        if (prazoEditor) prazoEditor.classList.add('hidden');
+        prazoEmEdicao = null;
+    }
+
+    function salvarEdicaoPrazo() {
+        if (!prazoLabelInput || !prazoCoefInput || !prazo) return;
+        const label = prazoLabelInput.value.trim();
+        const coeficiente = parseCoeficiente(prazoCoefInput.value);
+        if (!label || !coeficiente) {
+            window.alert('Informe o nome do prazo e um coeficiente válido.');
+            return;
+        }
+        const codigo = prazoEmEdicao || `custom_${Date.now()}`;
+        dados.novo[codigo] = { label, coeficiente, idade: '' };
+        atualizarOpcoesPrazo(codigo);
+        prazo.value = codigo;
+        fecharEditor();
+        calcular(tipo && tipo.value === 'novo_margem' ? margem : valorBase);
+    }
+
     if (valorBase) {
         valorBase.addEventListener('input', () => calcular(valorBase));
         valorBase.addEventListener('blur', () => calcular(valorBase));
@@ -1225,6 +1304,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (prazo) {
         prazo.addEventListener('change', () => calcular(tipo.value === 'novo_margem' ? margem : valorBase));
     }
+    if (adicionarPrazo) adicionarPrazo.addEventListener('click', () => abrirEditor('novo'));
+    if (editarCoeficiente) editarCoeficiente.addEventListener('click', () => abrirEditor('editar'));
+    if (salvarPrazo) salvarPrazo.addEventListener('click', salvarEdicaoPrazo);
+    if (cancelarPrazo) cancelarPrazo.addEventListener('click', fecharEditor);
+    form.addEventListener('submit', sincronizarPrazos);
+
+    aplicarPrazosSalvos();
+    atualizarOpcoesPrazo(prazo ? prazo.value : null);
     calcular(tipo && tipo.value === 'novo_margem' ? margem : valorBase);
 });
 

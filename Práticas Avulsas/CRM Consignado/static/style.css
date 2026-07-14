@@ -2777,6 +2777,12 @@ html[data-theme="escuro"] .drag-handle {
 
 /* v37 - Simulador INSS */
 .simulator-card h2 { margin: 0 0 4px; }
+.simulator-prazo-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: end;
+}
 .simulator-results {
     display: grid;
     grid-template-columns: repeat(4, minmax(160px, 1fr));
@@ -2790,11 +2796,32 @@ html[data-theme="escuro"] .drag-handle {
 .simulator-results .summary-card strong {
     font-size: 22px;
 }
+.simulator-coef-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.simulator-rate-editor {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(160px, 240px) auto;
+    gap: 12px;
+    align-items: end;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: #f8fafc;
+}
 html[data-theme="escuro"] .simulator-results .summary-card {
+    background: #111827;
+}
+html[data-theme="escuro"] .simulator-rate-editor {
     background: #111827;
 }
 @media (max-width: 900px) {
     .simulator-results { grid-template-columns: 1fr 1fr; }
+    .simulator-prazo-field,
+    .simulator-rate-editor { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
     .simulator-results { grid-template-columns: 1fr; }
