@@ -2452,9 +2452,9 @@ html[data-theme="escuro"] .today-section {
 .week-timed-event.priority-baixa > a { color: #475569; background: #f1f5f9; border-left-color: #94a3b8; }
 .week-timed-event.is-done { opacity: .55; }
 .week-timed-event.is-done > a { text-decoration: line-through; }
-.week-timed-event .week-event-actions { display: none; position: absolute; z-index: 4; right: 0; top: 18px; flex-direction: row; align-items: center; padding: 2px; border-radius: 5px; background: var(--panel); box-shadow: var(--shadow); }
-.week-timed-event:hover .week-event-actions, .week-timed-event:focus-within .week-event-actions { display: flex; }
-.week-timed-event .week-event-actions button { padding: 3px 4px; }
+.week-timed-event .week-event-actions { position: static; display: flex; flex: 0 0 auto; flex-direction: row; align-items: center; gap: 0; padding: 0; border-radius: 0 4px 4px 0; background: #eef2f7; overflow: hidden; }
+.week-timed-event .week-event-actions form { display: flex; margin: 0; }
+.week-timed-event .week-event-actions button { width: 16px; height: 16px; padding: 0; border-radius: 0; font-size: 10px; }
 .week-now-line { position: absolute; z-index: 4; left: 0; right: 0; top: var(--now-top, -20px); height: 2px; background: #ef4444; pointer-events: none; }
 .week-now-line::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 999px; background: #ef4444; }
 .legend-task, .legend-return { border-radius: 5px; padding: 4px 8px; }
