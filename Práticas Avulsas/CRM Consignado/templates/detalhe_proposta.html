@@ -35,7 +35,7 @@
                     </form>
                 </div>
                 {% if pode_criar_refin_vinculado(proposta) %}
-                    <form method="post" action="{{ url_for('criar_refin_vinculado', proposta_id=proposta.id) }}" onsubmit="return confirm('Criar refinanciamento vinculado com nº {{ incrementar_numero_proposta(proposta.numero_proposta) }}?');">
+                    <form method="post" action="{{ url_for('criar_refin_vinculado', proposta_id=proposta.id) }}" target="_blank" onsubmit="return confirm('Criar refinanciamento vinculado com nº {{ incrementar_numero_proposta(proposta.numero_proposta) }}?');">
                         <button class="btn btn-primary" type="submit"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Criar refin vinculado</span></button>
                     </form>
                 {% endif %}
@@ -176,24 +176,22 @@
                 <summary>Ver dados completos da proposta</summary>
                 <div class="info-grid compact-info-grid">
                     <div><small>NB/Matrícula</small><span>{{ proposta.nb_matricula or '-' }}</span></div>
-                    <div><small>Nº port vinculada</small><span>{{ proposta.numero_port_vinculada or '-' }}</span></div>
-                    <div><small>Nº refin vinculado</small><span>{{ proposta.numero_refin_vinculada or '-' }}</span></div>
+                    {% if proposta_eh_refin_vinculado(proposta) %}<div><small>Nº port vinculada</small><span>{{ proposta.numero_port_vinculada or '-' }}</span></div>{% endif %}
+                    {% if produto_tem_campos_vinculo(proposta.produto) %}<div><small>Nº refin vinculado</small><span>{{ proposta.numero_refin_vinculada or '-' }}</span></div>{% endif %}
                     <div><small>Tipo</small><span>{{ proposta.tipo_cliente or '-' }}</span></div>
-                    <div><small>Banco atual</small><span>{{ proposta.banco_atual or '-' }}</span></div>
+                    {% if produto_tem_campos_portabilidade(proposta.produto) %}<div><small>Banco atual</small><span>{{ proposta.banco_atual or '-' }}</span></div>{% endif %}
                     <div><small>Promotora</small><span>{{ proposta.promotora or '-' }}</span></div>
                     <div><small>Benefício bloqueado</small><span>{{ proposta.beneficio_bloqueado or 'NÃO' }}</span></div>
                     <div><small>Telefone</small><span>{{ proposta.telefone or '-' }}</span></div>
                     <div class="wide-info"><small>Endereço</small><span>{{ proposta.endereco or '-' }}</span></div>
                     <div class="wide-info"><small>Dados bancários</small><span>{{ proposta.dados_bancarios or '-' }}</span></div>
                     <div><small>Parcela atual</small><span>{{ br_moeda(proposta.parcela_atual) }}</span></div>
-                    <div><small>Nova parcela</small><span>{{ br_moeda(proposta.nova_parcela) }}</span></div>
+                    {% if produto_tem_campos_portabilidade(proposta.produto) %}<div><small>Nova parcela</small><span>{{ br_moeda(proposta.nova_parcela) }}</span></div>{% endif %}
                     <div><small>Valor</small><span>{{ br_moeda(proposta.troco) }}</span></div>
                     <div><small>% comissão</small><span>{{ br_percentual(proposta.comissao_percentual) }}</span></div>
                     <div><small>Valor caiu na promotora</small><span>{{ proposta.valor_caiu_promotora or 'NÃO' }}</span></div>
                     <div><small>Valor já foi sacado</small><span>{{ proposta.valor_sacado or 'NÃO' }}</span></div>
-                    <div><small>Margem após</small><span>{{ proposta.margem_apos or '-' }}</span></div>
-                    <div><small>Próxima ação</small><span>{{ proposta.proxima_acao or '-' }}</span></div>
-                    <div><small>Responsável</small><span>{{ proposta.responsavel or '-' }}</span></div>
+                    {% if produto_tem_campos_portabilidade(proposta.produto) %}<div><small>Margem após</small><span>{{ proposta.margem_apos or '-' }}</span></div>{% endif %}
                     <div><small>Criação</small><span>{{ br_data_hora(proposta.data_criacao) }}</span></div>
                     <div><small>Atualização</small><span>{{ br_data_hora(proposta.data_atualizacao) }}</span></div>
                 </div>

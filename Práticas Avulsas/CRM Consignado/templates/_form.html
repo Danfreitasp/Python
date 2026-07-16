@@ -1,4 +1,4 @@
-<div class="form-grid">
+<div class="form-grid" id="propostaFormGrid" data-refin-vinculado="{{ 'true' if proposta_eh_refin_vinculado(proposta) else 'false' }}">
     <label>Nome do cliente
         <input name="nome" value="{{ proposta.nome or proposta['nome'] or '' }}" required>
     </label>
@@ -15,12 +15,6 @@
     <label>Nº proposta
         <input name="numero_proposta" value="{{ proposta.numero_proposta or proposta['numero_proposta'] or '' }}" placeholder="Número desta proposta">
     </label>
-    <label>Nº proposta da port vinculada
-        <input name="numero_port_vinculada" value="{{ proposta.numero_port_vinculada or proposta['numero_port_vinculada'] or '' }}" placeholder="Use no refin, se houver">
-    </label>
-    <label>Nº proposta do refin vinculado
-        <input name="numero_refin_vinculada" value="{{ proposta.numero_refin_vinculada or proposta['numero_refin_vinculada'] or '' }}" placeholder="Use na port, se houver">
-    </label>
     <label>Tipo de cliente
         <select name="tipo_cliente">
             <option value="">Selecione</option>
@@ -29,19 +23,25 @@
             {% endfor %}
         </select>
     </label>
-    <label>Banco atual
+    <label data-portability-field {% if not produto_tem_campos_portabilidade(proposta.produto or proposta['produto'] or '') %}hidden{% endif %}>Banco atual
         <input name="banco_atual" value="{{ proposta.banco_atual or proposta['banco_atual'] or '' }}">
     </label>
     <label>Banco digitado
         <input name="banco_digitado" value="{{ proposta.banco_digitado or proposta['banco_digitado'] or '' }}" placeholder="Banco onde a proposta foi digitada">
     </label>
     <label>Produto
-        <select name="produto">
+        <select name="produto" id="propostaProduto">
             <option value="">Selecione</option>
             {% for produto in PRODUTOS %}
                 <option value="{{ produto }}" {% if (proposta.produto or proposta['produto'] or '') == produto %}selected{% endif %}>{{ produto }}</option>
             {% endfor %}
         </select>
+    </label>
+    <label class="linked-proposal-field" data-refin-vinculado-field {% if not proposta_eh_refin_vinculado(proposta) %}hidden{% endif %}>Nº port vinculada
+        <input name="numero_port_vinculada" value="{{ proposta.numero_port_vinculada or proposta['numero_port_vinculada'] or '' }}" placeholder="Portabilidade vinculada" readonly>
+    </label>
+    <label class="linked-proposal-field" data-linked-refin-field {% if not produto_tem_campos_vinculo(proposta.produto or proposta['produto'] or '') %}hidden{% endif %}>Nº refin vinculado
+        <input name="numero_refin_vinculada" value="{{ proposta.numero_refin_vinculada or proposta['numero_refin_vinculada'] or '' }}" placeholder="Refinanciamento vinculado">
     </label>
     <label>Promotora
         <input name="promotora" value="{{ proposta.promotora or proposta['promotora'] or '' }}" placeholder="Ex.: Única, Vieira">
@@ -77,7 +77,7 @@
     <label>Parcela atual
         <input name="parcela_atual" class="money-mask" value="{{ br_moeda(proposta.parcela_atual or proposta['parcela_atual'] or 0) }}">
     </label>
-    <label>Nova parcela
+    <label data-portability-field {% if not produto_tem_campos_portabilidade(proposta.produto or proposta['produto'] or '') %}hidden{% endif %}>Nova parcela
         <input name="nova_parcela" class="money-mask" value="{{ br_moeda(proposta.nova_parcela or proposta['nova_parcela'] or 0) }}">
     </label>
     <label>Valor
@@ -89,17 +89,11 @@
     <label>Comissão
         <input name="comissao" class="money-mask" value="{{ br_moeda(proposta.comissao or proposta['comissao'] or 0) }}">
     </label>
-    <label>Margem após operação
+    <label data-portability-field {% if not produto_tem_campos_portabilidade(proposta.produto or proposta['produto'] or '') %}hidden{% endif %}>Margem após operação
         <input name="margem_apos" value="{{ proposta.margem_apos or proposta['margem_apos'] or '' }}">
-    </label>
-    <label>Responsável
-        <input name="responsavel" value="{{ proposta.responsavel or proposta['responsavel'] or '' }}">
     </label>
     <label>Telefone/WhatsApp
         <input name="telefone" value="{{ proposta.telefone or proposta['telefone'] or '' }}">
-    </label>
-    <label>Próxima ação
-        <input name="proxima_acao" value="{{ proposta.proxima_acao or proposta['proxima_acao'] or '' }}">
     </label>
     <label>Previsão de saldo
         <input type="date" name="data_retorno" value="{{ proposta.data_retorno or proposta['data_retorno'] or '' }}">

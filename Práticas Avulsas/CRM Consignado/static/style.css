@@ -412,6 +412,16 @@ tbody tr:hover {
     gap: 6px;
     margin-bottom: 8px;
 }
+.proposal-form-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+.proposal-form-column { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); min-width: 0; }
+.proposal-form-column h3 { margin: 0; font-size: 14px; }
+.proposal-form-column-fields { display: grid; gap: 12px; }
+html[data-theme="escuro"] .proposal-form-column { background: #111827; border-color: #263445; }
+@media (max-width: 1100px) { .proposal-form-columns { grid-template-columns: 1fr; } }
+.linked-proposal-field { background: #f8fafc; border: 1px solid var(--line); border-radius: var(--radius-md); padding: 9px; }
+.linked-proposal-field input { background: var(--panel); }
+[data-portability-field][hidden], [data-linked-refin-field][hidden], [data-refin-vinculado-field][hidden] { display: none; }
+html[data-theme="escuro"] .linked-proposal-field { background: #111827; border-color: #263445; }
 .metric-label-row small { margin-bottom: 0; }
 .saldo-conta-card { border-color: #93c5fd; background: #f8fbff; }
 .metric-edit-menu { margin-left: auto; position: relative; }

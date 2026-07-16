@@ -81,7 +81,7 @@ STATUS_COMISSAO_PREVISTA = (
 INSS_PRAZO_PADRAO = "108_carencia"
 
 TIPOS_CLIENTE = ["INSS", "SIAPE"]
-PRODUTOS = ["Portabilidade", "Refinanciamento", "Novo", "Cartão", "Saque Complementar", "Outro"]
+PRODUTOS = ["Portabilidade", "Portabilidade com Refinanciamento", "Refinanciamento", "Novo", "Cartão", "Saque Complementar", "Outro"]
 TAREFAS_HOJE_PRIORIDADE = ("paradas", "cip", "averbacao", "pagamento", "reapresentacao", "bloqueado", "acompanhamento")
 TAREFAS_HOJE_INFO = {
     "paradas": {"titulo": "Sem interação recente", "vazia": "Nenhuma proposta sem interação recente."},
@@ -766,7 +766,7 @@ def url_interna_segura(valor: Any, fallback: str | None = None) -> str:
             and not partes.netloc
         ):
             return destino
-    return fallback or "/propostas"
+    return fallback or "/funil"
 
 
 def url_interna_com_parametros(valor: Any, fallback: str | None = None, **parametros: Any) -> str:
@@ -780,11 +780,11 @@ def url_interna_com_parametros(valor: Any, fallback: str | None = None, **parame
 
 
 def url_origem_atual() -> str:
-    return url_interna_segura(request.full_path.rstrip("?"), "/propostas")
+    return url_interna_segura(request.full_path.rstrip("?"), "/funil")
 
 
 def url_retorno_padrao() -> str:
-    return url_interna_segura(request.values.get("origem") or request.values.get("next"), "/propostas")
+    return url_interna_segura(request.values.get("origem") or request.values.get("next"), "/funil")
 
 
 def origem_eh_hoje() -> bool:
@@ -1095,8 +1095,8 @@ def data_encerramento_para_status(status_anterior: str | None, status_novo: str 
 
 
 def produto_portabilidade(produto: Any) -> bool:
-    texto = remover_acentos(limpar_texto(produto)).upper()
-    return "PORT" in texto or "REFIN" in texto
+    texto = remover_acentos(limpar_texto(produto)).casefold()
+    return texto in {"portabilidade", "portabilidade com refinanciamento"}
 
 
 def banco_digitado_exibicao(proposta: Any) -> str:
@@ -1195,6 +1195,10 @@ def normalizar_produto_importacao(valor: Any) -> str:
     aliases = {
         "PORT": "Portabilidade",
         "PORTABILIDADE": "Portabilidade",
+        "PORT COM REFIN": "Portabilidade com Refinanciamento",
+        "PORT + REFIN": "Portabilidade com Refinanciamento",
+        "PORTABILIDADE COM REFIN": "Portabilidade com Refinanciamento",
+        "PORTABILIDADE COM REFINANCIAMENTO": "Portabilidade com Refinanciamento",
         "REFIN": "Refinanciamento",
         "REFIN DA PORT": "Refinanciamento",
         "REFINANCIAMENTO": "Refinanciamento",
@@ -1459,42 +1463,40 @@ def status_entrada_proposta() -> str:
     db.commit()
     return status
 
-def dados_formulario() -> dict[str, Any]:
+def dados_formulario(proposta_atual: sqlite3.Row | dict[str, Any] | None = None) -> dict[str, Any]:
     status = limpar_texto(request.form.get("status")) or "Novo lead"
     if not status_valido(status):
         status = status_padrao()
-
-    return {
-        "nome": limpar_texto(request.form.get("nome")),
-        "cpf": formatar_cpf(limpar_texto(request.form.get("cpf"))),
-        "nb_matricula": limpar_texto(request.form.get("nb_matricula")),
-        "numero_proposta": limpar_texto(request.form.get("numero_proposta")),
-        "numero_port_vinculada": limpar_texto(request.form.get("numero_port_vinculada")),
-        "numero_refin_vinculada": limpar_texto(request.form.get("numero_refin_vinculada")),
-        "tipo_cliente": limpar_texto(request.form.get("tipo_cliente")),
-        "banco_atual": limpar_texto(request.form.get("banco_atual")),
-        "banco_destino": limpar_texto(request.form.get("banco_destino")),
-        "banco_digitado": limpar_texto(request.form.get("banco_digitado")),
-        "produto": limpar_texto(request.form.get("produto")),
-        "promotora": limpar_texto(request.form.get("promotora")),
-        "beneficio_bloqueado": normalizar_bloqueado(request.form.get("beneficio_bloqueado")),
-        "valor_caiu_promotora": normalizar_sim_nao(request.form.get("valor_caiu_promotora")),
-        "valor_sacado": normalizar_sim_nao(request.form.get("valor_sacado")),
-        "parcela_atual": parse_moeda(request.form.get("parcela_atual")),
-        "nova_parcela": parse_moeda(request.form.get("nova_parcela")),
-        "troco": parse_moeda(request.form.get("troco")),
-        "comissao_percentual": parse_percentual(request.form.get("comissao_percentual")),
-        "comissao": parse_moeda(request.form.get("comissao")),
-        "margem_apos": limpar_texto(request.form.get("margem_apos")),
-        "status": status,
-        "responsavel": limpar_texto(request.form.get("responsavel")),
-        "telefone": limpar_texto(request.form.get("telefone")),
-        "endereco": limpar_texto(request.form.get("endereco")),
-        "dados_bancarios": limpar_texto(request.form.get("dados_bancarios")),
-        "proxima_acao": limpar_texto(request.form.get("proxima_acao")),
-        "data_retorno": limpar_texto(request.form.get("data_retorno")),
-        "observacoes": limpar_texto(request.form.get("observacoes")),
+    dados = {
+        "nome": limpar_texto(request.form.get("nome")), "cpf": formatar_cpf(limpar_texto(request.form.get("cpf"))),
+        "nb_matricula": limpar_texto(request.form.get("nb_matricula")), "numero_proposta": limpar_texto(request.form.get("numero_proposta")),
+        "numero_port_vinculada": limpar_texto(request.form.get("numero_port_vinculada")), "numero_refin_vinculada": limpar_texto(request.form.get("numero_refin_vinculada")),
+        "tipo_cliente": limpar_texto(request.form.get("tipo_cliente")), "banco_atual": limpar_texto(request.form.get("banco_atual")),
+        "banco_destino": limpar_texto(request.form.get("banco_destino")), "banco_digitado": limpar_texto(request.form.get("banco_digitado")),
+        "produto": limpar_texto(request.form.get("produto")), "promotora": limpar_texto(request.form.get("promotora")),
+        "beneficio_bloqueado": normalizar_bloqueado(request.form.get("beneficio_bloqueado")), "valor_caiu_promotora": normalizar_sim_nao(request.form.get("valor_caiu_promotora")),
+        "valor_sacado": normalizar_sim_nao(request.form.get("valor_sacado")), "parcela_atual": parse_moeda(request.form.get("parcela_atual")),
+        "nova_parcela": parse_moeda(request.form.get("nova_parcela")), "troco": parse_moeda(request.form.get("troco")),
+        "comissao_percentual": parse_percentual(request.form.get("comissao_percentual")), "comissao": parse_moeda(request.form.get("comissao")),
+        "margem_apos": limpar_texto(request.form.get("margem_apos")), "status": status, "responsavel": "",
+        "telefone": limpar_texto(request.form.get("telefone")), "endereco": limpar_texto(request.form.get("endereco")),
+        "dados_bancarios": limpar_texto(request.form.get("dados_bancarios")), "proxima_acao": "",
+        "data_retorno": limpar_texto(request.form.get("data_retorno")), "observacoes": limpar_texto(request.form.get("observacoes")),
     }
+    if not produto_tem_campos_portabilidade(dados["produto"]):
+        dados["banco_atual"] = ""
+        dados["nova_parcela"] = 0
+        dados["margem_apos"] = ""
+    if not produto_tem_campos_vinculo(dados["produto"]):
+        atual = dict(proposta_atual) if proposta_atual else {}
+        refin_vinculado = proposta_eh_refin_vinculado(atual)
+        if refin_vinculado:
+            dados["numero_port_vinculada"] = limpar_texto(atual.get("numero_port_vinculada"))
+            dados["numero_refin_vinculada"] = ""
+        else:
+            dados["numero_port_vinculada"] = ""
+            dados["numero_refin_vinculada"] = ""
+    return dados
 
 
 
@@ -1697,18 +1699,25 @@ def buscar_propostas_vinculadas(proposta: sqlite3.Row) -> list[sqlite3.Row]:
     return vinculadas
 
 
-def produto_eh_portabilidade(proposta: sqlite3.Row | dict[str, Any]) -> bool:
-    """Retorna True para portabilidade pura, evitando refin da port."""
+def produto_eh_portabilidade_com_refin(proposta: sqlite3.Row | dict[str, Any]) -> bool:
+    """Retorna True somente para a operação que exige um refin vinculado."""
     try:
         produto = proposta["produto"]
     except (KeyError, IndexError, TypeError):
         produto = ""
-    texto = remover_acentos(limpar_texto(produto)).upper()
-    if not texto:
-        return False
-    tem_port = "PORT" in texto or "PORTABILIDADE" in texto
-    tem_refin = "REFIN" in texto or "REFINANCIAMENTO" in texto
-    return tem_port and not tem_refin
+    return remover_acentos(limpar_texto(produto)).casefold() == "portabilidade com refinanciamento"
+
+
+def proposta_eh_refin_vinculado(proposta: sqlite3.Row | dict[str, Any]) -> bool:
+    """Identifica o refin criado a partir de uma Portabilidade com Refinanciamento."""
+    try:
+        dados = dict(proposta)
+    except (TypeError, ValueError):
+        dados = {}
+    return (
+        remover_acentos(limpar_texto(dados.get("produto"))).casefold() == "refinanciamento"
+        and bool(limpar_texto(dados.get("numero_port_vinculada")))
+    )
 
 
 def incrementar_numero_proposta(valor: Any) -> str:
@@ -1733,12 +1742,23 @@ def incrementar_numero_proposta(valor: Any) -> str:
 
 
 def pode_criar_refin_vinculado(proposta: sqlite3.Row | dict[str, Any]) -> bool:
-    """Exibe o botão apenas em portabilidades com número próprio preenchido."""
+    """Exibe o botão apenas em portabilidades com refinanciamento."""
     try:
         numero = proposta["numero_proposta"]
     except (KeyError, IndexError, TypeError):
         numero = ""
-    return produto_eh_portabilidade(proposta) and bool(incrementar_numero_proposta(numero))
+    return produto_eh_portabilidade_com_refin(proposta) and bool(incrementar_numero_proposta(numero))
+
+
+def produto_tem_campos_portabilidade(produto: Any) -> bool:
+    return remover_acentos(limpar_texto(produto)).casefold() in {
+        "portabilidade",
+        "portabilidade com refinanciamento",
+    }
+
+
+def produto_tem_campos_vinculo(produto: Any) -> bool:
+    return remover_acentos(limpar_texto(produto)).casefold() == "portabilidade com refinanciamento"
 
 
 
@@ -1900,6 +1920,9 @@ def helpers() -> dict[str, Any]:
         "verificado_hoje": verificado_hoje,
         "status_verificacao_texto": status_verificacao_texto,
         "pode_criar_refin_vinculado": pode_criar_refin_vinculado,
+        "produto_tem_campos_portabilidade": produto_tem_campos_portabilidade,
+        "produto_tem_campos_vinculo": produto_tem_campos_vinculo,
+        "proposta_eh_refin_vinculado": proposta_eh_refin_vinculado,
         "incrementar_numero_proposta": incrementar_numero_proposta,
         "url_origem_atual": url_origem_atual,
         "url_retorno_padrao": url_retorno_padrao,
@@ -2205,7 +2228,7 @@ def nova_proposta():
         if salvos:
             registrar_historico(cursor.lastrowid, dados["status"], dados["status"], f"{salvos} anexo(s) enviado(s) na criação")
         flash("Proposta criada com sucesso.", "ok")
-        return render_template("nova_proposta.html", proposta=proposta_vazia())
+        return redirect(url_for("detalhe_proposta", proposta_id=cursor.lastrowid))
 
     return render_template("nova_proposta.html", proposta=proposta_vazia())
 
@@ -2217,8 +2240,8 @@ def criar_refin_vinculado(proposta_id: int):
         flash("Proposta de portabilidade não encontrada.", "erro")
         return redirect(url_for("index"))
 
-    if not produto_eh_portabilidade(port):
-        flash("O refinanciamento vinculado só pode ser criado a partir de uma proposta de portabilidade.", "erro")
+    if not produto_eh_portabilidade_com_refin(port):
+        flash("O refinanciamento vinculado só pode ser criado a partir de uma proposta de Portabilidade com Refinanciamento.", "erro")
         return redirect(url_for("detalhe_proposta", proposta_id=proposta_id))
 
     numero_port = limpar_texto(port["numero_proposta"])
@@ -2259,7 +2282,7 @@ def criar_refin_vinculado(proposta_id: int):
         flash("Refinanciamento existente vinculado à portabilidade.", "ok")
         return redirect(url_for("detalhe_proposta", proposta_id=existente["id"]))
 
-    banco_refin = banco_digitado_exibicao(port) or port["banco_atual"] or ""
+    banco_refin = limpar_texto(port["banco_digitado"]) or banco_digitado_exibicao(port) or port["banco_atual"] or ""
     status_inicial = status_padrao()
     observacao = f"Refinanciamento criado a partir da portabilidade nº {numero_port}."
 
@@ -2274,7 +2297,7 @@ def criar_refin_vinculado(proposta_id: int):
         (
             (port["cliente_id"] if "cliente_id" in port.keys() and port["cliente_id"] else salvar_cliente_dos_dados(port)),
             port["nome"], port["cpf"], port["nb_matricula"], numero_refin, numero_port, "",
-            port["tipo_cliente"], banco_refin, banco_refin, banco_refin, "Refinanciamento",
+            port["tipo_cliente"], "", "", banco_refin, "Refinanciamento",
             port["promotora"], port["beneficio_bloqueado"] or "NÃO", "NÃO", "NÃO", None,
             0, 0, 0, 0, 0, "", status_inicial, port["responsavel"], port["telefone"],
             port["endereco"] if "endereco" in port.keys() else "",
@@ -2997,7 +3020,7 @@ def editar_proposta(proposta_id: int):
         return redirect(url_for("index"))
 
     if request.method == "POST":
-        dados = dados_formulario()
+        dados = dados_formulario(proposta)
         origem = url_retorno_padrao()
         if not dados["nome"]:
             flash("Informe o nome do cliente.", "erro")

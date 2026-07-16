@@ -1,4 +1,46 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const propostaFormGrid = document.getElementById('propostaFormGrid');
+    if (propostaFormGrid) {
+        const labels = Array.from(propostaFormGrid.children).filter((item) => item.tagName === 'LABEL');
+        const localizarCampo = (name) => labels.find((label) => label.querySelector(`[name="${name}"]`));
+        const grupos = [
+            ['Dados do cliente', ['nome', 'cpf', 'nb_matricula', 'tipo_cliente', 'telefone']],
+            ['Dados da proposta', ['numero_proposta', 'produto', 'banco_atual', 'banco_digitado', 'status', 'parcela_atual', 'nova_parcela', 'margem_apos', 'troco', 'numero_port_vinculada', 'numero_refin_vinculada', 'data_retorno']],
+            ['Dados da promotora', ['promotora', 'beneficio_bloqueado', 'valor_caiu_promotora', 'valor_sacado', 'comissao_percentual', 'comissao']],
+        ];
+        const usados = new Set();
+        const fragment = document.createDocumentFragment();
+        grupos.forEach(([titulo, campos]) => {
+            const coluna = document.createElement('section');
+            coluna.className = 'proposal-form-column';
+            coluna.innerHTML = `<h3>${titulo}</h3><div class="proposal-form-column-fields"></div>`;
+            const destino = coluna.querySelector('.proposal-form-column-fields');
+            campos.forEach((name) => {
+                const campo = localizarCampo(name);
+                if (campo) { destino.appendChild(campo); usados.add(campo); }
+            });
+            fragment.appendChild(coluna);
+        });
+        labels.filter((label) => !usados.has(label)).forEach((label) => fragment.appendChild(label));
+        propostaFormGrid.replaceChildren(fragment);
+        propostaFormGrid.classList.add('proposal-form-columns');
+    }
+
+    const produtoSelect = document.getElementById('propostaProduto');
+    if (produtoSelect) {
+        const atualizarCamposPortabilidade = () => {
+            const produto = (produtoSelect.value || '').toLocaleLowerCase('pt-BR');
+            const portabilidade = ['portabilidade', 'portabilidade com refinanciamento'].includes(produto);
+            const portabilidadeComRefin = produto === 'portabilidade com refinanciamento';
+            const refinVinculado = propostaFormGrid?.dataset.refinVinculado === 'true';
+            document.querySelectorAll('[data-portability-field]').forEach((campo) => { campo.hidden = !portabilidade; });
+            document.querySelectorAll('[data-linked-refin-field]').forEach((campo) => { campo.hidden = !portabilidadeComRefin; });
+            document.querySelectorAll('[data-refin-vinculado-field]').forEach((campo) => { campo.hidden = !(produto === 'refinanciamento' && refinVinculado); });
+        };
+        produtoSelect.addEventListener('change', atualizarCamposPortabilidade);
+        atualizarCamposPortabilidade();
+    }
+
     const weekTimeline = document.querySelector('[data-week-timeline]');
     if (weekTimeline) {
         const esconderDestaquesSemana = () => {
@@ -201,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let ultimaConsultaClientes = 0;
 
     function montarSelectMatriculas(clientes) {
-        matriculaSelect.innerHTML = '<option value="">Cliente encontrado</option>';
+        matriculaSelect.innerHTML = '';
 
         clientes.forEach((cliente, index) => {
             const option = document.createElement('option');
@@ -222,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const digits = cpfField.value.replace(/\D/g, '');
 
         matriculaSelect.classList.add('hidden');
-        matriculaSelect.innerHTML = '<option value="">Cliente encontrado</option>';
+        matriculaSelect.innerHTML = '';
         clientesCPFCache = [];
 
         if (digits.length !== 11) {
