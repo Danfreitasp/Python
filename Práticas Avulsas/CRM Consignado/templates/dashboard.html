@@ -31,6 +31,20 @@
     <div class="metric-card highlight-card"><small>Valor a sacar</small><strong>{{ br_moeda(dados.valor_a_sacar) }}</strong></div>
     <div class="metric-card"><small>Falta cair na promotora</small><strong>{{ br_moeda(dados.falta_cair_promotora) }}</strong></div>
     <div class="metric-card"><small>Já sacado</small><strong>{{ br_moeda(dados.valor_ja_sacado) }}</strong></div>
+    <div class="metric-card saldo-conta-card">
+        <div class="metric-label-row">
+            <small>Saldo em conta</small>
+            <details class="metric-edit-menu">
+                <summary class="metric-edit-button"><i class="bi bi-pencil-square" aria-hidden="true"></i><span>Editar</span></summary>
+                <form method="post" action="{{ url_for('atualizar_saldo_dashboard') }}" class="metric-edit-form">
+                    <input type="hidden" name="mes" value="{{ dados.mes }}">
+                    <label>Saldo atual<input type="text" name="saldo_em_conta" value="{{ '%.2f'|format(saldo_em_conta)|replace('.', ',') }}" inputmode="decimal" required autofocus></label>
+                    <button class="btn btn-primary" type="submit">Salvar</button>
+                </form>
+            </details>
+        </div>
+        <strong>{{ br_moeda(saldo_em_conta) }}</strong>
+    </div>
 </section>
 
 <section class="charts-grid">

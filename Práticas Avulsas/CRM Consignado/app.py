@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import csv
+import calendar
 import io
 import json
 import os
 import re
 import sqlite3
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -103,6 +104,7 @@ DESTINOS_INTERNOS_PREFIXOS = (
     "/propostas",
     "/funil",
     "/hoje",
+    "/agenda",
     "/tarefas",
     "/encerradas",
     "/dashboard",
@@ -274,6 +276,15 @@ def init_db() -> None:
     )
     db.execute(
         """
+        CREATE TABLE IF NOT EXISTS configuracoes (
+            chave TEXT PRIMARY KEY,
+            valor TEXT NOT NULL,
+            atualizado_em TEXT NOT NULL
+        )
+        """
+    )
+    db.execute(
+        """
         CREATE TABLE IF NOT EXISTS anotacoes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             proposta_id INTEGER NOT NULL,
@@ -364,6 +375,8 @@ def init_db() -> None:
             criado_em TEXT NOT NULL,
             concluido_em TEXT,
             atualizado_em TEXT NOT NULL,
+            notificar INTEGER NOT NULL DEFAULT 0,
+            notificado_em TEXT,
             FOREIGN KEY (proposta_id) REFERENCES propostas(id) ON DELETE SET NULL
         )
         """
@@ -425,6 +438,10 @@ def init_db() -> None:
         db.execute("ALTER TABLE tarefas ADD COLUMN concluido_em TEXT")
     if "atualizado_em" not in colunas_tarefas:
         db.execute("ALTER TABLE tarefas ADD COLUMN atualizado_em TEXT NOT NULL DEFAULT ''")
+    if "notificar" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN notificar INTEGER NOT NULL DEFAULT 0")
+    if "notificado_em" not in colunas_tarefas:
+        db.execute("ALTER TABLE tarefas ADD COLUMN notificado_em TEXT")
 
     db.execute("CREATE INDEX IF NOT EXISTS idx_tarefas_data_status ON tarefas(data_tarefa, status)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_tarefas_proposta ON tarefas(proposta_id)")
@@ -1307,6 +1324,21 @@ def carregar_notificacoes_importantes(limite: int = 8) -> list[dict[str, Any]]:
         """,
         (limite * 2,),
     ).fetchall()
+    lembretes_agenda = db.execute(
+        """
+        SELECT t.id, t.titulo, t.descricao, t.data_tarefa, t.horario, t.notificado_em,
+               p.nome AS proposta_nome, p.numero_proposta AS proposta_numero
+        FROM tarefas t
+        LEFT JOIN propostas p ON p.id = t.proposta_id
+        WHERE t.notificar = 1
+          AND t.status IN ('pendente', 'adiada')
+          AND COALESCE(t.horario, '') <> ''
+          AND datetime(t.data_tarefa || ' ' || t.horario) <= datetime(?)
+        ORDER BY t.data_tarefa DESC, t.horario DESC, t.id DESC
+        LIMIT ?
+        """,
+        (agora_iso(), limite),
+    ).fetchall()
 
     notificacoes: list[dict[str, Any]] = []
     for h in historicos:
@@ -1343,6 +1375,26 @@ def carregar_notificacoes_importantes(limite: int = 8) -> list[dict[str, Any]]:
                 "data_hora": n["data_hora"],
                 "lida": bool(lido_ate and n["data_hora"] <= lido_ate),
                 "url": url,
+            }
+        )
+
+    for tarefa in lembretes_agenda:
+        data_hora = tarefa["notificado_em"] or agora_iso()
+        detalhes = f"Horário: {tarefa['horario']}."
+        if tarefa["descricao"]:
+            detalhes += f" {tarefa['descricao']}"
+        notificacoes.append(
+            {
+                "id": f"lembrete-{tarefa['id']}",
+                "proposta_id": None,
+                "proposta_nome": tarefa["proposta_nome"] or "Tarefa sem proposta vinculada",
+                "proposta_numero": tarefa["proposta_numero"],
+                "tipo": "lembrete",
+                "titulo": "Lembrete de agenda",
+                "mensagem": f"{tarefa['titulo']}. {detalhes}",
+                "data_hora": data_hora,
+                "lida": bool(tarefa["notificado_em"] and lido_ate and data_hora <= lido_ate),
+                "url": url_for("editar_tarefa", tarefa_id=tarefa["id"], origem=url_origem_atual()),
             }
         )
 
@@ -2530,13 +2582,14 @@ def nova_tarefa():
             """
             INSERT INTO tarefas (
                 titulo, descricao, data_tarefa, horario, prioridade, status, categoria,
-                proposta_id, criado_em, concluido_em, atualizado_em
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                proposta_id, criado_em, concluido_em, atualizado_em, notificar, notificado_em
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 dados["titulo"], dados["descricao"], dados["data_tarefa"], dados["horario"],
                 dados["prioridade"], dados["status"], dados["categoria"], dados["proposta_id"],
                 agora, agora if dados["status"] == "concluida" else None, agora,
+                dados["notificar"], None,
             ),
         )
         get_db().commit()
@@ -2544,6 +2597,12 @@ def nova_tarefa():
         return redirect(origem)
 
     tarefa = tarefa_vazia(proposta)
+    data_informada = parse_data_iso(request.args.get("data"))
+    if data_informada:
+        tarefa["data_tarefa"] = data_informada
+    horario_informado = normalizar_horario(request.args.get("horario"))
+    if horario_informado:
+        tarefa["horario"] = horario_informado
     return render_template(
         "tarefa_form.html",
         tarefa=tarefa,
@@ -2589,13 +2648,14 @@ def editar_tarefa(tarefa_id: int):
             """
             UPDATE tarefas
             SET titulo = ?, descricao = ?, data_tarefa = ?, horario = ?, prioridade = ?,
-                status = ?, categoria = ?, proposta_id = ?, concluido_em = ?, atualizado_em = ?
+                status = ?, categoria = ?, proposta_id = ?, concluido_em = ?, atualizado_em = ?,
+                notificar = ?, notificado_em = ?
             WHERE id = ?
             """,
             (
                 dados["titulo"], dados["descricao"], dados["data_tarefa"], dados["horario"],
                 dados["prioridade"], dados["status"], dados["categoria"], dados["proposta_id"],
-                concluido_em, agora_iso(), tarefa_id,
+                concluido_em, agora_iso(), dados["notificar"], None, tarefa_id,
             ),
         )
         get_db().commit()
@@ -2647,7 +2707,7 @@ def adiar_tarefa(tarefa_id: int):
     get_db().execute(
         """
         UPDATE tarefas
-        SET data_tarefa = ?, status = 'adiada', concluido_em = NULL, atualizado_em = ?
+        SET data_tarefa = ?, status = 'adiada', concluido_em = NULL, notificado_em = NULL, atualizado_em = ?
         WHERE id = ?
         """,
         (nova_data, agora_iso(), tarefa_id),
@@ -3244,6 +3304,7 @@ def tarefa_vazia(proposta: sqlite3.Row | None = None) -> dict[str, Any]:
         "prioridade": "normal",
         "status": "pendente",
         "categoria": "Retorno",
+        "notificar": 0,
         "proposta_id": proposta["id"] if proposta else "",
     }
 
@@ -3269,11 +3330,14 @@ def dados_formulario_tarefa() -> tuple[dict[str, Any], list[str]]:
     categoria = normalizar_categoria_tarefa(request.form.get("categoria"))
     proposta_id_txt = limpar_texto(request.form.get("proposta_id"))
     proposta_id = int(proposta_id_txt) if proposta_id_txt.isdigit() else None
+    notificar = 1 if request.form.get("notificar") == "1" else 0
     erros = []
     if not titulo:
         erros.append("Informe o título da tarefa.")
     if not data_tarefa:
         erros.append("Informe uma data válida.")
+    if notificar and not normalizar_horario(request.form.get("horario")):
+        erros.append("Informe um horário para gerar a notificação.")
     if proposta_id and not buscar_proposta(proposta_id):
         erros.append("A proposta vinculada não foi encontrada.")
         proposta_id = None
@@ -3286,6 +3350,7 @@ def dados_formulario_tarefa() -> tuple[dict[str, Any], list[str]]:
         "status": status,
         "categoria": categoria,
         "proposta_id": proposta_id,
+        "notificar": notificar,
     }, erros
 
 
@@ -3396,6 +3461,129 @@ def contexto_agenda(filtros: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def mes_agenda_de_args(args: Any) -> date:
+    """Retorna o primeiro dia do mês solicitado, com fallback para o atual."""
+    valor = limpar_texto(args.get("mes"))
+    try:
+        return datetime.strptime(valor, "%Y-%m").date().replace(day=1)
+    except ValueError:
+        return date.today().replace(day=1)
+
+
+def contexto_calendario(mes: date) -> dict[str, Any]:
+    """Monta os eventos mensais sem criar retornos duplicados no banco."""
+    if mes.month == 12:
+        proximo_mes = mes.replace(year=mes.year + 1, month=1)
+    else:
+        proximo_mes = mes.replace(month=mes.month + 1)
+    mes_anterior = (mes - timedelta(days=1)).replace(day=1)
+    tarefas = get_db().execute(
+        """SELECT t.*, p.nome AS proposta_nome FROM tarefas t
+           LEFT JOIN propostas p ON p.id = t.proposta_id
+           WHERE t.data_tarefa >= ? AND t.data_tarefa < ?
+           ORDER BY COALESCE(NULLIF(t.horario, ''), '99:99'), t.id""",
+        (mes.isoformat(), proximo_mes.isoformat()),
+    ).fetchall()
+    retornos = get_db().execute(
+        """SELECT id, nome, data_retorno, proxima_acao, status FROM propostas
+           WHERE data_retorno >= ? AND data_retorno < ?
+             AND status NOT IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')
+           ORDER BY data_retorno, nome""",
+        (mes.isoformat(), proximo_mes.isoformat()),
+    ).fetchall()
+    eventos_por_data: dict[str, list[dict[str, Any]]] = {}
+    for tarefa in tarefas:
+        eventos_por_data.setdefault(tarefa["data_tarefa"], []).append({
+            "tipo": "tarefa", "id": tarefa["id"], "titulo": tarefa["titulo"],
+            "horario": tarefa["horario"], "prioridade": tarefa["prioridade"],
+            "status": tarefa["status"], "proposta_nome": tarefa["proposta_nome"],
+        })
+    for retorno in retornos:
+        eventos_por_data.setdefault(retorno["data_retorno"][:10], []).append({
+            "tipo": "retorno", "id": retorno["id"],
+            "titulo": retorno["proxima_acao"] or "Retorno programado",
+            "horario": "", "prioridade": "normal", "status": retorno["status"],
+            "proposta_nome": retorno["nome"],
+        })
+    semanas = []
+    for semana in calendar.Calendar(firstweekday=6).monthdatescalendar(mes.year, mes.month):
+        semanas.append([{
+            "data": dia.isoformat(), "numero": dia.day, "do_mes": dia.month == mes.month,
+            "hoje": dia.isoformat() == hoje_iso(), "eventos": eventos_por_data.get(dia.isoformat(), []),
+        } for dia in semana])
+    meses_pt = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro")
+    return {
+        "semanas_calendario": semanas, "mes_agenda": mes.strftime("%Y-%m"),
+        "mes_anterior": mes_anterior.strftime("%Y-%m"), "proximo_mes": proximo_mes.strftime("%Y-%m"),
+        "titulo_mes_agenda": f"{meses_pt[mes.month - 1].capitalize()} de {mes.year}",
+        "total_tarefas_mes": len(tarefas), "total_retornos_mes": len(retornos),
+    }
+
+
+def data_agenda_de_args(args: Any) -> date:
+    valor = limpar_texto(args.get("data"))
+    try:
+        return datetime.strptime(valor, "%Y-%m-%d").date()
+    except ValueError:
+        return date.today()
+
+
+def contexto_semana_agenda(referencia: date) -> dict[str, Any]:
+    """Monta a visão semanal da Agenda, de domingo a sábado."""
+    inicio = referencia - timedelta(days=(referencia.weekday() + 1) % 7)
+    fim = inicio + timedelta(days=7)
+    tarefas = get_db().execute(
+        """SELECT t.*, p.nome AS proposta_nome FROM tarefas t
+           LEFT JOIN propostas p ON p.id = t.proposta_id
+           WHERE t.data_tarefa >= ? AND t.data_tarefa < ?
+           ORDER BY t.data_tarefa, COALESCE(NULLIF(t.horario, ''), '99:99'), t.id""",
+        (inicio.isoformat(), fim.isoformat()),
+    ).fetchall()
+    retornos = get_db().execute(
+        """SELECT id, nome, data_retorno, proxima_acao, status FROM propostas
+           WHERE data_retorno >= ? AND data_retorno < ?
+             AND status NOT IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')
+           ORDER BY data_retorno, nome""",
+        (inicio.isoformat(), fim.isoformat()),
+    ).fetchall()
+    eventos_horarios: dict[str, list[dict[str, Any]]] = {}
+    eventos_dia_inteiro: dict[str, list[dict[str, Any]]] = {}
+    for tarefa in tarefas:
+        evento = {
+            "tipo": "tarefa", "id": tarefa["id"], "titulo": tarefa["titulo"], "horario": tarefa["horario"],
+            "prioridade": tarefa["prioridade"], "status": tarefa["status"], "proposta_nome": tarefa["proposta_nome"],
+        }
+        try:
+            horario_tarefa = datetime.strptime(tarefa["horario"] or "", "%H:%M")
+            evento["minuto"] = horario_tarefa.hour * 60 + horario_tarefa.minute
+            evento["top"] = max(0, round((evento["minuto"] - 420) * 64 / 60))
+            eventos_horarios.setdefault(tarefa["data_tarefa"], []).append(evento)
+        except ValueError:
+            eventos_dia_inteiro.setdefault(tarefa["data_tarefa"], []).append(evento)
+    for retorno in retornos:
+        eventos_dia_inteiro.setdefault(retorno["data_retorno"][:10], []).append({
+            "tipo": "retorno", "id": retorno["id"], "titulo": retorno["proxima_acao"] or "Retorno programado",
+            "horario": "", "prioridade": "normal", "status": retorno["status"], "proposta_nome": retorno["nome"],
+        })
+    nomes = ("Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb")
+    dias = []
+    for indice in range(7):
+        dia = inicio + timedelta(days=indice)
+        chave = dia.isoformat()
+        dias.append({
+            "data": chave, "nome": nomes[indice], "numero": dia.day, "hoje": dia == date.today(),
+            "eventos_dia_inteiro": eventos_dia_inteiro.get(chave, []),
+            "eventos_horarios": eventos_horarios.get(chave, []),
+        })
+    titulo = f"{inicio.strftime('%d/%m')} a {(fim - timedelta(days=1)).strftime('%d/%m/%Y')}"
+    return {
+        "dias_semana": dias, "semana_anterior": (inicio - timedelta(days=7)).isoformat(),
+        "proxima_semana": (inicio + timedelta(days=7)).isoformat(), "data_semana": referencia.isoformat(),
+        "titulo_semana_agenda": titulo, "total_tarefas_semana": len(tarefas), "total_retornos_semana": len(retornos),
+        "horas_semana": list(range(7, 21)),
+    }
+
+
 def tarefa_json(tarefa_id: int, mensagem: str) -> dict[str, Any]:
     tarefa = buscar_tarefa(tarefa_id)
     return {
@@ -3413,6 +3601,35 @@ def resposta_tarefa(tarefa_id: int, mensagem: str, destino: str | None = None):
         return jsonify(tarefa_json(tarefa_id, mensagem))
     flash(mensagem, "ok")
     return redirect(url_interna_segura(destino or request.form.get("next") or request.referrer, "/hoje"))
+
+
+@app.route("/api/agenda/lembretes")
+def lembretes_agenda():
+    """Entrega uma vez os lembretes já vencidos para o navegador ativo."""
+    lembretes = get_db().execute(
+        """SELECT t.id, t.titulo, t.descricao, t.data_tarefa, t.horario, p.nome AS proposta_nome
+           FROM tarefas t LEFT JOIN propostas p ON p.id = t.proposta_id
+           WHERE t.notificar = 1 AND t.notificado_em IS NULL
+             AND t.status IN ('pendente', 'adiada') AND COALESCE(t.horario, '') <> ''
+             AND datetime(t.data_tarefa || ' ' || t.horario) <= datetime(?)
+           ORDER BY t.data_tarefa, t.horario, t.id""",
+        (agora_iso(),),
+    ).fetchall()
+    return jsonify({"lembretes": [dict(item) for item in lembretes]})
+
+
+@app.route("/api/agenda/lembretes/confirmar", methods=["POST"])
+def confirmar_lembretes_agenda():
+    dados = request.get_json(silent=True) or {}
+    ids = [int(item) for item in dados.get("ids", []) if str(item).isdigit()]
+    if ids:
+        marcadores = ",".join("?" for _ in ids)
+        get_db().execute(
+            f"UPDATE tarefas SET notificado_em = ?, atualizado_em = ? WHERE id IN ({marcadores})",
+            [agora_iso(), agora_iso(), *ids],
+        )
+        get_db().commit()
+    return jsonify({"success": True})
 
 
 def data_retorno_curta(proposta: sqlite3.Row) -> str:
@@ -3701,6 +3918,22 @@ def hoje():
     )
 
 
+@app.route("/agenda")
+def agenda():
+    visao = "semana" if limpar_texto(request.args.get("visao")) == "semana" else "mes"
+    if visao == "semana":
+        contexto = contexto_semana_agenda(data_agenda_de_args(request.args))
+    else:
+        contexto = contexto_calendario(mes_agenda_de_args(request.args))
+    return render_template(
+        "agenda.html",
+        **contexto,
+        visao_agenda=visao,
+        titulo="Agenda",
+        subtitulo="Compromissos, tarefas e retornos das propostas em um só calendário.",
+    )
+
+
 @app.route("/encerradas")
 def encerradas():
     mes = limpar_texto(request.args.get("mes")) or mes_atual()
@@ -3981,11 +4214,35 @@ def consulta_dashboard(mes: str) -> dict[str, Any]:
     }
 
 
+def saldo_em_conta() -> float:
+    registro = get_db().execute(
+        "SELECT valor FROM configuracoes WHERE chave = 'saldo_em_conta'"
+    ).fetchone()
+    return parse_moeda(registro["valor"]) if registro else 0.0
+
+
 @app.route("/dashboard")
 def dashboard():
     mes = limpar_texto(request.args.get("mes")) or mes_atual()
     dados = consulta_dashboard(mes)
-    return render_template("dashboard.html", dados=dados)
+    return render_template("dashboard.html", dados=dados, saldo_em_conta=saldo_em_conta())
+
+
+@app.route("/dashboard/saldo", methods=["POST"])
+def atualizar_saldo_dashboard():
+    valor_informado = limpar_texto(request.form.get("saldo_em_conta"))
+    if not valor_informado:
+        flash("Informe o saldo em conta.", "erro")
+    else:
+        get_db().execute(
+            """INSERT INTO configuracoes (chave, valor, atualizado_em) VALUES ('saldo_em_conta', ?, ?)
+               ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, atualizado_em = excluded.atualizado_em""",
+            (str(parse_moeda(valor_informado)), agora_iso()),
+        )
+        get_db().commit()
+        flash("Saldo em conta atualizado.", "ok")
+    mes = limpar_texto(request.form.get("mes")) or mes_atual()
+    return redirect(url_for("dashboard", mes=mes))
 
 
 @app.route("/exportar/csv")

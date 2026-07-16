@@ -45,6 +45,12 @@
             </label>
         </div>
 
+        <label class="notification-option">
+            <input type="checkbox" name="notificar" id="taskNotify" value="1" {% if tarefa.notificar %}checked{% endif %}>
+            <span><strong>Gerar notificação</strong><small id="notificationPermission">O CRM lembrará este compromisso no horário informado.</small></span>
+        </label>
+        <button class="mini-btn notification-test-button" type="button" id="notificationTest"><i class="bi bi-bell" aria-hidden="true"></i><span>Testar notificação</span></button>
+
         <section class="task-link-box" data-proposta-search-url="{{ url_for('api_buscar_propostas') }}">
             <div class="section-title-row compact-row">
                 <div>

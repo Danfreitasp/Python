@@ -1,4 +1,129 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const weekTimeline = document.querySelector('[data-week-timeline]');
+    if (weekTimeline) {
+        const esconderDestaquesSemana = () => {
+            weekTimeline.querySelectorAll('.week-hover-slot').forEach((item) => { item.hidden = true; });
+        };
+        const now = new Date();
+        const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const minute = now.getHours() * 60 + now.getMinutes();
+        const top = Math.max(0, (minute - 420) * 64 / 60);
+        const todayLane = weekTimeline.querySelector(`[data-week-day="${localDate}"]`);
+        const nowLine = todayLane?.querySelector('[data-week-now-line]');
+        if (nowLine && minute >= 420 && minute <= 1260) nowLine.style.setProperty('--now-top', `${top}px`);
+        if (todayLane && minute >= 420 && minute <= 1260) weekTimeline.scrollTop = Math.max(0, top - 170);
+
+        weekTimeline.querySelectorAll('.week-empty-slot').forEach((slot) => {
+            const lane = slot.closest('.week-day-lane');
+            if (!lane) return;
+            const hoverSlot = document.createElement('span');
+            hoverSlot.className = 'week-hover-slot';
+            hoverSlot.hidden = true;
+            lane.appendChild(hoverSlot);
+
+            function horarioDoPonteiro(event) {
+                const offset = event.clientY - lane.getBoundingClientRect().top;
+                const rawMinute = 420 + (offset * 60 / 64);
+                return Math.max(420, Math.min(1245, Math.round(rawMinute / 15) * 15));
+            }
+
+            function mostrarHorario(event) {
+                weekTimeline.querySelectorAll('.week-hover-slot').forEach((item) => {
+                    if (item !== hoverSlot) item.hidden = true;
+                });
+                const rounded = horarioDoPonteiro(event);
+                const horario = `${String(Math.floor(rounded / 60)).padStart(2, '0')}:${String(rounded % 60).padStart(2, '0')}`;
+                hoverSlot.style.setProperty('--hover-top', `${(rounded - 420) * 64 / 60}px`);
+                hoverSlot.textContent = `${horario} · Criar compromisso`;
+                hoverSlot.hidden = false;
+            }
+
+            slot.addEventListener('mouseenter', mostrarHorario);
+            slot.addEventListener('mousemove', mostrarHorario);
+            slot.addEventListener('mouseleave', () => { hoverSlot.hidden = true; });
+            lane.addEventListener('mouseleave', () => { hoverSlot.hidden = true; });
+            slot.addEventListener('click', (event) => {
+                event.preventDefault();
+                const rounded = horarioDoPonteiro(event);
+                const horario = `${String(Math.floor(rounded / 60)).padStart(2, '0')}:${String(rounded % 60).padStart(2, '0')}`;
+                const target = new URL(slot.href, window.location.origin);
+                target.searchParams.set('horario', horario);
+                window.location.href = target.toString();
+            });
+        });
+        weekTimeline.addEventListener('mouseleave', esconderDestaquesSemana);
+    }
+
+    const notifyCheckbox = document.getElementById('taskNotify');
+    const notificationPermission = document.getElementById('notificationPermission');
+    const notificationTest = document.getElementById('notificationTest');
+    function atualizarEstadoNotificacao() {
+        if (!notificationPermission) return;
+        if (!('Notification' in window)) {
+            notificationPermission.textContent = 'Este navegador não oferece notificações. O CRM exibirá o alerta dentro da página.';
+        } else if (Notification.permission === 'granted') {
+            notificationPermission.textContent = 'Permissão concedida: o alerta aparecerá no CRM e como notificação do navegador.';
+        } else if (Notification.permission === 'denied') {
+            notificationPermission.textContent = 'Notificações do navegador estão bloqueadas. O lembrete aparecerá dentro do CRM.';
+        } else {
+            notificationPermission.textContent = 'Ao marcar esta opção, permita as notificações quando o navegador solicitar.';
+        }
+    }
+
+    async function pedirPermissaoNotificacao() {
+        if (!('Notification' in window) || Notification.permission !== 'default') return;
+        await Notification.requestPermission();
+        atualizarEstadoNotificacao();
+    }
+
+    if (notifyCheckbox) {
+        notifyCheckbox.addEventListener('change', () => {
+            if (notifyCheckbox.checked) pedirPermissaoNotificacao();
+        });
+    }
+    atualizarEstadoNotificacao();
+    if (notificationTest) {
+        notificationTest.addEventListener('click', async () => {
+            await pedirPermissaoNotificacao();
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification('CRM: teste de notificação', { body: 'As notificações do navegador estão funcionando.', icon: '/static/favicon.svg' });
+                mostrarAvisoCopiado('Teste enviado também como notificação do navegador.');
+            } else {
+                mostrarAvisoCopiado('O navegador bloqueou o alerta externo. O CRM continuará exibindo os lembretes dentro da página.', 'erro');
+            }
+        });
+    }
+
+    async function verificarLembretesAgenda() {
+        try {
+            const response = await fetch('/api/agenda/lembretes', { headers: { Accept: 'application/json' } });
+            if (!response.ok) return;
+            const payload = await response.json();
+            const lembretes = Array.isArray(payload.lembretes) ? payload.lembretes : [];
+            if (!lembretes.length) return;
+            const ids = [];
+            lembretes.forEach((lembrete) => {
+                const vinculo = lembrete.proposta_nome ? ` — ${lembrete.proposta_nome}` : '';
+                const mensagem = `Lembrete ${lembrete.horario}: ${lembrete.titulo}${vinculo}`;
+                mostrarAvisoCopiado(mensagem, 'erro');
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification(`CRM: ${lembrete.titulo}`, {
+                        body: `${lembrete.horario}${vinculo}${lembrete.descricao ? `\n${lembrete.descricao}` : ''}`,
+                        icon: '/static/favicon.svg', tag: `crm-lembrete-${lembrete.id}`,
+                    });
+                }
+                ids.push(lembrete.id);
+            });
+            await fetch('/api/agenda/lembretes/confirmar', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
+            });
+        } catch (error) {
+            console.warn('Não foi possível verificar os lembretes da agenda.', error);
+        }
+    }
+    verificarLembretesAgenda();
+    window.setInterval(verificarLembretesAgenda, 30000);
+
     const notificationMenu = document.querySelector('.notification-menu');
     if (notificationMenu) {
         document.addEventListener('click', (event) => {

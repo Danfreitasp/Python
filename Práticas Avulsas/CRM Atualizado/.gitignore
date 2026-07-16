@@ -1,0 +1,6 @@
+backend/.venv/
+backend/data/crm.db
+backend/data/uploads/
+frontend/node_modules/
+frontend/dist/
+.env
