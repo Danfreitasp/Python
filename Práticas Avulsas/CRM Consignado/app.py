@@ -1917,6 +1917,22 @@ def marcar_notificacoes_lidas():
     return redirect(destino)
 
 
+@app.route("/api/notificacoes")
+def api_notificacoes():
+    notificacoes = carregar_notificacoes_importantes()
+    total_nao_lidas = sum(1 for notificacao in notificacoes if not notificacao["lida"])
+    origem = url_interna_segura(request.args.get("origem"), "/propostas")
+    return jsonify({
+        "total": total_nao_lidas,
+        "html": render_template(
+            "_notificacoes_panel.html",
+            notificacoes_importantes=notificacoes,
+            notificacoes_importantes_total=total_nao_lidas,
+            notificacoes_origem=origem,
+        ),
+    })
+
+
 
 def prazos_simulador_inss(prazos_json: str | None = None) -> dict[str, dict[str, Any]]:
     prazos = {codigo: dict(info) for codigo, info in INSS_NOVO_COEFICIENTES.items()}

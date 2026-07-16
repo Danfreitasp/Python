@@ -134,6 +134,30 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const notificationPanelContent = document.getElementById('notificationPanelContent');
+    const notificationBadge = document.querySelector('.notification-badge');
+    async function atualizarNotificacoesAutomaticamente() {
+        if (!notificationPanelContent || document.hidden) return;
+        try {
+            const url = new URL('/api/notificacoes', window.location.origin);
+            url.searchParams.set('origem', `${window.location.pathname}${window.location.search}`);
+            const response = await fetch(url, { headers: { Accept: 'application/json' } });
+            if (!response.ok) return;
+            const payload = await response.json();
+            notificationPanelContent.innerHTML = payload.html || '';
+            if (notificationBadge) {
+                notificationBadge.textContent = String(payload.total || '');
+                notificationBadge.hidden = !payload.total;
+            }
+        } catch (error) {
+            console.warn('Não foi possível atualizar as notificações.', error);
+        }
+    }
+    window.setInterval(atualizarNotificacoesAutomaticamente, 15000);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) atualizarNotificacoesAutomaticamente();
+    });
+
     document.querySelectorAll('.cpf-mask').forEach((input) => {
         input.addEventListener('input', () => {
             let v = input.value.replace(/\D/g, '').slice(0, 11);
