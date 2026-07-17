@@ -957,6 +957,61 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function formatarMoeda(valor) {
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(valor) || 0);
+    }
+
+    function atualizarResumoEncerradas(coluna) {
+        if (!coluna?.closest('.kanban[data-modulo="encerradas"]')) return;
+        const cards = coluna.querySelectorAll('.encerrada-card');
+        const total = Array.from(cards).reduce((soma, card) => soma + (Number(card.dataset.comissao) || 0), 0);
+        updateColumnCounter(coluna);
+        const comissao = coluna.querySelector('[data-column-commission]');
+        if (comissao) comissao.textContent = formatarMoeda(total);
+    }
+
+    function atualizarVisualStatusEncerrada(card, destino) {
+        if (!card?.classList.contains('encerrada-card')) return;
+        const perdido = destino === 'Perdido / Cancelado';
+        card.classList.toggle('card-paid', !perdido);
+        card.classList.toggle('card-lost', perdido);
+    }
+
+    document.querySelectorAll('.encerrada-finance-form').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const card = form.closest('.encerrada-card');
+            const button = form.querySelector('button[type="submit"]');
+            if (!card || !button) return;
+            button.disabled = true;
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'fetch' },
+                    body: new FormData(form),
+                });
+                const payload = await response.json();
+                if (!response.ok || payload.success === false) throw new Error(payload.message || 'Não foi possível atualizar os valores.');
+
+                card.dataset.comissao = String(payload.comissao_numero || 0);
+                card.querySelector('[data-finance-value]').textContent = payload.troco;
+                card.querySelector('[data-finance-commission]').textContent = payload.comissao;
+                card.querySelector('[data-finance-percent]').textContent = payload.comissao_percentual;
+                card.querySelector('.encerrada-finance-editor').open = false;
+                atualizarResumoEncerradas(card.closest('.kanban-column'));
+                card.classList.add('card-recently-saved');
+                setTimeout(() => card.classList.remove('card-recently-saved'), 1400);
+                mostrarAvisoCopiado(payload.message || 'Valores atualizados.');
+            } catch (error) {
+                console.error(error);
+                mostrarAvisoCopiado(error.message || 'Não foi possível atualizar os valores.', 'erro');
+            } finally {
+                button.disabled = false;
+            }
+        });
+    });
+
     function restoreScroll(kanban, scrollLeft, sourceArea, sourceScrollTop, targetArea, targetScrollTop) {
         requestAnimationFrame(() => {
             if (kanban) kanban.scrollLeft = scrollLeft;
@@ -1059,9 +1114,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateColumnCounter(sourceColumn, payload.colunas.origem);
                     updateColumnCounter(targetColumn, payload.colunas.destino);
                 } else {
-                    updateColumnCounter(sourceColumn);
-                    updateColumnCounter(targetColumn);
+                    atualizarResumoEncerradas(sourceColumn);
+                    atualizarResumoEncerradas(targetColumn);
                 }
+                atualizarVisualStatusEncerrada(card, novoStatus);
                 card.classList.add('move-success');
                 mostrarAvisoCopiado(payload?.message || 'Proposta movida com sucesso');
                 setTimeout(() => card.classList.remove('move-success'), 1400);
@@ -1070,8 +1126,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 restoreCard(card, sourceArea, nextSibling);
                 refreshEmptyState(sourceArea);
                 refreshEmptyState(cardsArea);
-                updateColumnCounter(sourceColumn);
-                updateColumnCounter(targetColumn);
+                if (modulo === 'funil') {
+                    updateColumnCounter(sourceColumn);
+                    updateColumnCounter(targetColumn);
+                } else {
+                    atualizarResumoEncerradas(sourceColumn);
+                    atualizarResumoEncerradas(targetColumn);
+                }
                 card.classList.add('move-error');
                 mostrarAvisoCopiado(error.message || 'Não foi possível mover a proposta', 'erro');
                 setTimeout(() => card.classList.remove('move-error'), 1800);

@@ -3190,7 +3190,10 @@ def mudar_status(proposta_id: int):
 @app.route("/proposta/<int:proposta_id>/financeiro-rapido", methods=["POST"])
 def atualizar_financeiro_rapido(proposta_id: int):
     proposta = buscar_proposta(proposta_id)
+    is_fetch = request.headers.get("X-Requested-With") == "fetch"
     if not proposta:
+        if is_fetch:
+            return jsonify({"success": False, "message": "Proposta não encontrada."}), 404
         flash("Proposta não encontrada.", "erro")
         return redirect(url_for("encerradas"))
 
@@ -3213,6 +3216,16 @@ def atualizar_financeiro_rapido(proposta_id: int):
         proposta["status"],
         f"Valor/comissão atualizados em Encerradas. Percentual calculado: {percentual:.2f}%",
     )
+    if is_fetch:
+        return jsonify({
+            "success": True,
+            "message": "Valores atualizados.",
+            "proposta_id": proposta_id,
+            "troco": br_moeda(valor),
+            "comissao": br_moeda(comissao),
+            "comissao_percentual": br_percentual(percentual),
+            "comissao_numero": comissao,
+        })
     flash("Valor e comissão atualizados.", "ok")
     return redirect(request.form.get("next") or url_for("encerradas"))
 
