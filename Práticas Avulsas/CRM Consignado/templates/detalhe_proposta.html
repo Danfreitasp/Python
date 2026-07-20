@@ -176,6 +176,8 @@
                 <summary>Ver dados completos da proposta</summary>
                 <div class="info-grid compact-info-grid">
                     <div><small>NB/Matrícula</small><span>{{ proposta.nb_matricula or '-' }}</span></div>
+                    {% if proposta.nascimento %}<div><small>Nascimento</small><span>{{ proposta.nascimento }}</span></div>{% endif %}
+                    {% if proposta.especie %}<div><small>Espécie do benefício</small><span>{{ proposta.especie }}</span></div>{% endif %}
                     {% if proposta_eh_refin_vinculado(proposta) %}<div><small>Nº port vinculada</small><span>{{ proposta.numero_port_vinculada or '-' }}</span></div>{% endif %}
                     {% if produto_tem_campos_vinculo(proposta.produto) %}<div><small>Nº refin vinculado</small><span>{{ proposta.numero_refin_vinculada or '-' }}</span></div>{% endif %}
                     <div><small>Tipo</small><span>{{ proposta.tipo_cliente or '-' }}</span></div>

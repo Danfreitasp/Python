@@ -416,8 +416,18 @@ tbody tr:hover {
 .proposal-form-column { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); min-width: 0; }
 .proposal-form-column h3 { margin: 0; font-size: 14px; }
 .proposal-form-column-fields { display: grid; gap: 12px; }
+.proposal-form-free-section { display: grid; gap: 10px; margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); }
+.proposal-form-free-section h3 { margin: 0; font-size: 14px; }
+.portal-import-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 14px; border: 1px solid #93c5fd; border-radius: var(--radius); background: #eff6ff; }
+.portal-import-panel h2, .portal-import-panel p { margin: 0; }
+.portal-import-panel h2 { font-size: 16px; }
+.portal-import-panel .is-waiting { border-color: var(--primary); color: var(--primary); }
+.portal-import-highlight { outline: 3px solid #60a5fa; outline-offset: 2px; transition: outline-color .25s ease; }
 html[data-theme="escuro"] .proposal-form-column { background: #111827; border-color: #263445; }
+html[data-theme="escuro"] .proposal-form-free-section { background: #111827; border-color: #263445; }
+html[data-theme="escuro"] .portal-import-panel { background: #172554; border-color: #1d4ed8; }
 @media (max-width: 1100px) { .proposal-form-columns { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .portal-import-panel { align-items: stretch; flex-direction: column; } }
 .linked-proposal-field { background: #f8fafc; border: 1px solid var(--line); border-radius: var(--radius-md); padding: 9px; }
 .linked-proposal-field input { background: var(--panel); }
 [data-portability-field][hidden], [data-linked-refin-field][hidden], [data-refin-vinculado-field][hidden] { display: none; }

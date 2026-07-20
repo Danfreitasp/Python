@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const labels = Array.from(propostaFormGrid.children).filter((item) => item.tagName === 'LABEL');
         const localizarCampo = (name) => labels.find((label) => label.querySelector(`[name="${name}"]`));
         const grupos = [
-            ['Dados do cliente', ['nome', 'cpf', 'nb_matricula', 'tipo_cliente', 'telefone']],
+            ['Dados do cliente', ['nome', 'cpf', 'nascimento', 'nb_matricula', 'especie', 'tipo_cliente', 'telefone']],
             ['Dados da proposta', ['numero_proposta', 'produto', 'banco_atual', 'banco_digitado', 'status', 'parcela_atual', 'nova_parcela', 'margem_apos', 'troco', 'numero_port_vinculada', 'numero_refin_vinculada', 'data_retorno']],
             ['Dados da promotora', ['promotora', 'beneficio_bloqueado', 'valor_caiu_promotora', 'valor_sacado', 'comissao_percentual', 'comissao']],
         ];

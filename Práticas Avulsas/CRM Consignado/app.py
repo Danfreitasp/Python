@@ -141,7 +141,9 @@ INSS_CARTAO_COEFICIENTES = {
 CAMPOS_PROPOSTA = [
     "nome",
     "cpf",
+    "nascimento",
     "nb_matricula",
+    "especie",
     "numero_proposta",
     "numero_port_vinculada",
     "numero_refin_vinculada",
@@ -199,7 +201,9 @@ def init_db() -> None:
             cliente_id INTEGER,
             nome TEXT NOT NULL,
             cpf TEXT,
+            nascimento TEXT,
             nb_matricula TEXT,
+            especie TEXT,
             numero_proposta TEXT,
             numero_port_vinculada TEXT,
             numero_refin_vinculada TEXT,
@@ -414,6 +418,10 @@ def init_db() -> None:
         db.execute("ALTER TABLE propostas ADD COLUMN endereco TEXT")
     if "dados_bancarios" not in colunas_propostas:
         db.execute("ALTER TABLE propostas ADD COLUMN dados_bancarios TEXT")
+    if "especie" not in colunas_propostas:
+        db.execute("ALTER TABLE propostas ADD COLUMN especie TEXT")
+    if "nascimento" not in colunas_propostas:
+        db.execute("ALTER TABLE propostas ADD COLUMN nascimento TEXT")
 
     colunas_tarefas = {row["name"] for row in db.execute("PRAGMA table_info(tarefas)").fetchall()}
     if "titulo" not in colunas_tarefas:
@@ -1469,7 +1477,8 @@ def dados_formulario(proposta_atual: sqlite3.Row | dict[str, Any] | None = None)
         status = status_padrao()
     dados = {
         "nome": limpar_texto(request.form.get("nome")), "cpf": formatar_cpf(limpar_texto(request.form.get("cpf"))),
-        "nb_matricula": limpar_texto(request.form.get("nb_matricula")), "numero_proposta": limpar_texto(request.form.get("numero_proposta")),
+        "nascimento": limpar_texto(request.form.get("nascimento")),
+        "nb_matricula": limpar_texto(request.form.get("nb_matricula")), "especie": limpar_texto(request.form.get("especie")), "numero_proposta": limpar_texto(request.form.get("numero_proposta")),
         "numero_port_vinculada": limpar_texto(request.form.get("numero_port_vinculada")), "numero_refin_vinculada": limpar_texto(request.form.get("numero_refin_vinculada")),
         "tipo_cliente": limpar_texto(request.form.get("tipo_cliente")), "banco_atual": limpar_texto(request.form.get("banco_atual")),
         "banco_destino": limpar_texto(request.form.get("banco_destino")), "banco_digitado": limpar_texto(request.form.get("banco_digitado")),
@@ -1505,7 +1514,9 @@ def dados_nova_proposta() -> dict[str, Any]:
     return {
         "nome": limpar_texto(request.form.get("nome")),
         "cpf": formatar_cpf(limpar_texto(request.form.get("cpf"))),
+        "nascimento": limpar_texto(request.form.get("nascimento")),
         "nb_matricula": limpar_texto(request.form.get("nb_matricula")),
+        "especie": limpar_texto(request.form.get("especie")),
         "numero_proposta": "",
         "numero_port_vinculada": "",
         "numero_refin_vinculada": "",
@@ -2200,13 +2211,18 @@ def nova_proposta():
         cursor = db.execute(
             """
             INSERT INTO propostas (
-                cliente_id, nome, cpf, nb_matricula, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
+                cliente_id, nome, cpf, nascimento, nb_matricula, especie, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
                 promotora, beneficio_bloqueado, valor_caiu_promotora, valor_sacado, data_verificacao, parcela_atual, nova_parcela, troco, comissao_percentual, comissao, margem_apos, status, responsavel,
                 telefone, endereco, dados_bancarios, data_criacao, data_atualizacao, proxima_acao, data_retorno, observacoes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?
+            )
             """,
             (
-                salvar_cliente_dos_dados(dados), dados["nome"], dados["cpf"], dados["nb_matricula"], dados["numero_proposta"],
+                salvar_cliente_dos_dados(dados), dados["nome"], dados["cpf"], dados["nascimento"], dados["nb_matricula"], dados["especie"], dados["numero_proposta"],
                 dados["numero_port_vinculada"], dados["numero_refin_vinculada"], dados["tipo_cliente"],
                 dados["banco_atual"], dados["banco_destino"], dados["banco_digitado"], dados["produto"],
                 dados["promotora"], dados["beneficio_bloqueado"], dados["valor_caiu_promotora"], dados["valor_sacado"], None, dados["parcela_atual"], dados["nova_parcela"], dados["troco"], dados["comissao_percentual"], dados["comissao"], dados["margem_apos"],
@@ -3037,14 +3053,14 @@ def editar_proposta(proposta_id: int):
         db.execute(
             """
             UPDATE propostas SET
-                cliente_id = ?, nome = ?, cpf = ?, nb_matricula = ?, numero_proposta = ?, numero_port_vinculada = ?, numero_refin_vinculada = ?, tipo_cliente = ?, banco_atual = ?,
+                cliente_id = ?, nome = ?, cpf = ?, nascimento = ?, nb_matricula = ?, especie = ?, numero_proposta = ?, numero_port_vinculada = ?, numero_refin_vinculada = ?, tipo_cliente = ?, banco_atual = ?,
                 banco_destino = ?, banco_digitado = ?, produto = ?, promotora = ?, beneficio_bloqueado = ?, valor_caiu_promotora = ?, valor_sacado = ?, parcela_atual = ?, nova_parcela = ?, troco = ?,
                 comissao_percentual = ?, comissao = ?, margem_apos = ?, status = ?, responsavel = ?, telefone = ?, endereco = ?, dados_bancarios = ?, data_atualizacao = ?, data_encerramento = ?,
                 proxima_acao = ?, data_retorno = ?, observacoes = ?
             WHERE id = ?
             """,
             (
-                salvar_cliente_dos_dados(dados), dados["nome"], dados["cpf"], dados["nb_matricula"], dados["numero_proposta"],
+                salvar_cliente_dos_dados(dados), dados["nome"], dados["cpf"], dados["nascimento"], dados["nb_matricula"], dados["especie"], dados["numero_proposta"],
                 dados["numero_port_vinculada"], dados["numero_refin_vinculada"], dados["tipo_cliente"],
                 dados["banco_atual"], dados["banco_destino"], dados["banco_digitado"], dados["produto"],
                 dados["promotora"], dados["beneficio_bloqueado"], dados["valor_caiu_promotora"], dados["valor_sacado"], dados["parcela_atual"], dados["nova_parcela"], dados["troco"], dados["comissao_percentual"], dados["comissao"], dados["margem_apos"],

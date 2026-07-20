@@ -1,16 +1,22 @@
 <div class="form-grid" id="propostaFormGrid" data-refin-vinculado="{{ 'true' if proposta_eh_refin_vinculado(proposta) else 'false' }}">
-    <label>Nome do cliente
-        <input name="nome" value="{{ proposta.nome or proposta['nome'] or '' }}" required>
+    <label>Nome do cliente{% if modo_nova %} *{% endif %}
+        <input id="proposta-nome" name="nome" value="{{ proposta.nome or proposta['nome'] or '' }}" {% if modo_nova %}required{% endif %}>
     </label>
-    <label>CPF
-        <input name="cpf" class="cpf-mask" value="{{ proposta.cpf or proposta['cpf'] or '' }}" placeholder="000.000.000-00">
+    <label>CPF{% if modo_nova %} *{% endif %}
+        <input id="proposta-cpf" name="cpf" class="cpf-mask" value="{{ proposta.cpf or proposta['cpf'] or '' }}" placeholder="000.000.000-00" {% if modo_nova %}required{% endif %}>
     </label>
-    <label>NB ou matrícula
-        <input name="nb_matricula" value="{{ proposta.nb_matricula or proposta['nb_matricula'] or '' }}">
+    <label>Data de nascimento
+        <input id="proposta-nascimento" name="nascimento" value="{{ proposta.nascimento or proposta['nascimento'] or '' }}" placeholder="DD/MM/AAAA">
+    </label>
+    <label>NB ou matrícula{% if modo_nova %} *{% endif %}
+        <input id="proposta-nb-matricula" name="nb_matricula" value="{{ proposta.nb_matricula or proposta['nb_matricula'] or '' }}" {% if modo_nova %}required{% endif %}>
         <small class="muted cliente-sugestao-ajuda">Digite o CPF para consultar matrículas já cadastradas.</small>
         <select id="cliente-matricula-select" class="cliente-matricula-select hidden" aria-label="Matrículas encontradas para este CPF">
             <option value="">Selecione uma matrícula cadastrada</option>
         </select>
+    </label>
+    <label>Espécie do benefício
+        <input id="proposta-especie" name="especie" value="{{ proposta.especie or proposta['especie'] or '' }}" placeholder="Ex.: 21, 32, 41">
     </label>
     <label>Nº proposta
         <input name="numero_proposta" value="{{ proposta.numero_proposta or proposta['numero_proposta'] or '' }}" placeholder="Número desta proposta">
@@ -29,8 +35,8 @@
     <label>Banco digitado
         <input name="banco_digitado" value="{{ proposta.banco_digitado or proposta['banco_digitado'] or '' }}" placeholder="Banco onde a proposta foi digitada">
     </label>
-    <label>Produto
-        <select name="produto" id="propostaProduto">
+    <label>Produto{% if modo_nova %} *{% endif %}
+        <select name="produto" id="propostaProduto" {% if modo_nova %}required{% endif %}>
             <option value="">Selecione</option>
             {% for produto in PRODUTOS %}
                 <option value="{{ produto }}" {% if (proposta.produto or proposta['produto'] or '') == produto %}selected{% endif %}>{{ produto }}</option>
@@ -92,21 +98,29 @@
     <label data-portability-field {% if not produto_tem_campos_portabilidade(proposta.produto or proposta['produto'] or '') %}hidden{% endif %}>Margem após operação
         <input name="margem_apos" value="{{ proposta.margem_apos or proposta['margem_apos'] or '' }}">
     </label>
-    <label>Telefone/WhatsApp
-        <input name="telefone" value="{{ proposta.telefone or proposta['telefone'] or '' }}">
+    <label>Telefone/WhatsApp{% if modo_nova %} *{% endif %}
+        <input id="proposta-telefone" name="telefone" value="{{ proposta.telefone or proposta['telefone'] or '' }}" {% if modo_nova %}required{% endif %}>
     </label>
     <label>Previsão de saldo
         <input type="date" name="data_retorno" value="{{ proposta.data_retorno or proposta['data_retorno'] or '' }}">
     </label>
 </div>
-<label class="full-label">Endereço do cliente
-    <textarea name="endereco" rows="3" placeholder="Rua, número, bairro, cidade, UF, CEP">{{ proposta.endereco or proposta['endereco'] or '' }}</textarea>
-</label>
-<label class="full-label">Dados bancários do cliente
-    <textarea name="dados_bancarios" rows="3" placeholder="Banco, agência, conta, tipo de conta, chave Pix ou informações necessárias">{{ proposta.dados_bancarios or proposta['dados_bancarios'] or '' }}</textarea>
-</label>
-
-<label class="full-label">Observação inicial / importada
-    <textarea name="observacoes" rows="5" placeholder="Use este campo apenas para a primeira observação. Depois, registre novas anotações na tela de detalhes da proposta.">{{ proposta.observacoes or proposta['observacoes'] or '' }}</textarea>
-</label>
+<section class="proposal-form-free-section">
+    <h3>Endereço do cliente</h3>
+    <label class="full-label">
+        <textarea id="proposta-endereco" name="endereco" rows="4" placeholder="Endereço&#10;RUA EXEMPLO 123&#10;CEP 00000000&#10;Bairro CENTRO&#10;Cidade - UF EXEMPLO - ES">{{ proposta.endereco or proposta['endereco'] or '' }}</textarea>
+    </label>
+</section>
+<section class="proposal-form-free-section">
+    <h3>Dados bancários do cliente</h3>
+    <label class="full-label">
+        <textarea id="proposta-dados-bancarios" name="dados_bancarios" rows="4" placeholder="BANCO EXEMPLO&#10;Agência: 123&#10;Conta Corrente: 000000000">{{ proposta.dados_bancarios or proposta['dados_bancarios'] or '' }}</textarea>
+    </label>
+</section>
+<section class="proposal-form-free-section">
+    <h3>Observação inicial/importada</h3>
+    <label class="full-label">
+        <textarea id="proposta-observacoes" name="observacoes" rows="5" placeholder="Use este campo apenas para a primeira observação. Depois, registre novas anotações na tela de detalhes da proposta.">{{ proposta.observacoes or proposta['observacoes'] or '' }}</textarea>
+    </label>
+</section>
 
