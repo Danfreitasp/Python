@@ -1273,22 +1273,10 @@ document.addEventListener('DOMContentLoaded', () => {
         tab.addEventListener('click', () => {
             const target = tab.dataset.tabTarget;
             activateTab(target);
-            try {
-                sessionStorage.setItem('crmProposalTab', target);
-            } catch (error) {
-                // Ignora navegadores que bloqueiam sessionStorage.
-            }
         });
     });
 
-    try {
-        const savedTab = sessionStorage.getItem('crmProposalTab');
-        if (savedTab && document.querySelector(`.proposal-tab[data-tab-target="${savedTab}"]`)) {
-            activateTab(savedTab);
-        }
-    } catch (error) {
-        // Mantém a primeira aba ativa.
-    }
+    activateTab('resumo');
 });
 
 // v35 - Editor visual de etapas: arrastar, reordenar e salvar tudo de uma vez.

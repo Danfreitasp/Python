@@ -2,26 +2,22 @@
     'use strict';
 
     const formGrid = document.getElementById('propostaFormGrid');
-    const waitButton = document.getElementById('portalImportWaitButton');
     const status = document.getElementById('portalImportStatus');
-    if (!formGrid || !waitButton || !status) return;
+    if (!formGrid || !status) return;
 
     let aguardando = false;
 
     function atualizarEstado(novoEstado, mensagem) {
         aguardando = novoEstado;
         document.body.dataset.crmImportacaoPortal = novoEstado ? 'aguardando' : 'inativa';
-        waitButton.classList.toggle('is-waiting', novoEstado);
         status.textContent = mensagem;
     }
-
-    waitButton.addEventListener('click', () => {
-        atualizarEstado(true, 'Aguardando dados do Sistemacorban nesta aba.');
-    });
 
     window.crmImportacaoPortal = {
         estaAguardando: () => aguardando,
     };
+
+    atualizarEstado(true, 'Aguardando dados do Sistemacorban nesta aba.');
 
     // Ponte chamada pela extensão no contexto principal da aba do CRM.
     // Preenche campos, mas deliberadamente não dispara submit nem requisição.

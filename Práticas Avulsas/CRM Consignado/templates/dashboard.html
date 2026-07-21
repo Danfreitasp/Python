@@ -15,7 +15,7 @@
     <div class="metric-card"><small>Criadas no mês</small><strong>{{ dados.total }}</strong></div>
     <div class="metric-card"><small>Pagas no mês</small><strong>{{ dados.pagas }}</strong></div>
     <div class="metric-card"><small>Perdidas no mês</small><strong>{{ dados.perdidas }}</strong></div>
-    <div class="metric-card"><small>Valor previsto</small><strong>{{ br_moeda(dados.troco_previsto) }}</strong></div>
+    <div class="metric-card"><small>Troco previsto</small><strong>{{ br_moeda(dados.troco_previsto) }}</strong></div>
     <div class="metric-card"><small>Valor pago no mês</small><strong>{{ br_moeda(dados.troco_pago) }}</strong></div>
     <div class="metric-card">
         {% set ajuda_comissao_prevista = 'Comissão prevista: soma atual das comissões em ' ~ (dados.comissao_prevista_status | join(', ')) ~ '.' %}
@@ -44,6 +44,26 @@
             </details>
         </div>
         <strong>{{ br_moeda(saldo_em_conta) }}</strong>
+    </div>
+    <div class="metric-card">
+        {% set ajuda_valor_previsto = 'Valor Previsto = Comissão Prevista + Valor a Sacar + Falta Cair na Promotora + Saldo em Conta.' %}
+        <div class="metric-label-row">
+            <small>Valor Previsto</small>
+            <button type="button" class="metric-help-button" title="{{ ajuda_valor_previsto }}" aria-label="Ajuda sobre valor previsto">
+                <i class="bi bi-question-circle" aria-hidden="true"></i>
+            </button>
+        </div>
+        <strong>{{ br_moeda(dados.valor_previsto) }}</strong>
+    </div>
+    <div class="metric-card">
+        {% set ajuda_valor_a_receber = 'Valor a Receber = Valor a Sacar + Falta Cair na Promotora + Saldo em Conta.' %}
+        <div class="metric-label-row">
+            <small>Valor a Receber</small>
+            <button type="button" class="metric-help-button" title="{{ ajuda_valor_a_receber }}" aria-label="Ajuda sobre valor a receber">
+                <i class="bi bi-question-circle" aria-hidden="true"></i>
+            </button>
+        </div>
+        <strong>{{ br_moeda(dados.valor_a_receber) }}</strong>
     </div>
 </section>
 

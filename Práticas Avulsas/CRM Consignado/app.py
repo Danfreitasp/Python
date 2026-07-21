@@ -423,6 +423,68 @@ def init_db() -> None:
     if "nascimento" not in colunas_propostas:
         db.execute("ALTER TABLE propostas ADD COLUMN nascimento TEXT")
 
+    # Completa dados de cliente que ficaram vazios em refins vinculados criados
+    # antes de nascimento e espécie fazerem parte desse fluxo.
+    db.execute(
+        """
+        UPDATE propostas
+        SET
+            nascimento = COALESCE(
+                NULLIF(TRIM(nascimento), ''),
+                (
+                    SELECT NULLIF(TRIM(origem.nascimento), '')
+                    FROM propostas origem
+                    WHERE UPPER(TRIM(origem.numero_proposta)) = UPPER(TRIM(propostas.numero_port_vinculada))
+                    LIMIT 1
+                ),
+                ''
+            ),
+            especie = COALESCE(
+                NULLIF(TRIM(especie), ''),
+                (
+                    SELECT NULLIF(TRIM(origem.especie), '')
+                    FROM propostas origem
+                    WHERE UPPER(TRIM(origem.numero_proposta)) = UPPER(TRIM(propostas.numero_port_vinculada))
+                    LIMIT 1
+                ),
+                ''
+            ),
+            tipo_cliente = COALESCE(
+                NULLIF(TRIM(tipo_cliente), ''),
+                (
+                    SELECT COALESCE(
+                        NULLIF(TRIM(origem.tipo_cliente), ''),
+                        NULLIF(TRIM(cliente.tipo_cliente), ''),
+                        CASE
+                            WHEN COALESCE(TRIM(origem.especie), '') <> '' THEN 'INSS'
+                            ELSE NULL
+                        END
+                    )
+                    FROM propostas origem
+                    LEFT JOIN clientes cliente ON cliente.id = origem.cliente_id
+                    WHERE UPPER(TRIM(origem.numero_proposta)) = UPPER(TRIM(propostas.numero_port_vinculada))
+                    LIMIT 1
+                ),
+                ''
+            )
+        WHERE UPPER(TRIM(COALESCE(produto, ''))) = 'REFINANCIAMENTO'
+          AND COALESCE(TRIM(numero_port_vinculada), '') <> ''
+          AND (
+              COALESCE(TRIM(nascimento), '') = ''
+              OR COALESCE(TRIM(especie), '') = ''
+              OR COALESCE(TRIM(tipo_cliente), '') = ''
+          )
+        """
+    )
+    db.execute(
+        """
+        UPDATE propostas
+        SET data_verificacao = SUBSTR(data_criacao, 1, 10)
+        WHERE COALESCE(TRIM(data_verificacao), '') = ''
+          AND COALESCE(TRIM(data_criacao), '') <> ''
+        """
+    )
+
     colunas_tarefas = {row["name"] for row in db.execute("PRAGMA table_info(tarefas)").fetchall()}
     if "titulo" not in colunas_tarefas:
         db.execute("ALTER TABLE tarefas ADD COLUMN titulo TEXT NOT NULL DEFAULT 'Tarefa'")
@@ -2174,7 +2236,7 @@ def simulador_inss_criar_proposta():
         (
             salvar_cliente_dos_dados(dados_prop), dados_prop["nome"], dados_prop["cpf"], dados_prop["nb_matricula"], dados_prop["numero_proposta"],
             dados_prop["numero_port_vinculada"], dados_prop["numero_refin_vinculada"], dados_prop["tipo_cliente"], dados_prop["banco_atual"], dados_prop["banco_destino"], dados_prop["banco_digitado"], dados_prop["produto"],
-            dados_prop["promotora"], dados_prop["beneficio_bloqueado"], dados_prop["valor_caiu_promotora"], dados_prop["valor_sacado"], None, dados_prop["parcela_atual"], dados_prop["nova_parcela"], dados_prop["troco"],
+            dados_prop["promotora"], dados_prop["beneficio_bloqueado"], dados_prop["valor_caiu_promotora"], dados_prop["valor_sacado"], hoje_iso(), dados_prop["parcela_atual"], dados_prop["nova_parcela"], dados_prop["troco"],
             dados_prop["comissao_percentual"], dados_prop["comissao"], dados_prop["margem_apos"], dados_prop["status"], dados_prop["responsavel"], dados_prop["telefone"], dados_prop["endereco"], dados_prop["dados_bancarios"],
             agora, agora, dados_prop["proxima_acao"], dados_prop["data_retorno"], dados_prop["observacoes"],
         ),
@@ -2225,7 +2287,7 @@ def nova_proposta():
                 salvar_cliente_dos_dados(dados), dados["nome"], dados["cpf"], dados["nascimento"], dados["nb_matricula"], dados["especie"], dados["numero_proposta"],
                 dados["numero_port_vinculada"], dados["numero_refin_vinculada"], dados["tipo_cliente"],
                 dados["banco_atual"], dados["banco_destino"], dados["banco_digitado"], dados["produto"],
-                dados["promotora"], dados["beneficio_bloqueado"], dados["valor_caiu_promotora"], dados["valor_sacado"], None, dados["parcela_atual"], dados["nova_parcela"], dados["troco"], dados["comissao_percentual"], dados["comissao"], dados["margem_apos"],
+                dados["promotora"], dados["beneficio_bloqueado"], dados["valor_caiu_promotora"], dados["valor_sacado"], hoje_iso(), dados["parcela_atual"], dados["nova_parcela"], dados["troco"], dados["comissao_percentual"], dados["comissao"], dados["margem_apos"],
                 dados["status"], dados["responsavel"], dados["telefone"], dados["endereco"], dados["dados_bancarios"], agora, agora,
                 dados["proxima_acao"], dados["data_retorno"], dados["observacoes"],
             ),
@@ -2302,19 +2364,32 @@ def criar_refin_vinculado(proposta_id: int):
     status_inicial = status_padrao()
     observacao = f"Refinanciamento criado a partir da portabilidade nº {numero_port}."
 
+    cliente_id_refin = (
+        port["cliente_id"]
+        if "cliente_id" in port.keys() and port["cliente_id"]
+        else salvar_cliente_dos_dados(port)
+    )
+    tipo_cliente_refin = limpar_texto(port["tipo_cliente"])
+    if not tipo_cliente_refin and cliente_id_refin:
+        cliente = db.execute("SELECT tipo_cliente FROM clientes WHERE id = ?", (cliente_id_refin,)).fetchone()
+        if cliente:
+            tipo_cliente_refin = limpar_texto(cliente["tipo_cliente"])
+    if not tipo_cliente_refin and limpar_texto(port["especie"]):
+        # Espécie numérica é um dado próprio do benefício previdenciário do INSS.
+        tipo_cliente_refin = "INSS"
+
     cursor = db.execute(
         """
         INSERT INTO propostas (
-            cliente_id, nome, cpf, nb_matricula, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
+            cliente_id, nome, cpf, nascimento, nb_matricula, especie, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
             promotora, beneficio_bloqueado, valor_caiu_promotora, valor_sacado, data_verificacao, parcela_atual, nova_parcela, troco, comissao_percentual, comissao, margem_apos, status, responsavel,
             telefone, endereco, dados_bancarios, data_criacao, data_atualizacao, proxima_acao, data_retorno, observacoes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            (port["cliente_id"] if "cliente_id" in port.keys() and port["cliente_id"] else salvar_cliente_dos_dados(port)),
-            port["nome"], port["cpf"], port["nb_matricula"], numero_refin, numero_port, "",
-            port["tipo_cliente"], "", "", banco_refin, "Refinanciamento",
-            port["promotora"], port["beneficio_bloqueado"] or "NÃO", "NÃO", "NÃO", None,
+            cliente_id_refin, port["nome"], port["cpf"], port["nascimento"], port["nb_matricula"], port["especie"], numero_refin, numero_port, "",
+            tipo_cliente_refin, "", "", banco_refin, "Refinanciamento",
+            port["promotora"], port["beneficio_bloqueado"] or "NÃO", "NÃO", "NÃO", hoje_iso(),
             0, 0, 0, 0, 0, "", status_inicial, port["responsavel"], port["telefone"],
             port["endereco"] if "endereco" in port.keys() else "",
             port["dados_bancarios"] if "dados_bancarios" in port.keys() else "",
@@ -3538,6 +3613,32 @@ def mes_agenda_de_args(args: Any) -> date:
         return date.today().replace(day=1)
 
 
+def carregar_retornos_agenda(inicio: date, fim: date) -> list[sqlite3.Row]:
+    """Retorna uma previsão por operação, sem duplicar portabilidade + refin."""
+    return get_db().execute(
+        """
+        SELECT p.id, p.nome, p.data_retorno, p.proxima_acao, p.status
+        FROM propostas p
+        WHERE p.data_retorno >= ? AND p.data_retorno < ?
+          AND p.status NOT IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')
+          AND NOT (
+              UPPER(TRIM(COALESCE(p.produto, ''))) = 'REFINANCIAMENTO'
+              AND COALESCE(TRIM(p.numero_port_vinculada), '') <> ''
+              AND EXISTS (
+                  SELECT 1
+                  FROM propostas port
+                  WHERE port.id <> p.id
+                    AND UPPER(TRIM(COALESCE(port.numero_proposta, ''))) = UPPER(TRIM(p.numero_port_vinculada))
+                    AND COALESCE(TRIM(port.data_retorno), '') <> ''
+                    AND port.status NOT IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')
+              )
+          )
+        ORDER BY p.data_retorno, p.nome, p.id
+        """,
+        (inicio.isoformat(), fim.isoformat()),
+    ).fetchall()
+
+
 def contexto_calendario(mes: date) -> dict[str, Any]:
     """Monta os eventos mensais sem criar retornos duplicados no banco."""
     if mes.month == 12:
@@ -3552,13 +3653,7 @@ def contexto_calendario(mes: date) -> dict[str, Any]:
            ORDER BY COALESCE(NULLIF(t.horario, ''), '99:99'), t.id""",
         (mes.isoformat(), proximo_mes.isoformat()),
     ).fetchall()
-    retornos = get_db().execute(
-        """SELECT id, nome, data_retorno, proxima_acao, status FROM propostas
-           WHERE data_retorno >= ? AND data_retorno < ?
-             AND status NOT IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')
-           ORDER BY data_retorno, nome""",
-        (mes.isoformat(), proximo_mes.isoformat()),
-    ).fetchall()
+    retornos = carregar_retornos_agenda(mes, proximo_mes)
     eventos_por_data: dict[str, list[dict[str, Any]]] = {}
     for tarefa in tarefas:
         eventos_por_data.setdefault(tarefa["data_tarefa"], []).append({
@@ -3607,13 +3702,7 @@ def contexto_semana_agenda(referencia: date) -> dict[str, Any]:
            ORDER BY t.data_tarefa, COALESCE(NULLIF(t.horario, ''), '99:99'), t.id""",
         (inicio.isoformat(), fim.isoformat()),
     ).fetchall()
-    retornos = get_db().execute(
-        """SELECT id, nome, data_retorno, proxima_acao, status FROM propostas
-           WHERE data_retorno >= ? AND data_retorno < ?
-             AND status NOT IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')
-           ORDER BY data_retorno, nome""",
-        (inicio.isoformat(), fim.isoformat()),
-    ).fetchall()
+    retornos = carregar_retornos_agenda(inicio, fim)
     eventos_horarios: dict[str, list[dict[str, Any]]] = {}
     eventos_dia_inteiro: dict[str, list[dict[str, Any]]] = {}
     for tarefa in tarefas:
@@ -4248,6 +4337,9 @@ def consulta_dashboard(mes: str) -> dict[str, Any]:
     valor_a_sacar = sum(float(p["comissao"] or 0) for p in pagas if (p["valor_caiu_promotora"] or "NÃO") == "SIM" and (p["valor_sacado"] or "NÃO") != "SIM")
     falta_cair_promotora = sum(float(p["comissao"] or 0) for p in pagas if (p["valor_caiu_promotora"] or "NÃO") != "SIM")
     valor_ja_sacado = sum(float(p["comissao"] or 0) for p in pagas if (p["valor_sacado"] or "NÃO") == "SIM")
+    saldo_atual = saldo_em_conta()
+    valor_a_receber = valor_a_sacar + falta_cair_promotora + saldo_atual
+    valor_previsto = comissao_prevista + valor_a_receber
 
     def agrupar(campo: str) -> list[dict[str, Any]]:
         rows = db.execute(
@@ -4276,6 +4368,9 @@ def consulta_dashboard(mes: str) -> dict[str, Any]:
         "valor_a_sacar": valor_a_sacar,
         "falta_cair_promotora": falta_cair_promotora,
         "valor_ja_sacado": valor_ja_sacado,
+        "saldo_em_conta": saldo_atual,
+        "valor_a_receber": valor_a_receber,
+        "valor_previsto": valor_previsto,
         "por_status": agrupar("status"),
         "por_banco": agrupar("banco_digitado"),
         "por_produto": agrupar("produto"),
@@ -4293,7 +4388,7 @@ def saldo_em_conta() -> float:
 def dashboard():
     mes = limpar_texto(request.args.get("mes")) or mes_atual()
     dados = consulta_dashboard(mes)
-    return render_template("dashboard.html", dados=dados, saldo_em_conta=saldo_em_conta())
+    return render_template("dashboard.html", dados=dados, saldo_em_conta=dados["saldo_em_conta"])
 
 
 @app.route("/dashboard/saldo", methods=["POST"])
@@ -4632,7 +4727,7 @@ def importar():
                 normalizar_bloqueado(row.get("beneficio_bloqueado")),
                 normalizar_sim_nao(row.get("valor_caiu_promotora")),
                 normalizar_sim_nao(row.get("valor_sacado")),
-                None,
+                hoje_iso(),
                 parse_moeda(row.get("parcela_atual")),
                 parse_moeda(row.get("nova_parcela")),
                 parse_moeda(row.get("troco")),
