@@ -136,12 +136,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const agendaNavLink = document.querySelector('[data-agenda-nav]');
+    const agendaNavAlert = document.querySelector('[data-agenda-alert]');
+    function atualizarIndicadorAgenda(ativo, total = 0) {
+        if (!agendaNavLink || !agendaNavAlert || typeof ativo !== 'boolean') return;
+        const quantidade = Number(total || 0);
+        agendaNavAlert.hidden = !ativo;
+        const descricao = ativo
+            ? `Agenda: ${quantidade} compromisso(s) com horário próximo(s) ou vencido(s)`
+            : 'Agenda';
+        agendaNavLink.title = descricao;
+        agendaNavLink.setAttribute('aria-label', descricao);
+    }
+
     async function verificarLembretesAgenda() {
         try {
             const response = await fetch('/api/agenda/lembretes', { headers: { Accept: 'application/json' } });
             if (!response.ok) return;
             const payload = await response.json();
             const lembretes = Array.isArray(payload.lembretes) ? payload.lembretes : [];
+            atualizarIndicadorAgenda(Boolean(payload.agenda_alerta_ativo), payload.agenda_alerta_total);
             if (!lembretes.length) return;
             const ids = [];
             lembretes.forEach((lembrete) => {
@@ -786,6 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const countName = agendaCountName(section?.dataset.agendaSection || '');
                 if (countName) updateAgendaCount(countName, -1);
                 if (payload.status === 'concluida') updateAgendaCount('concluidas_hoje', 1);
+                atualizarIndicadorAgenda(payload.agenda_alerta_ativo, payload.agenda_alerta_total);
                 mostrarAvisoCopiado(payload.message || 'Tarefa atualizada.');
             } catch (error) {
                 console.error(error);
@@ -817,6 +832,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 refreshAgendaSection(section);
                 const countName = agendaCountName(section?.dataset.agendaSection || '');
                 if (countName) updateAgendaCount(countName, -1);
+                atualizarIndicadorAgenda(payload.agenda_alerta_ativo, payload.agenda_alerta_total);
                 mostrarAvisoCopiado(payload.message || 'Tarefa excluída.');
             } catch (error) {
                 console.error(error);
@@ -1232,24 +1248,129 @@ document.addEventListener('DOMContentLoaded', () => {
 // v23 - Alternância de modo claro/escuro com preferência salva no navegador.
 document.addEventListener('DOMContentLoaded', () => {
     const botaoTema = document.getElementById('themeToggle');
-    if (!botaoTema) return;
+    const seletorTema = document.getElementById('settingsTheme');
+    if (!botaoTema && !seletorTema) return;
 
     function aplicarTema(tema) {
         document.documentElement.setAttribute('data-theme', tema);
         localStorage.setItem('crmTema', tema);
-        botaoTema.innerHTML = tema === 'escuro'
-            ? '<i class="bi bi-sun" aria-hidden="true"></i><span>Modo claro</span>'
-            : '<i class="bi bi-moon" aria-hidden="true"></i><span>Modo escuro</span>';
-        botaoTema.title = tema === 'escuro' ? 'Alternar para modo claro' : 'Alternar para modo escuro';
+        if (botaoTema) {
+            botaoTema.innerHTML = tema === 'escuro'
+                ? '<i class="bi bi-sun" aria-hidden="true"></i><span>Modo claro</span>'
+                : '<i class="bi bi-moon" aria-hidden="true"></i><span>Modo escuro</span>';
+            botaoTema.title = tema === 'escuro' ? 'Alternar para modo claro' : 'Alternar para modo escuro';
+        }
+        if (seletorTema) seletorTema.value = tema;
     }
 
     const temaAtual = localStorage.getItem('crmTema') || document.documentElement.getAttribute('data-theme') || 'claro';
     aplicarTema(temaAtual);
 
-    botaoTema.addEventListener('click', () => {
-        const atual = document.documentElement.getAttribute('data-theme') || 'claro';
-        aplicarTema(atual === 'escuro' ? 'claro' : 'escuro');
+    if (botaoTema) {
+        botaoTema.addEventListener('click', () => {
+            const atual = document.documentElement.getAttribute('data-theme') || 'claro';
+            aplicarTema(atual === 'escuro' ? 'claro' : 'escuro');
+        });
+    }
+    if (seletorTema) seletorTema.addEventListener('change', () => aplicarTema(seletorTema.value));
+});
+
+// Campos personalizados do Dashboard.
+document.addEventListener('DOMContentLoaded', () => {
+    const modeSelect = document.getElementById('dashboardFieldMode');
+    if (!modeSelect) return;
+    const groups = document.querySelectorAll('[data-dashboard-mode]');
+    const aggregation = document.getElementById('dashboardAggregation');
+    const aggregationValueField = document.querySelector('[data-aggregation-value-field]');
+    const filterField = document.getElementById('dashboardFilterField');
+    const filterValue = document.getElementById('dashboardFilterValue');
+    const filterValueWrap = document.getElementById('dashboardFilterValueWrap');
+    const optionsElement = document.getElementById('dashboardFilterOptions');
+    const formulaRows = document.getElementById('dashboardFormulaRows');
+    const formulaTemplate = document.getElementById('dashboardFormulaRowTemplate');
+    const addFormulaOperation = document.getElementById('addDashboardFormulaOperation');
+    let filterOptions = {};
+    try { filterOptions = JSON.parse(optionsElement?.textContent || '{}'); } catch (error) { filterOptions = {}; }
+
+    function updateMode() {
+        groups.forEach((group) => {
+            const active = group.dataset.dashboardMode === modeSelect.value;
+            group.hidden = !active;
+            group.querySelectorAll('input, select').forEach((control) => { control.disabled = !active; });
+        });
+    }
+
+    function updateAggregation() {
+        if (!aggregationValueField || !aggregation) return;
+        const hidden = aggregation.value === 'contagem';
+        aggregationValueField.hidden = hidden;
+        const select = aggregationValueField.querySelector('select');
+        if (select) select.disabled = hidden || modeSelect.value !== 'agregado';
+    }
+
+    function updateFilterValues() {
+        if (!filterField || !filterValue || !filterValueWrap) return;
+        const field = filterField.value;
+        const current = filterValue.dataset.currentValue || filterValue.value || '';
+        filterValue.replaceChildren();
+        const values = Array.from(filterOptions[field] || []);
+        if (current && !values.includes(current)) values.unshift(current);
+        values.forEach((value) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = value;
+            option.selected = value === current;
+            filterValue.appendChild(option);
+        });
+        const hidden = !field;
+        filterValueWrap.hidden = hidden;
+        filterValue.disabled = hidden || modeSelect.value !== 'agregado';
+        filterValue.dataset.currentValue = '';
+    }
+
+    function updateFormulaRow(row) {
+        const type = row.querySelector('[data-formula-operand-type]')?.value || 'indicador';
+        const indicatorWrap = row.querySelector('[data-formula-indicator-wrap]');
+        const fixedWrap = row.querySelector('[data-formula-fixed-wrap]');
+        const suffix = row.querySelector('[data-formula-fixed-suffix]');
+        if (indicatorWrap) indicatorWrap.hidden = type !== 'indicador';
+        if (fixedWrap) fixedWrap.hidden = type === 'indicador';
+        if (suffix) suffix.textContent = type === 'percentual_fixo' ? '(%)' : '';
+    }
+
+    function refreshFormulaRows() {
+        const rows = formulaRows ? Array.from(formulaRows.querySelectorAll('[data-formula-row]')) : [];
+        rows.forEach(updateFormulaRow);
+        rows.forEach((row) => {
+            const remove = row.querySelector('[data-remove-formula-operation]');
+            if (remove) remove.hidden = rows.length === 1;
+        });
+        if (addFormulaOperation) addFormulaOperation.hidden = rows.length >= 10;
+    }
+
+    modeSelect.addEventListener('change', () => { updateMode(); updateAggregation(); updateFilterValues(); });
+    aggregation?.addEventListener('change', updateAggregation);
+    filterField?.addEventListener('change', updateFilterValues);
+    formulaRows?.addEventListener('change', (event) => {
+        const row = event.target.closest('[data-formula-row]');
+        if (row) updateFormulaRow(row);
     });
+    formulaRows?.addEventListener('click', (event) => {
+        const remove = event.target.closest('[data-remove-formula-operation]');
+        if (!remove) return;
+        const row = remove.closest('[data-formula-row]');
+        if (row && formulaRows.querySelectorAll('[data-formula-row]').length > 1) row.remove();
+        refreshFormulaRows();
+    });
+    addFormulaOperation?.addEventListener('click', () => {
+        if (!formulaRows || !formulaTemplate || formulaRows.querySelectorAll('[data-formula-row]').length >= 10) return;
+        formulaRows.appendChild(formulaTemplate.content.cloneNode(true));
+        refreshFormulaRows();
+    });
+    updateMode();
+    updateAggregation();
+    updateFilterValues();
+    refreshFormulaRows();
 });
 
 // v27 - Abas internas na tela de detalhes da proposta.

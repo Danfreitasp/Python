@@ -30,13 +30,13 @@
 		<a href="{{ url_for('funil') }}" class="nav-link {% if request.endpoint == 'funil' %}active{% endif %}"><i class="bi bi-kanban nav-icon" aria-hidden="true"></i><span>Funil</span></a>
 		<a href="{{ url_for('nova_proposta') }}" class="nav-link {% if request.endpoint == 'nova_proposta' %}active{% endif %}"><i class="bi bi-plus-circle nav-icon" aria-hidden="true"></i><span>Nova Proposta</span></a>
 		<a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}"><i class="bi bi-card-checklist nav-icon" aria-hidden="true"></i><span>Propostas</span></a>
-		<a href="{{ url_for('agenda') }}" class="nav-link {% if request.endpoint == 'agenda' %}active{% endif %}"><i class="bi bi-calendar3 nav-icon" aria-hidden="true"></i><span>Agenda</span></a>
+		<a href="{{ url_for('agenda') }}" class="nav-link {% if request.endpoint == 'agenda' %}active{% endif %}" data-agenda-nav title="{% if agenda_alerta_ativo %}{{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}" aria-label="{% if agenda_alerta_ativo %}Agenda: {{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}"><i class="bi bi-calendar3 nav-icon" aria-hidden="true"></i><span>Agenda</span><span class="agenda-alert-badge" data-agenda-alert {% if not agenda_alerta_ativo %}hidden{% endif %} aria-hidden="true">!</span></a>
 		<a href="{{ url_for('simulador_inss') }}" class="nav-link {% if request.endpoint == 'simulador_inss' %}active{% endif %}"><i class="bi bi-calculator nav-icon" aria-hidden="true"></i><span>Simulador INSS</span></a>
 		<a href="{{ url_for('gerador_mensagens_page') }}" class="nav-link {% if request.endpoint == 'gerador_mensagens_page' %}active{% endif %}"><i class="bi bi-chat-left-text nav-icon" aria-hidden="true"></i><span>Gerador de Mensagens</span></a>
 		<a href="{{ url_for('converter_contatos') }}" class="nav-link {% if request.endpoint == 'converter_contatos' %}active{% endif %}"><i class="bi bi-arrow-left-right nav-icon" aria-hidden="true"></i><span>Converter Contatos</span></a>
 		<a href="{{ url_for('encerradas') }}" class="nav-link {% if request.endpoint == 'encerradas' %}active{% endif %}"><i class="bi bi-archive nav-icon" aria-hidden="true"></i><span>Encerradas</span></a>
 		<a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}"><i class="bi bi-bar-chart-line nav-icon" aria-hidden="true"></i><span>Dashboard</span></a>
-		<a href="{{ url_for('configurar_status') }}" class="nav-link {% if request.endpoint == 'configurar_status' %}active{% endif %}"><i class="bi bi-diagram-3 nav-icon" aria-hidden="true"></i><span>Editar Etapas</span></a>
+		<a href="{{ url_for('configuracoes') }}" class="nav-link {% if request.endpoint in ['configuracoes', 'configurar_status', 'configurar_dashboard'] %}active{% endif %}"><i class="bi bi-gear nav-icon" aria-hidden="true"></i><span>Configurações</span></a>
         </nav>
     </aside>
 

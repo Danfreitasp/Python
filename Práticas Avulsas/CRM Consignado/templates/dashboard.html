@@ -3,12 +3,15 @@
 {% set subtitulo = 'Resumo mensal de propostas, valores e conversões.' %}
 {% block content %}
 <section class="card">
-    <form method="get" class="month-filter">
-        <label>Mês de análise
-            <input type="month" name="mes" value="{{ dados.mes }}">
-        </label>
-        <button class="btn btn-primary" type="submit"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i><span>Atualizar</span></button>
-    </form>
+    <div class="toolbar">
+        <form method="get" class="month-filter">
+            <label>Mês de análise
+                <input type="month" name="mes" value="{{ dados.mes }}">
+            </label>
+            <button class="btn btn-primary" type="submit"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i><span>Atualizar</span></button>
+        </form>
+        <a class="btn" href="{{ url_for('configurar_dashboard') }}"><i class="bi bi-gear" aria-hidden="true"></i><span>Personalizar Dashboard</span></a>
+    </div>
 </section>
 
 <section class="metrics">
@@ -66,6 +69,39 @@
         <strong>{{ br_moeda(dados.valor_a_receber) }}</strong>
     </div>
 </section>
+
+{% if campos_dashboard %}
+<section class="dashboard-custom-section">
+    <div class="section-title-row">
+        <div><h2>Indicadores personalizados</h2><small>Valores calculados para {{ dados.mes[5:7] }}/{{ dados.mes[:4] }}.</small></div>
+    </div>
+    <div class="metrics dashboard-custom-metrics">
+        {% for campo in campos_dashboard %}
+        <div class="metric-card dashboard-custom-card color-{{ campo.cor }}">
+            <div class="metric-label-row">
+                <small>{{ campo.nome }}</small>
+                {% if campo.modalidade == 'manual' %}
+                <details class="metric-edit-menu">
+                    <summary class="metric-edit-button"><i class="bi bi-pencil-square" aria-hidden="true"></i><span>Editar</span></summary>
+                    <form method="post" action="{{ url_for('atualizar_valor_dashboard', campo_id=campo.id) }}" class="metric-edit-form">
+                        <input type="hidden" name="mes" value="{{ dados.mes }}">
+                        <label>Valor de {{ dados.mes[5:7] }}/{{ dados.mes[:4] }}
+                            <input type="text" name="valor" value="{{ ('%.2f'|format(campo.valor))|replace('.', ',') }}" inputmode="decimal" required>
+                        </label>
+                        <button class="btn btn-primary" type="submit">Salvar</button>
+                    </form>
+                </details>
+                {% endif %}
+            </div>
+            <strong>{{ campo.valor_formatado }}</strong>
+            <span class="dashboard-card-origin">
+                {% if campo.modalidade == 'manual' %}Valor manual mensal{% elif campo.modalidade == 'agregado' %}Calculado pelas propostas{% else %}Fórmula personalizada{% endif %}
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
 
 <section class="charts-grid">
     <div class="card stack">

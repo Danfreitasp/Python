@@ -96,6 +96,60 @@ DIAS_PARADA_OPERACIONAL = 3
 TAREFA_STATUS = ("pendente", "concluida", "adiada", "cancelada")
 TAREFA_PRIORIDADES = ("baixa", "normal", "alta")
 TAREFA_CATEGORIAS = ("Ligação", "WhatsApp", "Conferência", "Retorno", "Pagamento", "Documentação", "Administrativo", "Outro")
+AGENDA_ANTECEDENCIAS_MINUTOS = (5, 10, 15, 30, 60)
+AGENDA_ANTECEDENCIA_PADRAO = 10
+DASHBOARD_CAMPO_TIPOS = ("numero", "moeda", "percentual")
+DASHBOARD_CAMPO_MODALIDADES = ("manual", "agregado", "formula")
+DASHBOARD_CAMPO_CORES = ("azul", "verde", "laranja", "vermelho", "roxo", "neutro")
+DASHBOARD_AGREGACOES = ("contagem", "soma", "media")
+DASHBOARD_FORMULA_OPERACOES = {
+    "somar": "Somar (+)",
+    "subtrair": "Subtrair (−)",
+    "multiplicar": "Multiplicar (×)",
+    "dividir": "Dividir (÷)",
+    "percentual_de": "Percentual de",
+    "variacao_percentual": "Variação percentual",
+    "media": "Média",
+    "maior": "Maior valor",
+    "menor": "Menor valor",
+    "diferenca_absoluta": "Diferença absoluta",
+}
+DASHBOARD_FORMULA_OPERANDO_TIPOS = {
+    "indicador": "Outro indicador",
+    "valor_fixo": "Valor fixo",
+    "percentual_fixo": "Percentual fixo",
+}
+DASHBOARD_AGREGACAO_CAMPOS = {
+    "troco": "Troco",
+    "comissao": "Comissão",
+    "parcela_atual": "Parcela atual",
+    "nova_parcela": "Nova parcela",
+    "comissao_percentual": "Comissão percentual",
+}
+DASHBOARD_FILTRO_CAMPOS = {
+    "": "Sem filtro adicional",
+    "status": "Status",
+    "produto": "Produto",
+    "banco_digitado": "Banco digitado",
+    "promotora": "Promotora",
+    "valor_caiu_promotora": "Valor caiu na promotora",
+    "valor_sacado": "Valor sacado",
+}
+DASHBOARD_INDICADORES_BASE = {
+    "total": {"nome": "Propostas criadas", "tipo": "numero"},
+    "pagas": {"nome": "Propostas pagas", "tipo": "numero"},
+    "perdidas": {"nome": "Propostas perdidas", "tipo": "numero"},
+    "troco_previsto": {"nome": "Troco previsto", "tipo": "moeda"},
+    "troco_pago": {"nome": "Valor pago no mês", "tipo": "moeda"},
+    "comissao_prevista": {"nome": "Comissão prevista", "tipo": "moeda"},
+    "comissao_paga": {"nome": "Comissão paga no mês", "tipo": "moeda"},
+    "valor_a_sacar": {"nome": "Valor a sacar", "tipo": "moeda"},
+    "falta_cair_promotora": {"nome": "Falta cair na promotora", "tipo": "moeda"},
+    "valor_ja_sacado": {"nome": "Já sacado", "tipo": "moeda"},
+    "saldo_em_conta": {"nome": "Saldo em conta", "tipo": "moeda"},
+    "valor_a_receber": {"nome": "Valor a receber", "tipo": "moeda"},
+    "valor_previsto": {"nome": "Valor previsto", "tipo": "moeda"},
+}
 NOTIFICACOES_IMPORTANTES_OBSERVACOES = (
     "Proposta criada%",
     "Proposta importada%",
@@ -113,6 +167,7 @@ DESTINOS_INTERNOS_PREFIXOS = (
     "/gerador-mensagens",
     "/converter-contatos",
     "/mensagens",
+    "/configuracoes",
     "/configuracoes/status",
     "/proposta/",
 )
@@ -478,6 +533,35 @@ def init_db() -> None:
     )
     db.execute(
         """
+        CREATE TABLE IF NOT EXISTS dashboard_campos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            tipo TEXT NOT NULL DEFAULT 'numero',
+            modalidade TEXT NOT NULL DEFAULT 'manual',
+            configuracao_json TEXT NOT NULL DEFAULT '{}',
+            cor TEXT NOT NULL DEFAULT 'azul',
+            ordem INTEGER NOT NULL DEFAULT 0,
+            ativo INTEGER NOT NULL DEFAULT 1,
+            criado_em TEXT NOT NULL,
+            atualizado_em TEXT NOT NULL
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS dashboard_valores_manuais (
+            campo_id INTEGER NOT NULL,
+            mes TEXT NOT NULL,
+            valor REAL NOT NULL DEFAULT 0,
+            atualizado_em TEXT NOT NULL,
+            PRIMARY KEY (campo_id, mes),
+            FOREIGN KEY (campo_id) REFERENCES dashboard_campos(id) ON DELETE CASCADE
+        )
+        """
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_dashboard_campos_ordem ON dashboard_campos(ativo, ordem, id)")
+    db.execute(
+        """
         UPDATE propostas
         SET data_verificacao = SUBSTR(data_criacao, 1, 10)
         WHERE COALESCE(TRIM(data_verificacao), '') = ''
@@ -821,6 +905,50 @@ def limpar_texto(valor: Any) -> str:
     if valor is None:
         return ""
     return str(valor).strip()
+
+
+def obter_configuracao(chave: str, padrao: str = "") -> str:
+    registro = get_db().execute(
+        "SELECT valor FROM configuracoes WHERE chave = ?",
+        (chave,),
+    ).fetchone()
+    return limpar_texto(registro["valor"]) if registro else padrao
+
+
+def salvar_configuracao(chave: str, valor: Any) -> None:
+    get_db().execute(
+        """INSERT INTO configuracoes (chave, valor, atualizado_em) VALUES (?, ?, ?)
+           ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, atualizado_em = excluded.atualizado_em""",
+        (chave, str(valor), agora_iso()),
+    )
+
+
+def agenda_antecedencia_minutos() -> int:
+    try:
+        valor = int(obter_configuracao("agenda_antecedencia_minutos", str(AGENDA_ANTECEDENCIA_PADRAO)))
+    except (TypeError, ValueError):
+        valor = AGENDA_ANTECEDENCIA_PADRAO
+    return valor if valor in AGENDA_ANTECEDENCIAS_MINUTOS else AGENDA_ANTECEDENCIA_PADRAO
+
+
+def agenda_notificar_padrao() -> bool:
+    return obter_configuracao("agenda_notificar_padrao", "0") == "1"
+
+
+def agenda_alerta_info() -> dict[str, Any]:
+    antecedencia = agenda_antecedencia_minutos()
+    limite = (datetime.now() + timedelta(minutes=antecedencia)).strftime("%Y-%m-%d %H:%M:%S")
+    registro = get_db().execute(
+        """SELECT COUNT(*) AS total
+           FROM tarefas
+           WHERE notificar = 1
+             AND status IN ('pendente', 'adiada')
+             AND COALESCE(TRIM(horario), '') <> ''
+             AND datetime(data_tarefa || ' ' || horario) <= datetime(?)""",
+        (limite,),
+    ).fetchone()
+    total = int(registro["total"] or 0)
+    return {"ativo": total > 0, "total": total, "antecedencia_minutos": antecedencia}
 
 
 def url_interna_segura(valor: Any, fallback: str | None = None) -> str:
@@ -1972,6 +2100,7 @@ def status_verificacao_texto(proposta: sqlite3.Row | dict[str, Any]) -> str:
 def helpers() -> dict[str, Any]:
     notificacoes = carregar_notificacoes_importantes()
     total_nao_lidas = sum(1 for notificacao in notificacoes if not notificacao["lida"])
+    alerta_agenda = agenda_alerta_info()
     return {
         "STATUS_LIST": nomes_status(),
         "STATUS_VENDEDOR": nomes_status("vendedor"),
@@ -2002,6 +2131,9 @@ def helpers() -> dict[str, Any]:
         "origem_eh_hoje": origem_eh_hoje,
         "notificacoes_importantes": notificacoes,
         "notificacoes_importantes_total": total_nao_lidas,
+        "agenda_alerta_ativo": alerta_agenda["ativo"],
+        "agenda_alerta_total": alerta_agenda["total"],
+        "agenda_antecedencia_minutos": alerta_agenda["antecedencia_minutos"],
         "anexos_base_dir": str(ANEXOS_BASE_DIR),
     }
 
@@ -2873,7 +3005,15 @@ def excluir_tarefa(tarefa_id: int):
     get_db().execute("DELETE FROM tarefas WHERE id = ?", (tarefa_id,))
     get_db().commit()
     if request.headers.get("X-Requested-With") == "fetch":
-        return jsonify({"success": True, "message": "Tarefa excluída.", "tarefa_id": tarefa_id, "status": "excluida"})
+        alerta_agenda = agenda_alerta_info()
+        return jsonify({
+            "success": True,
+            "message": "Tarefa excluída.",
+            "tarefa_id": tarefa_id,
+            "status": "excluida",
+            "agenda_alerta_ativo": alerta_agenda["ativo"],
+            "agenda_alerta_total": alerta_agenda["total"],
+        })
     flash("Tarefa excluída.", "ok")
     return redirect(url_interna_segura(request.form.get("next") or request.referrer, "/hoje"))
 
@@ -3447,7 +3587,7 @@ def tarefa_vazia(proposta: sqlite3.Row | None = None) -> dict[str, Any]:
         "prioridade": "normal",
         "status": "pendente",
         "categoria": "Retorno",
-        "notificar": 0,
+        "notificar": 1 if agenda_notificar_padrao() else 0,
         "proposta_id": proposta["id"] if proposta else "",
     }
 
@@ -3743,6 +3883,7 @@ def contexto_semana_agenda(referencia: date) -> dict[str, Any]:
 
 def tarefa_json(tarefa_id: int, mensagem: str) -> dict[str, Any]:
     tarefa = buscar_tarefa(tarefa_id)
+    alerta_agenda = agenda_alerta_info()
     return {
         "success": True,
         "message": mensagem,
@@ -3750,6 +3891,8 @@ def tarefa_json(tarefa_id: int, mensagem: str) -> dict[str, Any]:
         "status": tarefa["status"] if tarefa else "",
         "data_tarefa": tarefa["data_tarefa"] if tarefa else "",
         "concluido_em": tarefa["concluido_em"] if tarefa else "",
+        "agenda_alerta_ativo": alerta_agenda["ativo"],
+        "agenda_alerta_total": alerta_agenda["total"],
     }
 
 
@@ -3772,7 +3915,13 @@ def lembretes_agenda():
            ORDER BY t.data_tarefa, t.horario, t.id""",
         (agora_iso(),),
     ).fetchall()
-    return jsonify({"lembretes": [dict(item) for item in lembretes]})
+    alerta_agenda = agenda_alerta_info()
+    return jsonify({
+        "lembretes": [dict(item) for item in lembretes],
+        "agenda_alerta_ativo": alerta_agenda["ativo"],
+        "agenda_alerta_total": alerta_agenda["total"],
+        "agenda_antecedencia_minutos": alerta_agenda["antecedencia_minutos"],
+    })
 
 
 @app.route("/api/agenda/lembretes/confirmar", methods=["POST"])
@@ -4152,6 +4301,372 @@ def administrativo():
     return redirect(url_for("funil"))
 
 
+@app.route("/configuracoes", methods=["GET", "POST"])
+def configuracoes():
+    if request.method == "POST":
+        try:
+            antecedencia = int(request.form.get("agenda_antecedencia_minutos") or 0)
+        except (TypeError, ValueError):
+            antecedencia = 0
+        if antecedencia not in AGENDA_ANTECEDENCIAS_MINUTOS:
+            flash("Escolha uma antecedência válida para os avisos da agenda.", "erro")
+            return redirect(url_for("configuracoes"))
+
+        salvar_configuracao("agenda_antecedencia_minutos", antecedencia)
+        salvar_configuracao("agenda_notificar_padrao", 1 if request.form.get("agenda_notificar_padrao") == "1" else 0)
+        get_db().commit()
+        flash("Configurações salvas.", "ok")
+        return redirect(url_for("configuracoes"))
+
+    return render_template(
+        "configuracoes.html",
+        antecedencias=AGENDA_ANTECEDENCIAS_MINUTOS,
+        antecedencia_atual=agenda_antecedencia_minutos(),
+        notificar_padrao=agenda_notificar_padrao(),
+        titulo="Configurações",
+        subtitulo="Personalize os alertas, o funil e a aparência do CRM.",
+    )
+
+
+def normalizar_formula_dashboard(configuracao: dict[str, Any], tipo_resultado: str = "numero") -> dict[str, Any]:
+    primeiro = limpar_texto(configuracao.get("primeiro") or configuracao.get("indicador_a"))
+    operacoes_brutas = configuracao.get("operacoes")
+    if not isinstance(operacoes_brutas, list):
+        operador_antigo = limpar_texto(configuracao.get("operador"))
+        if tipo_resultado == "percentual" and operador_antigo == "dividir":
+            operador_antigo = "percentual_de"
+        operacoes_brutas = [{
+            "operador": operador_antigo,
+            "operando_tipo": "indicador",
+            "indicador": limpar_texto(configuracao.get("indicador_b")),
+        }] if operador_antigo else []
+
+    operacoes: list[dict[str, Any]] = []
+    for operacao in operacoes_brutas[:10]:
+        if not isinstance(operacao, dict):
+            continue
+        operando_tipo = limpar_texto(operacao.get("operando_tipo")) or "indicador"
+        try:
+            valor = float(operacao.get("valor") or 0)
+        except (TypeError, ValueError):
+            valor = 0.0
+        valor_exibicao = valor * 100 if operando_tipo == "percentual_fixo" else valor
+        texto_valor = f"{valor_exibicao:.6f}".rstrip("0").rstrip(".").replace(".", ",")
+        operacoes.append({
+            "operador": limpar_texto(operacao.get("operador")),
+            "operando_tipo": operando_tipo,
+            "indicador": limpar_texto(operacao.get("indicador")),
+            "valor": valor,
+            "valor_exibicao": texto_valor or "0",
+        })
+    return {"primeiro": primeiro, "operacoes": operacoes, "limitar_zero": bool(configuracao.get("limitar_zero"))}
+
+
+def carregar_dashboard_campos(apenas_ativos: bool = False) -> list[dict[str, Any]]:
+    where = "WHERE ativo = 1" if apenas_ativos else ""
+    rows = get_db().execute(
+        f"SELECT * FROM dashboard_campos {where} ORDER BY ordem, id"
+    ).fetchall()
+    campos: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        try:
+            configuracao = json.loads(item["configuracao_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            configuracao = {}
+        item["configuracao"] = configuracao if isinstance(configuracao, dict) else {}
+        if item["modalidade"] == "formula":
+            item["formula"] = normalizar_formula_dashboard(item["configuracao"], item["tipo"])
+        campos.append(item)
+    return campos
+
+
+def indicadores_dashboard_disponiveis(excluir_id: int | None = None) -> list[dict[str, str]]:
+    indicadores = [
+        {"chave": chave, "nome": info["nome"], "tipo": info["tipo"]}
+        for chave, info in DASHBOARD_INDICADORES_BASE.items()
+    ]
+    for campo in carregar_dashboard_campos():
+        if excluir_id and campo["id"] == excluir_id:
+            continue
+        indicadores.append({
+            "chave": f"personalizado:{campo['id']}",
+            "nome": campo["nome"],
+            "tipo": campo["tipo"],
+        })
+    return indicadores
+
+
+def dashboard_filtros_valores() -> dict[str, list[str]]:
+    valores: dict[str, list[str]] = {"": []}
+    for campo in DASHBOARD_FILTRO_CAMPOS:
+        if not campo:
+            continue
+        rows = get_db().execute(
+            f"""SELECT DISTINCT TRIM(COALESCE({campo}, '')) AS valor
+                FROM propostas
+                WHERE TRIM(COALESCE({campo}, '')) <> ''
+                ORDER BY valor COLLATE NOCASE"""
+        ).fetchall()
+        valores[campo] = [row["valor"] for row in rows]
+    return valores
+
+
+def dados_campo_dashboard_form(campo_id: int | None = None) -> tuple[dict[str, Any], list[str]]:
+    erros: list[str] = []
+    nome = limpar_texto(request.form.get("nome"))
+    tipo = limpar_texto(request.form.get("tipo"))
+    modalidade = limpar_texto(request.form.get("modalidade"))
+    cor = limpar_texto(request.form.get("cor"))
+    try:
+        ordem = max(1, int(request.form.get("ordem") or 1))
+    except (TypeError, ValueError):
+        ordem = 1
+    ativo = 1 if request.form.get("ativo") == "1" else 0
+
+    if not nome:
+        erros.append("Informe o nome do campo do Dashboard.")
+    if tipo not in DASHBOARD_CAMPO_TIPOS:
+        erros.append("Escolha um tipo de valor válido.")
+    if modalidade not in DASHBOARD_CAMPO_MODALIDADES:
+        erros.append("Escolha uma origem válida para o indicador.")
+    if cor not in DASHBOARD_CAMPO_CORES:
+        cor = "azul"
+
+    configuracao: dict[str, Any] = {}
+    if modalidade == "agregado":
+        operacao = limpar_texto(request.form.get("agregacao"))
+        campo_valor = limpar_texto(request.form.get("campo_valor"))
+        base_data = limpar_texto(request.form.get("base_data"))
+        filtro_campo = limpar_texto(request.form.get("filtro_campo"))
+        filtro_valor = limpar_texto(request.form.get("filtro_valor"))
+        if operacao not in DASHBOARD_AGREGACOES:
+            erros.append("Escolha como os dados das propostas serão calculados.")
+        if operacao != "contagem" and campo_valor not in DASHBOARD_AGREGACAO_CAMPOS:
+            erros.append("Escolha qual valor das propostas será usado no cálculo.")
+        if base_data not in ("criacao", "encerramento"):
+            erros.append("Escolha a referência mensal do indicador.")
+        if filtro_campo not in DASHBOARD_FILTRO_CAMPOS:
+            erros.append("Escolha um filtro de propostas válido.")
+        if filtro_campo and not filtro_valor:
+            erros.append("Escolha o valor do filtro de propostas.")
+        configuracao = {
+            "agregacao": operacao,
+            "campo_valor": campo_valor if operacao != "contagem" else "id",
+            "base_data": base_data,
+            "filtro_campo": filtro_campo,
+            "filtro_valor": filtro_valor if filtro_campo else "",
+        }
+    elif modalidade == "formula":
+        indicador_a = limpar_texto(request.form.get("indicador_a"))
+        chaves_validas = {item["chave"] for item in indicadores_dashboard_disponiveis(campo_id)}
+        if indicador_a not in chaves_validas:
+            erros.append("Escolha um indicador inicial válido para a fórmula.")
+        operadores = request.form.getlist("operador")[:10]
+        tipos_operandos = request.form.getlist("operando_tipo")[:10]
+        indicadores_b = request.form.getlist("indicador_b")[:10]
+        valores_fixos = request.form.getlist("valor_fixo")[:10]
+        if not operadores:
+            erros.append("Adicione pelo menos uma operação à fórmula.")
+        operacoes = []
+        for indice, operador in enumerate(operadores):
+            operador = limpar_texto(operador)
+            operando_tipo = limpar_texto(tipos_operandos[indice] if indice < len(tipos_operandos) else "indicador")
+            indicador_b = limpar_texto(indicadores_b[indice] if indice < len(indicadores_b) else "")
+            valor_texto = limpar_texto(valores_fixos[indice] if indice < len(valores_fixos) else "")
+            if operador not in DASHBOARD_FORMULA_OPERACOES:
+                erros.append(f"A operação {indice + 1} não é válida.")
+            if operando_tipo not in DASHBOARD_FORMULA_OPERANDO_TIPOS:
+                erros.append(f"Escolha a origem do valor na operação {indice + 1}.")
+                operando_tipo = "indicador"
+            valor = 0.0
+            if operando_tipo == "indicador":
+                if indicador_b not in chaves_validas:
+                    erros.append(f"Escolha um indicador válido na operação {indice + 1}.")
+            else:
+                if not valor_texto:
+                    erros.append(f"Informe o valor fixo da operação {indice + 1}.")
+                valor = parse_percentual(valor_texto) if operando_tipo == "percentual_fixo" else parse_moeda(valor_texto)
+                if operando_tipo == "percentual_fixo":
+                    valor /= 100
+            operacoes.append({
+                "operador": operador,
+                "operando_tipo": operando_tipo,
+                "indicador": indicador_b if operando_tipo == "indicador" else "",
+                "valor": valor,
+            })
+        configuracao = {
+            "primeiro": indicador_a,
+            "operacoes": operacoes,
+            "limitar_zero": request.form.get("limitar_zero") == "1",
+        }
+
+    return {
+        "nome": nome,
+        "tipo": tipo,
+        "modalidade": modalidade,
+        "configuracao_json": json.dumps(configuracao, ensure_ascii=False),
+        "configuracao": configuracao,
+        "cor": cor,
+        "ordem": ordem,
+        "ativo": ativo,
+    }, erros
+
+
+def referencias_formula_dashboard(configuracao: dict[str, Any], tipo_resultado: str = "numero") -> list[str]:
+    formula = normalizar_formula_dashboard(configuracao, tipo_resultado)
+    referencias = [formula["primeiro"]] if formula["primeiro"] else []
+    referencias.extend(
+        operacao["indicador"]
+        for operacao in formula["operacoes"]
+        if operacao["operando_tipo"] == "indicador" and operacao["indicador"]
+    )
+    return referencias
+
+
+def formula_dashboard_tem_ciclo(campo_id: int, configuracao_nova: dict[str, Any]) -> bool:
+    if not campo_id:
+        return False
+    grafo: dict[int, list[int]] = {}
+    for campo in carregar_dashboard_campos():
+        config = configuracao_nova if campo["id"] == campo_id else campo["configuracao"]
+        if (campo["id"] == campo_id or campo["modalidade"] == "formula") and config:
+            dependencias = []
+            for chave in referencias_formula_dashboard(config, campo["tipo"]):
+                if limpar_texto(chave).startswith("personalizado:"):
+                    try:
+                        dependencias.append(int(str(chave).split(":", 1)[1]))
+                    except (TypeError, ValueError):
+                        pass
+            grafo[campo["id"]] = dependencias
+
+    visitando: set[int] = set()
+    visitados: set[int] = set()
+
+    def visitar(no: int) -> bool:
+        if no in visitando:
+            return True
+        if no in visitados:
+            return False
+        visitando.add(no)
+        if any(visitar(dependencia) for dependencia in grafo.get(no, [])):
+            return True
+        visitando.remove(no)
+        visitados.add(no)
+        return False
+
+    return any(visitar(no) for no in grafo)
+
+
+@app.route("/configuracoes/dashboard", methods=["GET", "POST"])
+def configurar_dashboard():
+    db = get_db()
+    editar_id = int(request.values.get("editar") or 0) if str(request.values.get("editar") or "").isdigit() else 0
+    campo_edicao = next((campo for campo in carregar_dashboard_campos() if campo["id"] == editar_id), None)
+
+    if request.method == "POST":
+        acao = limpar_texto(request.form.get("acao"))
+        campo_id = int(request.form.get("campo_id") or 0) if str(request.form.get("campo_id") or "").isdigit() else 0
+        campo_existente = db.execute("SELECT * FROM dashboard_campos WHERE id = ?", (campo_id,)).fetchone() if campo_id else None
+
+        if acao in ("criar", "salvar"):
+            if acao == "salvar" and not campo_existente:
+                flash("O campo do Dashboard não foi encontrado.", "erro")
+                return redirect(url_for("configurar_dashboard"))
+            dados, erros = dados_campo_dashboard_form(campo_id or None)
+            if dados["modalidade"] == "formula" and formula_dashboard_tem_ciclo(campo_id, dados["configuracao"]):
+                erros.append("Essa fórmula criaria uma dependência circular entre os campos.")
+            if erros:
+                for erro in erros:
+                    flash(erro, "erro")
+                destino = url_for("configurar_dashboard", editar=campo_id) if campo_id else url_for("configurar_dashboard")
+                return redirect(destino)
+            agora = agora_iso()
+            if acao == "criar":
+                db.execute(
+                    """INSERT INTO dashboard_campos
+                       (nome, tipo, modalidade, configuracao_json, cor, ordem, ativo, criado_em, atualizado_em)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (dados["nome"], dados["tipo"], dados["modalidade"], dados["configuracao_json"],
+                     dados["cor"], dados["ordem"], dados["ativo"], agora, agora),
+                )
+                mensagem = "Campo adicionado ao Dashboard."
+            else:
+                db.execute(
+                    """UPDATE dashboard_campos
+                       SET nome = ?, tipo = ?, modalidade = ?, configuracao_json = ?, cor = ?,
+                           ordem = ?, ativo = ?, atualizado_em = ?
+                       WHERE id = ?""",
+                    (dados["nome"], dados["tipo"], dados["modalidade"], dados["configuracao_json"],
+                     dados["cor"], dados["ordem"], dados["ativo"], agora, campo_id),
+                )
+                mensagem = "Campo do Dashboard atualizado."
+            db.commit()
+            flash(mensagem, "ok")
+            return redirect(url_for("configurar_dashboard"))
+
+        if acao == "excluir":
+            if not campo_existente:
+                flash("O campo do Dashboard não foi encontrado.", "erro")
+                return redirect(url_for("configurar_dashboard"))
+            chave = f"personalizado:{campo_id}"
+            dependentes = []
+            for campo in carregar_dashboard_campos():
+                config = campo["configuracao"]
+                if campo["modalidade"] == "formula" and chave in referencias_formula_dashboard(config, campo["tipo"]):
+                    dependentes.append(campo["nome"])
+            if dependentes:
+                flash(f"Este campo é usado por: {', '.join(dependentes)}. Edite essas fórmulas antes de excluir.", "erro")
+                return redirect(url_for("configurar_dashboard"))
+            db.execute("DELETE FROM dashboard_campos WHERE id = ?", (campo_id,))
+            db.commit()
+            flash("Campo removido do Dashboard.", "ok")
+            return redirect(url_for("configurar_dashboard"))
+
+    if campo_edicao:
+        formulario = dict(campo_edicao)
+    else:
+        proxima_ordem = get_db().execute("SELECT COALESCE(MAX(ordem), 0) + 1 AS ordem FROM dashboard_campos").fetchone()["ordem"]
+        formulario = {
+            "id": 0, "nome": "", "tipo": "moeda", "modalidade": "manual",
+            "configuracao": {},
+            "formula": {
+                "primeiro": "total",
+                "operacoes": [{
+                    "operador": "somar", "operando_tipo": "indicador",
+                    "indicador": "pagas", "valor": 0, "valor_exibicao": "0",
+                }],
+                "limitar_zero": False,
+            },
+            "cor": "azul", "ordem": proxima_ordem, "ativo": 1,
+        }
+    formulario.setdefault("formula", {
+        "primeiro": "total",
+        "operacoes": [{
+            "operador": "somar", "operando_tipo": "indicador",
+            "indicador": "pagas", "valor": 0, "valor_exibicao": "0",
+        }],
+        "limitar_zero": False,
+    })
+    return render_template(
+        "dashboard_config.html",
+        campos=carregar_dashboard_campos(),
+        campo=formulario,
+        indicadores=indicadores_dashboard_disponiveis(formulario.get("id") or None),
+        filtros_valores=dashboard_filtros_valores(),
+        tipos=DASHBOARD_CAMPO_TIPOS,
+        modalidades=DASHBOARD_CAMPO_MODALIDADES,
+        cores=DASHBOARD_CAMPO_CORES,
+        agregacoes=DASHBOARD_AGREGACOES,
+        campos_agregacao=DASHBOARD_AGREGACAO_CAMPOS,
+        campos_filtro=DASHBOARD_FILTRO_CAMPOS,
+        formula_operacoes=DASHBOARD_FORMULA_OPERACOES,
+        formula_operando_tipos=DASHBOARD_FORMULA_OPERANDO_TIPOS,
+        titulo="Campos do Dashboard",
+        subtitulo="Crie indicadores manuais, cálculos sobre propostas e fórmulas personalizadas.",
+    )
+
+
 
 @app.route("/configuracoes/status", methods=["GET", "POST"])
 def configurar_status():
@@ -4384,11 +4899,168 @@ def saldo_em_conta() -> float:
     return parse_moeda(registro["valor"]) if registro else 0.0
 
 
+def calcular_agregado_dashboard(configuracao: dict[str, Any], mes: str) -> float:
+    agregacao = configuracao.get("agregacao")
+    campo_valor = configuracao.get("campo_valor")
+    base_data = configuracao.get("base_data")
+    filtro_campo = configuracao.get("filtro_campo") or ""
+    filtro_valor = limpar_texto(configuracao.get("filtro_valor"))
+
+    if agregacao == "contagem":
+        expressao = "COUNT(*)"
+    elif agregacao in ("soma", "media") and campo_valor in DASHBOARD_AGREGACAO_CAMPOS:
+        funcao = "SUM" if agregacao == "soma" else "AVG"
+        expressao = f"{funcao}(COALESCE({campo_valor}, 0))"
+    else:
+        return 0.0
+
+    params: list[Any] = [mes]
+    if base_data == "encerramento":
+        where = [
+            "status IN ('Pago', 'Perdido / Cancelado', 'Perdido', 'Cancelado')",
+            "substr(COALESCE(data_encerramento, data_atualizacao, data_criacao), 1, 7) = ?",
+        ]
+    else:
+        where = ["substr(data_criacao, 1, 7) = ?"]
+    if filtro_campo in DASHBOARD_FILTRO_CAMPOS and filtro_campo:
+        where.append(f"UPPER(TRIM(COALESCE({filtro_campo}, ''))) = UPPER(?)")
+        params.append(filtro_valor)
+    registro = get_db().execute(
+        f"SELECT {expressao} AS valor FROM propostas WHERE {' AND '.join(where)}",
+        params,
+    ).fetchone()
+    return float(registro["valor"] or 0)
+
+
+def formatar_valor_dashboard(valor: float, tipo: str) -> str:
+    if tipo == "moeda":
+        return br_moeda(valor)
+    if tipo == "percentual":
+        return br_percentual(valor)
+    if abs(valor - round(valor)) < 0.00001:
+        return f"{int(round(valor)):,}".replace(",", ".")
+    texto = f"{valor:,.2f}"
+    return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def calcular_campos_dashboard(dados: dict[str, Any], mes: str) -> list[dict[str, Any]]:
+    todos_campos = carregar_dashboard_campos()
+    campos_por_id = {campo["id"]: campo for campo in todos_campos}
+    cache: dict[str, float] = {}
+    calculando: set[str] = set()
+
+    def resolver(chave: str) -> float:
+        if chave in cache:
+            return cache[chave]
+        if chave in DASHBOARD_INDICADORES_BASE:
+            valor = float(dados.get(chave) or 0)
+            cache[chave] = valor
+            return valor
+        if not chave.startswith("personalizado:"):
+            return 0.0
+        try:
+            campo_id = int(chave.split(":", 1)[1])
+        except (TypeError, ValueError):
+            return 0.0
+        campo = campos_por_id.get(campo_id)
+        if not campo or chave in calculando:
+            return 0.0
+        calculando.add(chave)
+        config = campo["configuracao"]
+        if campo["modalidade"] == "manual":
+            registro = get_db().execute(
+                "SELECT valor FROM dashboard_valores_manuais WHERE campo_id = ? AND mes = ?",
+                (campo_id, mes),
+            ).fetchone()
+            valor = float(registro["valor"] or 0) if registro else 0.0
+        elif campo["modalidade"] == "agregado":
+            valor = calcular_agregado_dashboard(config, mes)
+        elif campo["modalidade"] == "formula":
+            formula = normalizar_formula_dashboard(config, campo["tipo"])
+            valor = resolver(formula["primeiro"])
+            for operacao in formula["operacoes"]:
+                operando = (
+                    resolver(operacao["indicador"])
+                    if operacao["operando_tipo"] == "indicador"
+                    else float(operacao["valor"] or 0)
+                )
+                operador = operacao["operador"]
+                if operador == "somar":
+                    valor += operando
+                elif operador == "subtrair":
+                    valor -= operando
+                elif operador == "multiplicar":
+                    valor *= operando
+                elif operador == "dividir":
+                    valor = (valor / operando) if operando else 0.0
+                elif operador == "percentual_de":
+                    valor = (valor / operando * 100) if operando else 0.0
+                elif operador == "variacao_percentual":
+                    valor = ((valor - operando) / operando * 100) if operando else 0.0
+                elif operador == "media":
+                    valor = (valor + operando) / 2
+                elif operador == "maior":
+                    valor = max(valor, operando)
+                elif operador == "menor":
+                    valor = min(valor, operando)
+                elif operador == "diferenca_absoluta":
+                    valor = abs(valor - operando)
+            if formula["limitar_zero"]:
+                valor = max(0.0, valor)
+        else:
+            valor = 0.0
+        calculando.discard(chave)
+        cache[chave] = valor
+        return valor
+
+    resultado: list[dict[str, Any]] = []
+    for campo in todos_campos:
+        if not campo["ativo"]:
+            continue
+        item = dict(campo)
+        item["valor"] = resolver(f"personalizado:{campo['id']}")
+        item["valor_formatado"] = formatar_valor_dashboard(item["valor"], campo["tipo"])
+        resultado.append(item)
+    return resultado
+
+
 @app.route("/dashboard")
 def dashboard():
     mes = limpar_texto(request.args.get("mes")) or mes_atual()
     dados = consulta_dashboard(mes)
-    return render_template("dashboard.html", dados=dados, saldo_em_conta=dados["saldo_em_conta"])
+    return render_template(
+        "dashboard.html",
+        dados=dados,
+        saldo_em_conta=dados["saldo_em_conta"],
+        campos_dashboard=calcular_campos_dashboard(dados, mes),
+    )
+
+
+@app.route("/dashboard/campos/<int:campo_id>/valor", methods=["POST"])
+def atualizar_valor_dashboard(campo_id: int):
+    campo = get_db().execute(
+        "SELECT * FROM dashboard_campos WHERE id = ? AND modalidade = 'manual'",
+        (campo_id,),
+    ).fetchone()
+    mes = limpar_texto(request.form.get("mes")) or mes_atual()
+    if not campo:
+        flash("O campo manual do Dashboard não foi encontrado.", "erro")
+        return redirect(url_for("dashboard", mes=mes))
+    valor_texto = limpar_texto(request.form.get("valor"))
+    if not valor_texto:
+        flash("Informe o valor do campo.", "erro")
+        return redirect(url_for("dashboard", mes=mes))
+    valor = parse_percentual(valor_texto) if campo["tipo"] == "percentual" else parse_moeda(valor_texto)
+    get_db().execute(
+        """INSERT INTO dashboard_valores_manuais (campo_id, mes, valor, atualizado_em)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(campo_id, mes) DO UPDATE
+           SET valor = excluded.valor, atualizado_em = excluded.atualizado_em""",
+        (campo_id, mes, valor, agora_iso()),
+    )
+    get_db().commit()
+    flash("Valor mensal atualizado.", "ok")
+    return redirect(url_for("dashboard", mes=mes))
 
 
 @app.route("/dashboard/saldo", methods=["POST"])

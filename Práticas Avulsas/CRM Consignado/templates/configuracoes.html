@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="settings-grid">
+    <section class="card settings-card settings-card-primary">
+        <div class="settings-card-heading">
+            <span class="settings-icon"><i class="bi bi-bell" aria-hidden="true"></i></span>
+            <div>
+                <h2>Agenda e alertas</h2>
+                <p class="muted">Defina quando o sinal vermelho aparece no menu da Agenda.</p>
+            </div>
+        </div>
+
+        <form method="post" class="stack settings-form">
+            <label>Mostrar o aviso com antecedência
+                <select name="agenda_antecedencia_minutos">
+                    {% for minutos in antecedencias %}
+                    <option value="{{ minutos }}" {% if minutos == antecedencia_atual %}selected{% endif %}>{{ minutos }} minutos antes</option>
+                    {% endfor %}
+                </select>
+                <small>A exclamação permanece visível depois do horário até o compromisso ser concluído, cancelado ou excluído.</small>
+            </label>
+
+            <label class="notification-option">
+                <input type="checkbox" name="agenda_notificar_padrao" value="1" {% if notificar_padrao %}checked{% endif %}>
+                <span><strong>Ativar “Gerar notificação” em novos compromissos</strong><small>Você ainda poderá desmarcar a opção ao criar cada compromisso.</small></span>
+            </label>
+
+            <div class="actions">
+                <button class="btn btn-primary" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar configurações</span></button>
+                <button class="btn" type="button" id="notificationTest"><i class="bi bi-bell" aria-hidden="true"></i><span>Testar notificação</span></button>
+            </div>
+        </form>
+    </section>
+
+    <section class="card settings-card">
+        <div class="settings-card-heading">
+            <span class="settings-icon"><i class="bi bi-diagram-3" aria-hidden="true"></i></span>
+            <div>
+                <h2>Funil</h2>
+                <p class="muted">Organize os nomes, a ordem e a disponibilidade das etapas.</p>
+            </div>
+        </div>
+        <a class="btn" href="{{ url_for('configurar_status') }}"><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Editar etapas do funil</span></a>
+    </section>
+
+    <section class="card settings-card">
+        <div class="settings-card-heading">
+            <span class="settings-icon"><i class="bi bi-bar-chart-line" aria-hidden="true"></i></span>
+            <div>
+                <h2>Dashboard</h2>
+                <p class="muted">Crie cartões manuais, cálculos sobre propostas e fórmulas próprias.</p>
+            </div>
+        </div>
+        <a class="btn" href="{{ url_for('configurar_dashboard') }}"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Gerenciar campos do Dashboard</span></a>
+    </section>
+
+    <section class="card settings-card">
+        <div class="settings-card-heading">
+            <span class="settings-icon"><i class="bi bi-moon" aria-hidden="true"></i></span>
+            <div>
+                <h2>Aparência</h2>
+                <p class="muted">A preferência de tema fica salva neste navegador.</p>
+            </div>
+        </div>
+        <label>Tema do CRM
+            <select id="settingsTheme">
+                <option value="claro">Claro</option>
+                <option value="escuro">Escuro</option>
+            </select>
+        </label>
+    </section>
+</div>
+{% endblock %}
