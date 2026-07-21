@@ -11,6 +11,7 @@
         </div>
 
         <form method="post" class="stack settings-form">
+            <input type="hidden" name="acao" value="agenda">
             <label>Mostrar o aviso com antecedência
                 <select name="agenda_antecedencia_minutos">
                     {% for minutos in antecedencias %}
@@ -68,6 +69,37 @@
                 <option value="escuro">Escuro</option>
             </select>
         </label>
+    </section>
+
+    <section class="card settings-card settings-documents-card">
+        <div class="settings-card-heading">
+            <span class="settings-icon"><i class="bi bi-folder" aria-hidden="true"></i></span>
+            <div>
+                <h2>Documentos</h2>
+                <p class="muted">Escolha onde serão criadas as pastas dos clientes e salvos os novos anexos.</p>
+            </div>
+        </div>
+        <form method="post" class="stack settings-form">
+            <input type="hidden" name="acao" value="documentos">
+            <label>Pasta base dos documentos
+                <input type="text" name="anexos_base_dir" value="{{ pasta_anexos_atual }}" autocomplete="off" spellcheck="false" placeholder="C:\Documentos CRM" required>
+                <small>Use um caminho completo. Se a pasta não existir, o CRM tentará criá-la.</small>
+            </label>
+            <div class="settings-path-status">
+                <span><strong>Em uso:</strong> {{ pasta_anexos_atual }}</span>
+                {% if pasta_anexos_personalizada %}<small>Configuração personalizada. O padrão da instalação é {{ pasta_anexos_padrao }}.</small>{% else %}<small>Usando o padrão da instalação.</small>{% endif %}
+            </div>
+            <div class="actions settings-document-actions">
+                <button class="btn btn-primary" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar pasta</span></button>
+            </div>
+        </form>
+        {% if pasta_anexos_personalizada %}
+        <form method="post" class="settings-reset-path-form" onsubmit="return confirm('Restaurar a pasta padrão da instalação? Os arquivos existentes não serão movidos.');">
+            <input type="hidden" name="acao" value="restaurar_documentos">
+            <button class="btn" type="submit"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i><span>Restaurar padrão</span></button>
+        </form>
+        {% endif %}
+        <p class="settings-path-note"><strong>Importante:</strong> a mudança afeta somente novos uploads. Os documentos já anexados continuam disponíveis nos caminhos em que foram salvos.</p>
     </section>
 </div>
 {% endblock %}

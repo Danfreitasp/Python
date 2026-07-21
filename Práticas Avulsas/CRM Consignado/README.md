@@ -106,9 +106,11 @@ Esses backups são dados locais e não devem ser versionados.
 
 ## Anexos
 
-Os anexos são salvos em uma pasta local configurada no sistema.
+Os anexos são salvos na pasta definida em `Configurações > Documentos` dentro do CRM.
+Alterar essa pasta afeta os novos uploads; arquivos já cadastrados continuam vinculados
+ao caminho em que foram originalmente salvos.
 
-Para alterar a pasta base sem modificar o código, configure a variável de ambiente:
+Como fallback da instalação, também é possível definir a variável de ambiente:
 
 ```text
 CRM_ANEXOS_DIR

@@ -34,9 +34,9 @@ BACKUP_DIR = BASE_DIR / "backups"
 MAX_BACKUPS = 30
 _backup_checked_date: str | None = None
 
-# Pasta padrão dos documentos dos clientes.
-# Pode ser alterada sem mexer no código criando a variável de ambiente CRM_ANEXOS_DIR.
-ANEXOS_BASE_DIR = Path(
+# Pasta padrão dos documentos dos clientes. A configuração salva no CRM tem
+# prioridade; CRM_ANEXOS_DIR continua disponível como fallback da instalação.
+ANEXOS_BASE_DIR_PADRAO = Path(
     os.environ.get(
         "CRM_ANEXOS_DIR",
         r"C:\Users\tatia\OneDrive\DOCUMENTOS FACILITA - VILA VELHA\DANIEL",
@@ -951,6 +951,29 @@ def agenda_alerta_info() -> dict[str, Any]:
     return {"ativo": total > 0, "total": total, "antecedencia_minutos": antecedencia}
 
 
+def pasta_base_anexos() -> Path:
+    configurada = obter_configuracao("anexos_base_dir", "")
+    if configurada:
+        return Path(os.path.expandvars(os.path.expanduser(configurada)))
+    return ANEXOS_BASE_DIR_PADRAO
+
+
+def validar_pasta_base_anexos(valor: Any) -> tuple[Path | None, str]:
+    texto = limpar_texto(valor)
+    if not texto:
+        return None, "Informe a pasta base dos documentos."
+    caminho = Path(os.path.expandvars(os.path.expanduser(texto)))
+    if not caminho.is_absolute():
+        return None, "Informe um caminho absoluto, por exemplo C:\\Documentos CRM."
+    if caminho.exists() and not caminho.is_dir():
+        return None, "O caminho informado existe, mas não é uma pasta."
+    try:
+        caminho.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return None, f"Não foi possível acessar ou criar a pasta informada: {exc}"
+    return caminho, ""
+
+
 def url_interna_segura(valor: Any, fallback: str | None = None) -> str:
     destino = limpar_texto(valor)
     if destino:
@@ -998,7 +1021,7 @@ def nome_pasta_cliente(nome: str) -> str:
 
 
 def pasta_cliente(proposta: sqlite3.Row | dict[str, Any]) -> Path:
-    return ANEXOS_BASE_DIR / nome_pasta_cliente(proposta["nome"])
+    return pasta_base_anexos() / nome_pasta_cliente(proposta["nome"])
 
 
 def arquivo_destino_unico(pasta: Path, nome_arquivo: str) -> Path:
@@ -2134,7 +2157,7 @@ def helpers() -> dict[str, Any]:
         "agenda_alerta_ativo": alerta_agenda["ativo"],
         "agenda_alerta_total": alerta_agenda["total"],
         "agenda_antecedencia_minutos": alerta_agenda["antecedencia_minutos"],
-        "anexos_base_dir": str(ANEXOS_BASE_DIR),
+        "anexos_base_dir": str(pasta_base_anexos()),
     }
 
 
@@ -4304,6 +4327,22 @@ def administrativo():
 @app.route("/configuracoes", methods=["GET", "POST"])
 def configuracoes():
     if request.method == "POST":
+        acao = limpar_texto(request.form.get("acao")) or "agenda"
+        if acao == "documentos":
+            caminho, erro = validar_pasta_base_anexos(request.form.get("anexos_base_dir"))
+            if erro:
+                flash(erro, "erro")
+                return redirect(url_for("configuracoes"))
+            salvar_configuracao("anexos_base_dir", str(caminho))
+            get_db().commit()
+            flash("Pasta base dos documentos atualizada. Novos anexos serão salvos nesse local.", "ok")
+            return redirect(url_for("configuracoes"))
+        if acao == "restaurar_documentos":
+            get_db().execute("DELETE FROM configuracoes WHERE chave = 'anexos_base_dir'")
+            get_db().commit()
+            flash("Pasta base restaurada para o padrão da instalação.", "ok")
+            return redirect(url_for("configuracoes"))
+
         try:
             antecedencia = int(request.form.get("agenda_antecedencia_minutos") or 0)
         except (TypeError, ValueError):
@@ -4323,6 +4362,9 @@ def configuracoes():
         antecedencias=AGENDA_ANTECEDENCIAS_MINUTOS,
         antecedencia_atual=agenda_antecedencia_minutos(),
         notificar_padrao=agenda_notificar_padrao(),
+        pasta_anexos_atual=str(pasta_base_anexos()),
+        pasta_anexos_padrao=str(ANEXOS_BASE_DIR_PADRAO),
+        pasta_anexos_personalizada=bool(obter_configuracao("anexos_base_dir", "")),
         titulo="Configurações",
         subtitulo="Personalize os alertas, o funil e a aparência do CRM.",
     )
