@@ -1724,39 +1724,9 @@ def dados_formulario(proposta_atual: sqlite3.Row | dict[str, Any] | None = None)
 
 
 def dados_nova_proposta() -> dict[str, Any]:
-    return {
-        "nome": limpar_texto(request.form.get("nome")),
-        "cpf": formatar_cpf(limpar_texto(request.form.get("cpf"))),
-        "nascimento": limpar_texto(request.form.get("nascimento")),
-        "nb_matricula": limpar_texto(request.form.get("nb_matricula")),
-        "especie": limpar_texto(request.form.get("especie")),
-        "numero_proposta": "",
-        "numero_port_vinculada": "",
-        "numero_refin_vinculada": "",
-        "tipo_cliente": "",
-        "banco_atual": "",
-        "banco_destino": "",
-        "banco_digitado": "",
-        "produto": limpar_texto(request.form.get("produto")),
-        "promotora": "",
-        "beneficio_bloqueado": "NÃO",
-        "valor_caiu_promotora": "NÃO",
-        "valor_sacado": "NÃO",
-        "parcela_atual": 0,
-        "nova_parcela": 0,
-        "troco": 0,
-        "comissao_percentual": 0,
-        "comissao": 0,
-        "margem_apos": "",
-        "status": status_entrada_proposta(),
-        "responsavel": "",
-        "telefone": limpar_texto(request.form.get("telefone")),
-        "endereco": limpar_texto(request.form.get("endereco")),
-        "dados_bancarios": limpar_texto(request.form.get("dados_bancarios")),
-        "proxima_acao": "",
-        "data_retorno": "",
-        "observacoes": limpar_texto(request.form.get("observacoes")),
-    }
+    dados = dados_formulario()
+    dados["status"] = status_entrada_proposta()
+    return dados
 
 
 def proposta_vazia(status: str | None = None) -> dict[str, Any]:

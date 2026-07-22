@@ -16,6 +16,9 @@
                 <div class="card-topline">
                     <span class="verification-dot {% if verificado_hoje(p) %}dot-ok{% else %}dot-pending{% endif %}" title="{{ status_verificacao_texto(p) }}"></span>
                     <a href="{{ url_for('detalhe_proposta', proposta_id=p.id, origem=url_origem_atual()) }}">{{ p.nome }}</a>
+                    {% if p.beneficio_bloqueado == 'SIM' %}
+                    <span class="benefit-blocked-alert" role="img" tabindex="0" aria-label="Benefício Bloqueado" data-tooltip="Benefício Bloqueado">!</span>
+                    {% endif %}
                 </div>
                 {% if p.cpf %}<small>CPF: {{ p.cpf }} <button class="mini-btn copy-btn card-copy" type="button" data-copy="{{ p.cpf }}"><i class="bi bi-clipboard" aria-hidden="true"></i><span>Copiar</span></button></small>{% endif %}
                 <div class="card-values compact-card-values">
