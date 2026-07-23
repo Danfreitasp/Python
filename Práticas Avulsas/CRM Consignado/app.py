@@ -1001,7 +1001,14 @@ def url_interna_com_parametros(valor: Any, fallback: str | None = None, **parame
 
 
 def url_origem_atual() -> str:
-    return url_interna_segura(request.full_path.rstrip("?"), "/funil")
+    destino = url_interna_segura(request.full_path.rstrip("?"), "/funil")
+    partes = urlsplit(destino)
+    query = [
+        (chave, valor)
+        for chave, valor in parse_qsl(partes.query, keep_blank_values=True)
+        if chave != "destaque_proposta"
+    ]
+    return urlunsplit(("", "", partes.path, urlencode(query), partes.fragment))
 
 
 def url_retorno_padrao() -> str:
@@ -1760,8 +1767,8 @@ def chave_cliente(cpf: Any, nb_matricula: Any) -> tuple[str, str]:
 def salvar_cliente_dos_dados(dados: dict[str, Any] | sqlite3.Row) -> int | None:
     """Cria ou atualiza o cadastro do cliente a partir dos dados da proposta.
 
-    O benefício bloqueado não é salvo no cadastro do cliente porque muda de uma
-    proposta para outra. A chave usada é CPF + NB/Matrícula.
+    O benefício bloqueado continua nas propostas, mas é sincronizado entre todas
+    as propostas do mesmo NB/Matrícula. A chave do cliente é CPF + NB/Matrícula.
     """
     item = dict(dados)
     nome = limpar_texto(item.get("nome"))
@@ -1839,6 +1846,84 @@ def normalizar_numero_proposta(valor: Any) -> str:
     return limpar_texto(valor).upper()
 
 
+def beneficio_bloqueado_global(nb_matricula: Any, padrao: Any = "NÃO") -> str:
+    """Consulta o bloqueio compartilhado por todas as propostas do benefício."""
+    beneficio = limpar_texto(nb_matricula)
+    if not beneficio:
+        return normalizar_bloqueado(padrao)
+
+    registros = get_db().execute(
+        """
+        SELECT beneficio_bloqueado
+        FROM propostas
+        WHERE UPPER(TRIM(COALESCE(nb_matricula, ''))) = UPPER(TRIM(?))
+        ORDER BY data_atualizacao DESC, id DESC
+        """,
+        (beneficio,),
+    ).fetchall()
+    if any(normalizar_bloqueado(row["beneficio_bloqueado"]) == "SIM" for row in registros):
+        return "SIM"
+    if registros:
+        return normalizar_bloqueado(registros[0]["beneficio_bloqueado"])
+    return normalizar_bloqueado(padrao)
+
+
+def sincronizar_beneficio_bloqueado(
+    nb_matricula: Any,
+    valor: Any,
+    proposta_origem_id: int | None = None,
+    atualizado_em: str | None = None,
+) -> list[int]:
+    """Propaga o bloqueio para todas as propostas que usam o mesmo benefício."""
+    beneficio = limpar_texto(nb_matricula)
+    if not beneficio:
+        return []
+
+    bloqueado = normalizar_bloqueado(valor)
+    db = get_db()
+    propostas = db.execute(
+        """
+        SELECT id, status, beneficio_bloqueado
+        FROM propostas
+        WHERE UPPER(TRIM(COALESCE(nb_matricula, ''))) = UPPER(TRIM(?))
+        """,
+        (beneficio,),
+    ).fetchall()
+    alteradas = [
+        proposta
+        for proposta in propostas
+        if normalizar_bloqueado(proposta["beneficio_bloqueado"]) != bloqueado
+    ]
+    if not alteradas:
+        return []
+
+    ids = [proposta["id"] for proposta in alteradas]
+    placeholders = ",".join("?" for _ in ids)
+    momento = atualizado_em or agora_iso()
+    db.execute(
+        f"""
+        UPDATE propostas
+        SET beneficio_bloqueado = ?, data_atualizacao = ?
+        WHERE id IN ({placeholders})
+        """,
+        (bloqueado, momento, *ids),
+    )
+
+    origem = f" a partir da proposta {proposta_origem_id}" if proposta_origem_id else ""
+    observacao = f"Benefício bloqueado atualizado globalmente para {bloqueado}{origem}"
+    db.executemany(
+        """
+        INSERT INTO historico (proposta_id, data_hora, status_anterior, status_novo, observacao)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        [
+            (proposta["id"], momento, proposta["status"], proposta["status"], observacao)
+            for proposta in alteradas
+        ],
+    )
+    return ids
+
+
 def buscar_propostas_vinculadas(proposta: sqlite3.Row) -> list[sqlite3.Row]:
     """Busca propostas vinculadas manualmente por número de proposta.
 
@@ -1912,6 +1997,43 @@ def proposta_eh_refin_vinculado(proposta: sqlite3.Row | dict[str, Any]) -> bool:
         remover_acentos(limpar_texto(dados.get("produto"))).casefold() == "refinanciamento"
         and bool(limpar_texto(dados.get("numero_port_vinculada")))
     )
+
+
+def propostas_formam_par_port_refin(
+    primeira: sqlite3.Row | dict[str, Any],
+    segunda: sqlite3.Row | dict[str, Any],
+) -> bool:
+    """Confirma o vínculo específico entre Port com Refin e seu Refin vinculado."""
+    if produto_eh_portabilidade_com_refin(primeira) and proposta_eh_refin_vinculado(segunda):
+        port, refin = dict(primeira), dict(segunda)
+    elif produto_eh_portabilidade_com_refin(segunda) and proposta_eh_refin_vinculado(primeira):
+        port, refin = dict(segunda), dict(primeira)
+    else:
+        return False
+
+    numero_port = normalizar_numero_proposta(port.get("numero_proposta"))
+    numero_refin = normalizar_numero_proposta(refin.get("numero_proposta"))
+    return bool(
+        (
+            numero_port
+            and normalizar_numero_proposta(refin.get("numero_port_vinculada")) == numero_port
+        )
+        or (
+            numero_refin
+            and normalizar_numero_proposta(port.get("numero_refin_vinculada")) == numero_refin
+        )
+    )
+
+
+def buscar_vinculadas_para_verificacao(proposta: sqlite3.Row) -> list[sqlite3.Row]:
+    """Retorna somente o par Port com Refin/Refin que compartilha verificação."""
+    if not (produto_eh_portabilidade_com_refin(proposta) or proposta_eh_refin_vinculado(proposta)):
+        return []
+    return [
+        vinculada
+        for vinculada in buscar_propostas_vinculadas(proposta)
+        if propostas_formam_par_port_refin(proposta, vinculada)
+    ]
 
 
 def incrementar_numero_proposta(valor: Any) -> str:
@@ -2330,7 +2452,7 @@ def simulador_inss_criar_proposta():
         "banco_digitado": dados_sim["banco_digitado"],
         "produto": resultado["produto"],
         "promotora": dados_sim["promotora"],
-        "beneficio_bloqueado": "NÃO",
+        "beneficio_bloqueado": beneficio_bloqueado_global(dados_sim["nb_matricula"]),
         "valor_caiu_promotora": "NÃO",
         "valor_sacado": "NÃO",
         "parcela_atual": 0,
@@ -2367,6 +2489,12 @@ def simulador_inss_criar_proposta():
         ),
     )
     proposta_id = cursor.lastrowid
+    sincronizar_beneficio_bloqueado(
+        dados_prop["nb_matricula"],
+        dados_prop["beneficio_bloqueado"],
+        proposta_id,
+        agora,
+    )
     db.commit()
     registrar_historico(proposta_id, None, dados_prop["status"], "Proposta criada a partir do Simulador INSS.")
     registrar_anotacao(proposta_id, dados_prop["observacoes"], agora)
@@ -2417,21 +2545,28 @@ def nova_proposta():
                 dados["proxima_acao"], dados["data_retorno"], dados["observacoes"],
             ),
         )
+        proposta_id = cursor.lastrowid
+        sincronizar_beneficio_bloqueado(
+            dados["nb_matricula"],
+            dados["beneficio_bloqueado"],
+            proposta_id,
+            agora,
+        )
         db.commit()
-        registrar_historico(cursor.lastrowid, None, dados["status"], "Proposta criada em Aguardando inserção")
+        registrar_historico(proposta_id, None, dados["status"], "Proposta criada em Aguardando inserção")
         if dados.get("observacoes"):
-            registrar_anotacao(cursor.lastrowid, dados["observacoes"], agora)
+            registrar_anotacao(proposta_id, dados["observacoes"], agora)
 
-        proposta_criada = buscar_proposta(cursor.lastrowid)
+        proposta_criada = buscar_proposta(proposta_id)
         salvos = salvar_anexos_upload(
-            cursor.lastrowid,
+            proposta_id,
             proposta_criada or dados,
             request.files.getlist("arquivos"),
         )
         if salvos:
-            registrar_historico(cursor.lastrowid, dados["status"], dados["status"], f"{salvos} anexo(s) enviado(s) na criação")
+            registrar_historico(proposta_id, dados["status"], dados["status"], f"{salvos} anexo(s) enviado(s) na criação")
         flash("Proposta criada com sucesso.", "ok")
-        return redirect(url_for("detalhe_proposta", proposta_id=cursor.lastrowid))
+        return redirect(url_for("detalhe_proposta", proposta_id=proposta_id))
 
     return render_template("nova_proposta.html", proposta=proposta_vazia())
 
@@ -2502,6 +2637,10 @@ def criar_refin_vinculado(proposta_id: int):
     if not tipo_cliente_refin and limpar_texto(port["especie"]):
         # Espécie numérica é um dado próprio do benefício previdenciário do INSS.
         tipo_cliente_refin = "INSS"
+    bloqueio_refin = beneficio_bloqueado_global(
+        port["nb_matricula"],
+        port["beneficio_bloqueado"],
+    )
 
     cursor = db.execute(
         """
@@ -2514,7 +2653,7 @@ def criar_refin_vinculado(proposta_id: int):
         (
             cliente_id_refin, port["nome"], port["cpf"], port["nascimento"], port["nb_matricula"], port["especie"], numero_refin, numero_port, "",
             tipo_cliente_refin, "", "", banco_refin, "Refinanciamento",
-            port["promotora"], port["beneficio_bloqueado"] or "NÃO", "NÃO", "NÃO", hoje_iso(),
+            port["promotora"], bloqueio_refin, "NÃO", "NÃO", hoje_iso(),
             0, 0, 0, 0, 0, "", status_inicial, port["responsavel"], port["telefone"],
             port["endereco"] if "endereco" in port.keys() else "",
             port["dados_bancarios"] if "dados_bancarios" in port.keys() else "",
@@ -2525,6 +2664,12 @@ def criar_refin_vinculado(proposta_id: int):
     db.execute(
         "UPDATE propostas SET numero_refin_vinculada = ?, data_atualizacao = ? WHERE id = ?",
         (numero_refin, agora, proposta_id),
+    )
+    sincronizar_beneficio_bloqueado(
+        port["nb_matricula"],
+        bloqueio_refin,
+        refin_id,
+        agora,
     )
     db.commit()
 
@@ -2681,6 +2826,7 @@ def api_clientes_por_cpf():
             "tipo_cliente": c["tipo_cliente"] or "",
             "endereco": c["endereco"] or "",
             "dados_bancarios": c["dados_bancarios"] or "",
+            "beneficio_bloqueado": beneficio_bloqueado_global(nb),
         })
     return jsonify(resposta)
 
@@ -2760,29 +2906,58 @@ def atualizar_verificacao(proposta_id: int):
             return jsonify({"success": False, "message": "Proposta não encontrada.", "proposta_id": proposta_id}), 404
         flash("Proposta não encontrada.", "erro")
         return redirect(url_for("index"))
-    origem = url_retorno_padrao()
+    origem = url_interna_com_parametros(
+        url_retorno_padrao(),
+        "/funil",
+        destaque_proposta=proposta_id,
+    )
     verificado = normalizar_sim_nao(request.form.get("verificado"))
     data_verificacao = hoje_iso() if verificado == "SIM" else None
+    vinculadas = buscar_vinculadas_para_verificacao(proposta) if verificado == "SIM" else []
+    alvos = [proposta, *vinculadas]
+    ids_alvos = list(dict.fromkeys(alvo["id"] for alvo in alvos))
+    placeholders = ",".join("?" for _ in ids_alvos)
+    atualizado_em = agora_iso()
     get_db().execute(
-        "UPDATE propostas SET data_verificacao = ?, data_atualizacao = ? WHERE id = ?",
-        (data_verificacao, agora_iso(), proposta_id),
+        f"""
+        UPDATE propostas
+        SET data_verificacao = ?, data_atualizacao = ?
+        WHERE id IN ({placeholders})
+        """,
+        (data_verificacao, atualizado_em, *ids_alvos),
     )
     get_db().commit()
-    registrar_historico(
-        proposta_id,
-        proposta["status"],
-        proposta["status"],
-        "Proposta marcada como verificada hoje" if verificado == "SIM" else "Verificação diária removida",
+    for alvo in alvos:
+        eh_origem = alvo["id"] == proposta_id
+        if verificado == "SIM":
+            observacao = (
+                "Proposta marcada como verificada hoje"
+                if eh_origem
+                else f"Verificação de hoje sincronizada com a proposta vinculada {proposta_id}"
+            )
+        else:
+            observacao = "Verificação diária removida"
+        registrar_historico(
+            alvo["id"],
+            alvo["status"],
+            alvo["status"],
+            observacao,
+        )
+    mensagem = (
+        f"Verificação diária atualizada em {len(ids_alvos)} propostas vinculadas."
+        if len(ids_alvos) > 1
+        else "Verificação diária atualizada."
     )
     if is_fetch:
         return jsonify({
             "success": True,
-            "message": "Verificação diária atualizada.",
+            "message": mensagem,
             "proposta_id": proposta_id,
+            "proposta_ids": ids_alvos,
             "verificado": verificado == "SIM",
             "status_texto": "Verificado hoje" if verificado == "SIM" else "Não verificado hoje",
         })
-    flash("Verificação diária atualizada.", "ok")
+    flash(mensagem, "ok")
     return redirect(url_for("detalhe_proposta", proposta_id=proposta_id, origem=origem))
 
 
@@ -3275,6 +3450,12 @@ def editar_proposta(proposta_id: int):
                 dados["status"], dados["responsavel"], dados["telefone"], dados["endereco"], dados["dados_bancarios"], atualizado_em, data_encerramento,
                 dados["proxima_acao"], dados["data_retorno"], dados["observacoes"], proposta_id,
             ),
+        )
+        sincronizar_beneficio_bloqueado(
+            dados["nb_matricula"],
+            dados["beneficio_bloqueado"],
+            proposta_id,
+            atualizado_em,
         )
         db.commit()
         if status_anterior != dados["status"]:
@@ -5377,6 +5558,13 @@ def importar():
         produto_importado = normalizar_produto_importacao(row.get("produto"))
         banco_digitado_importado = texto_planilha(row.get("banco_digitado"))
         banco_destino_importado = ""
+        nb_importado = texto_planilha(row.get("nb_matricula"))
+        bloqueio_informado = limpar_texto(row.get("beneficio_bloqueado"))
+        beneficio_bloqueado_importado = (
+            normalizar_bloqueado(bloqueio_informado)
+            if bloqueio_informado
+            else beneficio_bloqueado_global(nb_importado)
+        )
         agora = agora_iso()
         cursor = db.execute(
             """
@@ -5390,7 +5578,7 @@ def importar():
                 salvar_cliente_dos_dados({
                     "nome": nome_cliente,
                     "cpf": formatar_cpf(texto_planilha(row.get("cpf"))),
-                    "nb_matricula": texto_planilha(row.get("nb_matricula")),
+                    "nb_matricula": nb_importado,
                     "telefone": texto_planilha(row.get("telefone")),
                     "tipo_cliente": texto_planilha(row.get("tipo_cliente")),
                     "endereco": texto_planilha(row.get("endereco")),
@@ -5398,7 +5586,7 @@ def importar():
                 }),
                 nome_cliente,
                 formatar_cpf(texto_planilha(row.get("cpf"))),
-                texto_planilha(row.get("nb_matricula")),
+                nb_importado,
                 texto_planilha(row.get("numero_proposta")),
                 texto_planilha(row.get("numero_port_vinculada")),
                 texto_planilha(row.get("numero_refin_vinculada")),
@@ -5408,7 +5596,7 @@ def importar():
                 banco_digitado_importado,
                 produto_importado,
                 texto_planilha(row.get("promotora")),
-                normalizar_bloqueado(row.get("beneficio_bloqueado")),
+                beneficio_bloqueado_importado,
                 normalizar_sim_nao(row.get("valor_caiu_promotora")),
                 normalizar_sim_nao(row.get("valor_sacado")),
                 hoje_iso(),
@@ -5429,6 +5617,12 @@ def importar():
                 parse_data_iso(row.get("data_retorno")) or extrair_data_do_status(limpar_texto(row.get("status")), row.get("data_criacao")),
                 texto_planilha(row.get("observacoes")),
             ),
+        )
+        sincronizar_beneficio_bloqueado(
+            nb_importado,
+            beneficio_bloqueado_importado,
+            cursor.lastrowid,
+            agora,
         )
         db.commit()
         registrar_historico(cursor.lastrowid, None, status, "Proposta importada")

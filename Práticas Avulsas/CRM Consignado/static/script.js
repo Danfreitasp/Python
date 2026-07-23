@@ -246,11 +246,11 @@ document.addEventListener('DOMContentLoaded', () => {
         setFieldValue('dados_bancarios', cliente.dados_bancarios || '');
         if (!novaMatricula) {
             setFieldValue('nb_matricula', cliente.nb_matricula || '');
+            setFieldValue('beneficio_bloqueado', cliente.beneficio_bloqueado || 'NÃO');
         } else if (matriculaField) {
             matriculaField.value = '';
             matriculaField.focus();
         }
-        // Importante: benefício bloqueado não é reaproveitado, porque pode mudar a cada proposta.
     }
 
     let clientesCPFCache = [];
@@ -579,6 +579,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const estadoRecente = estado && (Date.now() - Number(estado.at || 0)) < 30 * 60 * 1000;
         const mesmaUrl = estadoRecente && estado.url === funilUrlSemDestaque();
+        const propostaIdContexto = mesmaUrl ? estado.propostaId : '';
+        const propostaIdDestaque = destaqueId || propostaIdContexto;
 
         if (mesmaUrl) {
             requestAnimationFrame(() => {
@@ -591,12 +593,12 @@ document.addEventListener('DOMContentLoaded', () => {
             try { sessionStorage.removeItem(funilContextKey); } catch (error) {}
         }
 
-        if (destaqueId) {
-            const card = kanban.querySelector(`.kanban-card${propostaSelector(destaqueId)}`);
+        if (propostaIdDestaque) {
+            const card = kanban.querySelector(`.kanban-card${propostaSelector(propostaIdDestaque)}`);
             if (card) {
                 setTimeout(() => destacarCardRecemSalvo(card), mesmaUrl ? 120 : 0);
             }
-            limparDestaqueDaUrl();
+            if (destaqueId) limparDestaqueDaUrl();
         }
     }
 
@@ -669,26 +671,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 const params = new URLSearchParams(window.location.search);
                 const somentePendentes = params.get('verificacao') === 'pendente';
                 let removidasVerificar = 0;
-                const cardsDaProposta = Array.from(document.querySelectorAll(propostaSelector(payload.proposta_id)));
-                cardsDaProposta.forEach((card) => {
-                    setTodayCardVerified(card, payload.status_texto);
-                    if (somentePendentes || card.dataset.section === 'verificar') {
-                        const section = card.closest('[data-today-section]');
-                        if (card.dataset.section === 'verificar') removidasVerificar += 1;
-                        card.remove();
-                        refreshTodaySection(section);
+                let propostasAtualizadas = 0;
+                let propostasRemovidas = 0;
+                const propostaIds = Array.isArray(payload.proposta_ids) && payload.proposta_ids.length
+                    ? payload.proposta_ids
+                    : [payload.proposta_id];
+                propostaIds.forEach((propostaId) => {
+                    const cardsDaProposta = Array.from(document.querySelectorAll(propostaSelector(propostaId)));
+                    cardsDaProposta.forEach((card) => {
+                        setTodayCardVerified(card, payload.status_texto);
+                        if (somentePendentes || card.dataset.section === 'verificar') {
+                            const section = card.closest('[data-today-section]');
+                            if (card.dataset.section === 'verificar') removidasVerificar += 1;
+                            card.remove();
+                            refreshTodaySection(section);
+                        }
+                    });
+                    if (cardsDaProposta.length) {
+                        propostasAtualizadas += 1;
+                    }
+                    if (cardsDaProposta.length && !document.querySelector(propostaSelector(propostaId))) {
+                        propostasRemovidas += 1;
                     }
                 });
-                const aindaVisivel = Boolean(document.querySelector(propostaSelector(payload.proposta_id)));
                 if (removidasVerificar) {
                     updateTodayCount('verificar', -removidasVerificar);
                 }
-                if (!aindaVisivel) {
-                    updateTodayCount('total', -1);
+                if (propostasRemovidas) {
+                    updateTodayCount('total', -propostasRemovidas);
                 }
-                if (cardsDaProposta.length) {
-                    updateTodayCount('verificadas', 1);
-                    updateTodayCount('pendentes', -1);
+                if (propostasAtualizadas) {
+                    updateTodayCount('verificadas', propostasAtualizadas);
+                    updateTodayCount('pendentes', -propostasAtualizadas);
                 }
                 mostrarAvisoCopiado(payload.message || 'Verificação diária atualizada.');
             } catch (error) {
