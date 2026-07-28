@@ -103,6 +103,41 @@
 </section>
 {% endif %}
 
+<section class="card promoter-comparison" data-promoter-comparison>
+    <div class="promoter-comparison-heading">
+        <div>
+            <h2>Produção por promotora</h2>
+            <p>Comparativo entre Única e Vieira em {{ dados.mes[5:7] }}/{{ dados.mes[:4] }}.</p>
+        </div>
+        <div class="promoter-chart-toggle" role="group" aria-label="Indicador do gráfico">
+            <button type="button" class="is-active" data-promoter-mode="comissao" aria-pressed="true">Comissão paga</button>
+            <button type="button" data-promoter-mode="propostas" aria-pressed="false">Propostas digitadas</button>
+        </div>
+    </div>
+
+    <div class="promoter-comparison-body">
+        <div class="promoter-pie-shell">
+            <svg class="promoter-pie" viewBox="0 0 220 220" role="img" aria-labelledby="promoterPieTitle promoterPieDescription">
+                <title id="promoterPieTitle">Produção de Única e Vieira</title>
+                <desc id="promoterPieDescription">Gráfico interativo da participação de cada promotora.</desc>
+                <g data-promoter-slices></g>
+                <circle class="promoter-pie-hole" cx="110" cy="110" r="55"></circle>
+            </svg>
+            <div class="promoter-pie-center" aria-hidden="true">
+                <strong data-promoter-total>R$ 0,00</strong>
+                <span data-promoter-total-label>comissão paga</span>
+            </div>
+            <div class="promoter-chart-tooltip" data-promoter-tooltip hidden></div>
+        </div>
+        <div class="promoter-chart-legend" data-promoter-legend></div>
+    </div>
+
+    <p class="promoter-comparison-note" data-promoter-note>
+        Comissão paga considera as propostas encerradas como Pago no mês. Variações como “ÚNICA” e “UNICA - Adriano” são agrupadas em Única.
+    </p>
+    <script type="application/json" data-promoter-comparison-data>{{ dados.comparativo_promotoras | tojson }}</script>
+</section>
+
 <section class="charts-grid">
     <div class="card stack">
         <h2>Propostas por status</h2>

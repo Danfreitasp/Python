@@ -1716,6 +1716,131 @@ document.addEventListener('DOMContentLoaded', () => {
     atualizarModeloSelecionado();
 });
 
+// Comparativo interativo entre as promotoras no Dashboard.
+document.addEventListener('DOMContentLoaded', () => {
+    const root = document.querySelector('[data-promoter-comparison]');
+    if (!root) return;
+
+    const dataNode = root.querySelector('[data-promoter-comparison-data]');
+    const slicesRoot = root.querySelector('[data-promoter-slices]');
+    const legend = root.querySelector('[data-promoter-legend]');
+    const totalNode = root.querySelector('[data-promoter-total]');
+    const totalLabel = root.querySelector('[data-promoter-total-label]');
+    const note = root.querySelector('[data-promoter-note]');
+    const tooltip = root.querySelector('[data-promoter-tooltip]');
+    const description = root.querySelector('#promoterPieDescription');
+    const buttons = Array.from(root.querySelectorAll('[data-promoter-mode]'));
+    const colors = ['#2563eb', '#f59e0b'];
+    let data = {};
+    let activeIndex = null;
+
+    try { data = JSON.parse(dataNode?.textContent || '{}'); } catch (error) { data = {}; }
+
+    const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const quantity = (value) => `${Number(value || 0).toLocaleString('pt-BR')} proposta${Number(value || 0) === 1 ? '' : 's'}`;
+    const percent = (value) => `${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+    const point = (angle, radius) => {
+        const radians = (angle - 90) * Math.PI / 180;
+        return { x: 110 + radius * Math.cos(radians), y: 110 + radius * Math.sin(radians) };
+    };
+    const piePath = (startAngle, endAngle) => {
+        if (endAngle - startAngle >= 359.999) {
+            return 'M 110 15 A 95 95 0 1 1 109.99 15 Z';
+        }
+        const start = point(startAngle, 95);
+        const end = point(endAngle, 95);
+        const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+        return `M 110 110 L ${start.x} ${start.y} A 95 95 0 ${largeArc} 1 ${end.x} ${end.y} Z`;
+    };
+
+    function highlight(index) {
+        activeIndex = index;
+        root.querySelectorAll('[data-promoter-index]').forEach((item) => {
+            const itemIndex = Number(item.dataset.promoterIndex);
+            item.classList.toggle('is-active', index === itemIndex);
+            item.classList.toggle('is-muted', index !== null && index !== itemIndex);
+        });
+    }
+
+    function render(mode) {
+        const series = data[mode] || { total: 0, itens: [] };
+        const isMoney = mode === 'comissao';
+        activeIndex = null;
+        slicesRoot.replaceChildren();
+        legend.replaceChildren();
+
+        buttons.forEach((button) => {
+            const selected = button.dataset.promoterMode === mode;
+            button.classList.toggle('is-active', selected);
+            button.setAttribute('aria-pressed', String(selected));
+        });
+
+        totalNode.textContent = isMoney ? money(series.total) : quantity(series.total);
+        totalLabel.textContent = isMoney ? 'comissão paga' : 'digitadas no mês';
+        note.textContent = isMoney
+            ? 'Comissão paga considera as propostas encerradas como Pago no mês. Variações como “ÚNICA” e “UNICA - Adriano” são agrupadas em Única.'
+            : 'Propostas digitadas considera o mês de criação. Portabilidade com Refinanciamento + Refin vinculado contam como uma única proposta.';
+
+        let angle = 0;
+        if (!Number(series.total)) {
+            const empty = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            empty.setAttribute('class', 'promoter-pie-empty');
+            empty.setAttribute('cx', '110');
+            empty.setAttribute('cy', '110');
+            empty.setAttribute('r', '95');
+            slicesRoot.appendChild(empty);
+        }
+
+        series.itens.forEach((item, index) => {
+            const share = Number(item.percentual || 0);
+            const valueLabel = isMoney ? money(item.valor) : quantity(item.valor);
+            const detail = `${item.nome}: ${valueLabel} (${percent(share)})`;
+
+            if (share > 0) {
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', piePath(angle, angle + (share / 100 * 360)));
+                path.setAttribute('fill', colors[index]);
+                path.setAttribute('class', 'promoter-pie-slice');
+                path.setAttribute('tabindex', '0');
+                path.setAttribute('role', 'button');
+                path.setAttribute('aria-label', detail);
+                path.dataset.promoterIndex = String(index);
+                path.addEventListener('mouseenter', () => { highlight(index); tooltip.textContent = detail; tooltip.hidden = false; });
+                path.addEventListener('mouseleave', () => { highlight(null); tooltip.hidden = true; });
+                path.addEventListener('focus', () => { highlight(index); tooltip.textContent = detail; tooltip.hidden = false; });
+                path.addEventListener('blur', () => { highlight(null); tooltip.hidden = true; });
+                slicesRoot.appendChild(path);
+                angle += share / 100 * 360;
+            }
+
+            const itemButton = document.createElement('button');
+            itemButton.type = 'button';
+            itemButton.className = 'promoter-legend-item';
+            itemButton.style.setProperty('--promoter-color', colors[index]);
+            itemButton.dataset.promoterIndex = String(index);
+            itemButton.setAttribute('aria-label', detail);
+            itemButton.innerHTML = `
+                <span class="promoter-legend-color" aria-hidden="true"></span>
+                <span class="promoter-legend-copy"><strong>${item.nome}</strong><small>${valueLabel}</small></span>
+                <span class="promoter-legend-percent">${percent(share)}</span>
+            `;
+            itemButton.addEventListener('mouseenter', () => highlight(index));
+            itemButton.addEventListener('mouseleave', () => highlight(null));
+            itemButton.addEventListener('focus', () => highlight(index));
+            itemButton.addEventListener('blur', () => highlight(null));
+            itemButton.addEventListener('click', () => highlight(activeIndex === index ? null : index));
+            legend.appendChild(itemButton);
+        });
+
+        description.textContent = series.itens
+            .map((item) => `${item.nome}: ${percent(item.percentual)}`)
+            .join('; ');
+    }
+
+    buttons.forEach((button) => button.addEventListener('click', () => render(button.dataset.promoterMode)));
+    render('comissao');
+});
+
 // v44 - Gerador de mensagens comercial separado, inspirado no gerador desktop antigo.
 document.addEventListener('DOMContentLoaded', () => {
     const root = document.getElementById('geradorMensagens');

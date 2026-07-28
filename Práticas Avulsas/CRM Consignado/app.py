@@ -5607,6 +5607,75 @@ def configurar_status():
     )
 
 
+def grupo_promotora_dashboard(valor: Any) -> str:
+    """Agrupa as variações usadas no CRM nas duas promotoras comparadas."""
+    promotora = remover_acentos(limpar_texto(valor)).upper()
+    if promotora.startswith("UNICA"):
+        return "Única"
+    if promotora.startswith("VIEIRA"):
+        return "Vieira"
+    return ""
+
+
+def comparativo_promotoras_dashboard(
+    propostas_mes: list[sqlite3.Row],
+    propostas_pagas_mes: list[sqlite3.Row],
+) -> dict[str, Any]:
+    """Compara comissão paga e operações digitadas de Única e Vieira.
+
+    Comissão é somada por registro efetivamente pago. Na quantidade digitada,
+    o refin que forma um par válido com sua Portabilidade com Refinanciamento
+    é omitido, mantendo a operação como uma única proposta.
+    """
+    nomes = ("Única", "Vieira")
+    comissoes = {nome: 0.0 for nome in nomes}
+    quantidades = {nome: 0 for nome in nomes}
+
+    for proposta in propostas_pagas_mes:
+        grupo = grupo_promotora_dashboard(proposta["promotora"])
+        if grupo:
+            comissoes[grupo] += float(proposta["comissao"] or 0)
+
+    todas_propostas = get_db().execute(
+        """
+        SELECT id, produto, promotora, numero_proposta,
+               numero_port_vinculada, numero_refin_vinculada
+        FROM propostas
+        """
+    ).fetchall()
+    ports = [proposta for proposta in todas_propostas if produto_eh_portabilidade_com_refin(proposta)]
+    refins_vinculados = {
+        refin["id"]
+        for refin in todas_propostas
+        if proposta_eh_refin_vinculado(refin)
+        and any(propostas_formam_par_port_refin(port, refin) for port in ports)
+    }
+
+    for proposta in propostas_mes:
+        grupo = grupo_promotora_dashboard(proposta["promotora"])
+        if grupo and proposta["id"] not in refins_vinculados:
+            quantidades[grupo] += 1
+
+    def montar_serie(valores: dict[str, float | int]) -> dict[str, Any]:
+        total = sum(valores.values())
+        return {
+            "total": total,
+            "itens": [
+                {
+                    "nome": nome,
+                    "valor": valores[nome],
+                    "percentual": round((valores[nome] / total * 100), 1) if total else 0,
+                }
+                for nome in nomes
+            ],
+        }
+
+    return {
+        "comissao": montar_serie(comissoes),
+        "propostas": montar_serie(quantidades),
+    }
+
+
 def consulta_dashboard(mes: str) -> dict[str, Any]:
     db = get_db()
     propostas = db.execute(
@@ -5643,6 +5712,7 @@ def consulta_dashboard(mes: str) -> dict[str, Any]:
     saldo_atual = saldo_em_conta()
     valor_a_receber = valor_a_sacar + falta_cair_promotora + saldo_atual
     valor_previsto = comissao_prevista + valor_a_receber
+    comparativo_promotoras = comparativo_promotoras_dashboard(propostas, pagas)
 
     def agrupar(campo: str) -> list[dict[str, Any]]:
         rows = db.execute(
@@ -5674,6 +5744,7 @@ def consulta_dashboard(mes: str) -> dict[str, Any]:
         "saldo_em_conta": saldo_atual,
         "valor_a_receber": valor_a_receber,
         "valor_previsto": valor_previsto,
+        "comparativo_promotoras": comparativo_promotoras,
         "por_status": agrupar("status"),
         "por_banco": agrupar("banco_digitado"),
         "por_produto": agrupar("produto"),
