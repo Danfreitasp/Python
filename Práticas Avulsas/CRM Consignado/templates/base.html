@@ -30,6 +30,7 @@
 		<a href="{{ url_for('funil') }}" class="nav-link {% if request.endpoint == 'funil' %}active{% endif %}"><i class="bi bi-kanban nav-icon" aria-hidden="true"></i><span>Funil</span></a>
 		<a href="{{ url_for('nova_proposta') }}" class="nav-link {% if request.endpoint == 'nova_proposta' %}active{% endif %}"><i class="bi bi-plus-circle nav-icon" aria-hidden="true"></i><span>Nova Proposta</span></a>
 		<a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}"><i class="bi bi-card-checklist nav-icon" aria-hidden="true"></i><span>Propostas</span></a>
+		<a href="{{ url_for('lista_clientes') }}" class="nav-link {% if request.endpoint in ['lista_clientes', 'detalhe_cliente', 'editar_cliente'] %}active{% endif %}"><i class="bi bi-people nav-icon" aria-hidden="true"></i><span>Base de Clientes</span></a>
 		<a href="{{ url_for('agenda') }}" class="nav-link {% if request.endpoint == 'agenda' %}active{% endif %}" data-agenda-nav title="{% if agenda_alerta_ativo %}{{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}" aria-label="{% if agenda_alerta_ativo %}Agenda: {{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}"><i class="bi bi-calendar3 nav-icon" aria-hidden="true"></i><span>Agenda</span><span class="agenda-alert-badge" data-agenda-alert {% if not agenda_alerta_ativo %}hidden{% endif %} aria-hidden="true">!</span></a>
 		<a href="{{ url_for('simulador_inss') }}" class="nav-link {% if request.endpoint == 'simulador_inss' %}active{% endif %}"><i class="bi bi-calculator nav-icon" aria-hidden="true"></i><span>Simulador INSS</span></a>
 		<a href="{{ url_for('gerador_mensagens_page') }}" class="nav-link {% if request.endpoint == 'gerador_mensagens_page' %}active{% endif %}"><i class="bi bi-chat-left-text nav-icon" aria-hidden="true"></i><span>Gerador de Mensagens</span></a>
@@ -48,7 +49,7 @@
             </div>
             <div class="topbar-actions">
                 <a class="btn btn-back" href="{{ url_retorno_padrao() }}" title="Voltar para a origem"><i class="bi bi-arrow-left" aria-hidden="true"></i><span>Voltar</span></a>
-                <div class="quick-search" data-search-url="{{ url_for('api_buscar_propostas') }}">
+                <div class="quick-search" data-search-url="{{ url_for('api_pesquisa_global') }}">
                     <i class="bi bi-search quick-search-icon" aria-hidden="true"></i>
                     <input id="quickSearchInput" type="search" placeholder="Pesquisar cliente, CPF ou telefone..." autocomplete="off">
                     <div id="quickSearchResults" class="quick-search-results" hidden></div>
@@ -59,6 +60,9 @@
                 {% elif request.endpoint == 'encerradas' %}
                     {% set ajuda_pagina = 'Encerradas: propostas pagas ficam separadas entre falta cair na promotora, disponível para saque e já sacado. Perdidas ficam em uma coluna própria.' %}
                     {% set ajuda_rotulo = 'Ajuda sobre as propostas encerradas' %}
+                {% elif request.endpoint in ['lista_clientes', 'detalhe_cliente', 'editar_cliente'] %}
+                    {% set ajuda_pagina = 'Base de Clientes: pesquise todos os cadastros. Clientes sem propostas podem ser excluídos; os vinculados ficam protegidos para preservar o histórico.' %}
+                    {% set ajuda_rotulo = 'Ajuda sobre a Base de Clientes' %}
                 {% elif request.endpoint == 'configurar_status' %}
                     {% set ajuda_pagina = 'Editor visual de funil: ajuste a ordem, renomeie etapas e ative/desative colunas sem mexer no código. Arraste os cards para reordenar e clique em Salvar alterações uma única vez.' %}
                     {% set ajuda_rotulo = 'Ajuda sobre o Editor visual de funil' %}

@@ -23,7 +23,7 @@
     // Preenche campos, mas deliberadamente não dispara submit nem requisição.
     window.aplicarDadosConsultaINSS = function (dados = {}) {
         if (!aguardando) {
-            return { sucesso: false, motivo: 'A Nova Proposta não está aguardando importação.' };
+            return { sucesso: false, motivo: 'Esta tela do CRM não está aguardando importação.' };
         }
 
         const mapa = {

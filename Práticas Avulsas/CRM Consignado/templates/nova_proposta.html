@@ -3,12 +3,7 @@
 {% set subtitulo = 'Cadastre uma proposta com os mesmos dados da edição.' %}
 {% block content %}
 <section class="card proposal-entry-card">
-    <section class="portal-import-panel" aria-labelledby="portalImportTitle">
-        <div>
-            <h2 id="portalImportTitle">Importação do portal</h2>
-            <p id="portalImportStatus" class="muted" role="status">Abra o benefício no Sistemacorban e deixe esta página aberta.</p>
-        </div>
-    </section>
+    {% include '_portal_import_panel.html' %}
     <form method="post" enctype="multipart/form-data" class="stack proposal-entry-form">
         {% set modo_nova = true %}
         {% include '_form.html' %}

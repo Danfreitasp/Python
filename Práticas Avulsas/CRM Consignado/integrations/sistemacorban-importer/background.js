@@ -26,13 +26,14 @@ async function enviarParaCrm(dados) {
   const abas = await chrome.tabs.query({ url: permissao });
   const candidatas = abas.filter((aba) => {
     try {
-      return new URL(aba.url).pathname.replace(/\/$/, '') === '/nova';
+      const caminho = new URL(aba.url).pathname.replace(/\/$/, '');
+      return caminho === '/nova' || /^\/cliente\/\d+\/editar$/.test(caminho);
     } catch (_) {
       return false;
     }
-  });
+  }).sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
   if (!candidatas.length) {
-    return { sucesso: false, mensagem: 'Abra a página Nova Proposta no CRM configurado.' };
+    return { sucesso: false, mensagem: 'Abra a Nova Proposta ou a edição de um cliente no CRM configurado.' };
   }
 
   for (const aba of candidatas) {
@@ -52,10 +53,10 @@ async function enviarParaCrm(dados) {
     });
     const retorno = resultados?.[0]?.result;
     if (retorno?.sucesso) {
-      return { sucesso: true, mensagem: 'Dados enviados ao CRM. Revise a Nova Proposta antes de salvar.' };
+      return { sucesso: true, mensagem: 'Dados enviados ao CRM. Revise os dados antes de salvar.' };
     }
   }
-  return { sucesso: false, mensagem: 'Na Nova Proposta, clique primeiro em “Aguardar importação do portal”.' };
+  return { sucesso: false, mensagem: 'Deixe a Nova Proposta ou a edição do cliente aberta e aguardando a importação.' };
 }
 
 chrome.runtime.onMessage.addListener((mensagem, sender, responder) => {

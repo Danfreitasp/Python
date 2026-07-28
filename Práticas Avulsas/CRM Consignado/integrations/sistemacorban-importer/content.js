@@ -233,7 +233,7 @@
     if (document.getElementById('crm-sistemacorban-importer')) return;
     const painel = document.createElement('aside');
     painel.id = 'crm-sistemacorban-importer';
-    painel.innerHTML = '<button type="button">Enviar para Nova Proposta</button><p data-status="info">Envio manual; a proposta não será salva automaticamente.</p>';
+    painel.innerHTML = '<button type="button">Enviar para o CRM</button><p data-status="info">Envio manual; os dados não serão salvos automaticamente.</p>';
     const botao = painel.querySelector('button');
     const status = painel.querySelector('p');
     botao.addEventListener('click', async () => {

@@ -1,6 +1,6 @@
 # Sistemacorban para CRM Consignado
 
-Extensão Chrome Manifest V3 para enviar manualmente os dados do benefício atualmente visível no Sistemacorban para a página **Nova Proposta** do CRM.
+Extensão Chrome Manifest V3 para enviar manualmente os dados do benefício atualmente visível no Sistemacorban para a página **Nova Proposta** ou **Editar cliente** do CRM.
 
 ## Instalação
 
@@ -18,13 +18,13 @@ A extensão declara origens HTTP/HTTPS como permissões opcionais para suportar 
 
 ## Uso
 
-1. No CRM, abra **Nova Proposta** e clique em **Aguardar importação do portal**.
+1. No CRM, abra **Nova Proposta** ou **Editar cliente** e deixe a tela aguardando a importação.
 2. Entre manualmente no Sistemacorban, consulte o CPF e selecione manualmente o benefício correto.
-3. Na tela de detalhes do benefício, clique no botão flutuante **Enviar para Nova Proposta**.
+3. Na tela de detalhes do benefício, clique no botão flutuante **Enviar para o CRM**.
 4. A extensão tenta clicar nos ícones de olho somente dentro de **Dados Cliente**, aguarda a atualização visual e lê os rótulos da tela. Telefones não são extraídos nem enviados ao CRM.
 5. Volte ao CRM, revise os campos destacados e salve somente se os dados estiverem corretos.
 
-A extensão não executa login, não pesquisa CPF, não escolhe benefício, não cria filas e não salva a proposta.
+A extensão não executa login, não pesquisa CPF, não escolhe benefício, não cria filas e não salva os dados.
 
 ## Seletores e ajustes do portal
 

@@ -14,6 +14,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from flask import (
     Flask,
+    abort,
     flash,
     g,
     jsonify,
@@ -169,6 +170,8 @@ DESTINOS_INTERNOS_PREFIXOS = (
     "/mensagens",
     "/configuracoes",
     "/configuracoes/status",
+    "/clientes",
+    "/cliente/",
     "/proposta/",
 )
 
@@ -407,7 +410,9 @@ def init_db() -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
             cpf TEXT NOT NULL,
+            nascimento TEXT,
             nb_matricula TEXT NOT NULL DEFAULT '',
+            especie TEXT,
             telefone TEXT,
             tipo_cliente TEXT,
             endereco TEXT,
@@ -477,6 +482,61 @@ def init_db() -> None:
         db.execute("ALTER TABLE propostas ADD COLUMN especie TEXT")
     if "nascimento" not in colunas_propostas:
         db.execute("ALTER TABLE propostas ADD COLUMN nascimento TEXT")
+
+    colunas_clientes = {
+        row["name"] for row in db.execute("PRAGMA table_info(clientes)").fetchall()
+    }
+    if "nascimento" not in colunas_clientes:
+        db.execute("ALTER TABLE clientes ADD COLUMN nascimento TEXT")
+    if "especie" not in colunas_clientes:
+        db.execute("ALTER TABLE clientes ADD COLUMN especie TEXT")
+
+    # Completa apenas campos vazios do cadastro do cliente com dados já
+    # existentes em alguma proposta vinculada.
+    db.execute(
+        """
+        UPDATE clientes
+        SET
+            nascimento = COALESCE(
+                NULLIF(TRIM(nascimento), ''),
+                (
+                    SELECT NULLIF(TRIM(proposta.nascimento), '')
+                    FROM propostas proposta
+                    WHERE (
+                        proposta.cliente_id = clientes.id
+                        OR (
+                            proposta.cpf = clientes.cpf
+                            AND COALESCE(proposta.nb_matricula, '') = COALESCE(clientes.nb_matricula, '')
+                        )
+                    )
+                      AND COALESCE(TRIM(proposta.nascimento), '') <> ''
+                    ORDER BY proposta.data_atualizacao DESC, proposta.id DESC
+                    LIMIT 1
+                ),
+                ''
+            ),
+            especie = COALESCE(
+                NULLIF(TRIM(especie), ''),
+                (
+                    SELECT NULLIF(TRIM(proposta.especie), '')
+                    FROM propostas proposta
+                    WHERE (
+                        proposta.cliente_id = clientes.id
+                        OR (
+                            proposta.cpf = clientes.cpf
+                            AND COALESCE(proposta.nb_matricula, '') = COALESCE(clientes.nb_matricula, '')
+                        )
+                    )
+                      AND COALESCE(TRIM(proposta.especie), '') <> ''
+                    ORDER BY proposta.data_atualizacao DESC, proposta.id DESC
+                    LIMIT 1
+                ),
+                ''
+            )
+        WHERE COALESCE(TRIM(nascimento), '') = ''
+           OR COALESCE(TRIM(especie), '') = ''
+        """
+    )
 
     # Completa dados de cliente que ficaram vazios em refins vinculados criados
     # antes de nascimento e espécie fazerem parte desse fluxo.
@@ -1106,6 +1166,24 @@ def formatar_cpf(valor: str) -> str:
     if len(digitos) == 11:
         return f"{digitos[:3]}.{digitos[3:6]}.{digitos[6:9]}-{digitos[9:]}"
     return valor.strip()
+
+
+def cpf_valido(valor: Any) -> bool:
+    digitos = re.sub(r"\D", "", str(valor or ""))
+    if len(digitos) != 11 or digitos == digitos[0] * 11:
+        return False
+    numeros = [int(digito) for digito in digitos]
+    for tamanho in (9, 10):
+        soma = sum(
+            numeros[indice] * (tamanho + 1 - indice)
+            for indice in range(tamanho)
+        )
+        verificador = (soma * 10) % 11
+        if verificador == 10:
+            verificador = 0
+        if verificador != numeros[tamanho]:
+            return False
+    return True
 
 
 def parse_moeda(valor: Any) -> float:
@@ -1786,11 +1864,20 @@ def salvar_cliente_dos_dados(dados: dict[str, Any] | sqlite3.Row) -> int | None:
         db.execute(
             """
             UPDATE clientes SET
-                nome = ?, telefone = ?, tipo_cliente = ?, endereco = ?, dados_bancarios = ?, data_atualizacao = ?
+                nome = ?,
+                nascimento = COALESCE(NULLIF(?, ''), nascimento),
+                especie = COALESCE(NULLIF(?, ''), especie),
+                telefone = ?,
+                tipo_cliente = ?,
+                endereco = ?,
+                dados_bancarios = ?,
+                data_atualizacao = ?
             WHERE id = ?
             """,
             (
                 nome,
+                limpar_texto(item.get("nascimento")),
+                limpar_texto(item.get("especie")),
                 limpar_texto(item.get("telefone")),
                 limpar_texto(item.get("tipo_cliente")),
                 limpar_texto(item.get("endereco")),
@@ -1804,11 +1891,15 @@ def salvar_cliente_dos_dados(dados: dict[str, Any] | sqlite3.Row) -> int | None:
     cursor = db.execute(
         """
         INSERT INTO clientes (
-            nome, cpf, nb_matricula, telefone, tipo_cliente, endereco, dados_bancarios, data_criacao, data_atualizacao
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            nome, cpf, nascimento, nb_matricula, especie, telefone, tipo_cliente,
+            endereco, dados_bancarios, data_criacao, data_atualizacao
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            nome, cpf, nb,
+            nome, cpf,
+            limpar_texto(item.get("nascimento")),
+            nb,
+            limpar_texto(item.get("especie")),
             limpar_texto(item.get("telefone")),
             limpar_texto(item.get("tipo_cliente")),
             limpar_texto(item.get("endereco")),
@@ -2568,7 +2659,34 @@ def nova_proposta():
         flash("Proposta criada com sucesso.", "ok")
         return redirect(url_for("detalhe_proposta", proposta_id=proposta_id))
 
-    return render_template("nova_proposta.html", proposta=proposta_vazia())
+    proposta = proposta_vazia()
+    cliente_id = request.args.get("cliente_id", type=int)
+    if cliente_id:
+        cliente = get_db().execute(
+            """
+            SELECT id, nome, cpf, nascimento, nb_matricula, especie, telefone,
+                   tipo_cliente, endereco, dados_bancarios
+            FROM clientes
+            WHERE id = ?
+            """,
+            (cliente_id,),
+        ).fetchone()
+        if not cliente:
+            abort(404)
+        proposta.update(
+            {
+                "nome": cliente["nome"] or "",
+                "cpf": cliente["cpf"] or "",
+                "nascimento": cliente["nascimento"] or "",
+                "nb_matricula": cliente["nb_matricula"] or "",
+                "especie": cliente["especie"] or "",
+                "telefone": cliente["telefone"] or "",
+                "tipo_cliente": cliente["tipo_cliente"] or "",
+                "endereco": cliente["endereco"] or "",
+                "dados_bancarios": cliente["dados_bancarios"] or "",
+            }
+        )
+    return render_template("nova_proposta.html", proposta=proposta)
 
 
 @app.route("/proposta/<int:proposta_id>/criar-refin-vinculado", methods=["POST"])
@@ -2778,6 +2896,480 @@ def api_buscar_propostas():
     return jsonify(resultados)
 
 
+@app.route("/clientes")
+def lista_clientes():
+    termo = limpar_texto(request.args.get("q"))
+    vinculo = limpar_texto(request.args.get("vinculo")).lower()
+    if vinculo not in {"", "com", "sem"}:
+        vinculo = ""
+    try:
+        pagina = max(int(request.args.get("pagina", "1")), 1)
+    except (TypeError, ValueError):
+        pagina = 1
+
+    por_pagina = 100
+    termo_digitos = re.sub(r"\D", "", termo)
+    where = []
+    params: list[Any] = []
+    vinculo_sql = """
+        SELECT 1
+        FROM propostas p
+        WHERE p.cliente_id = c.id
+           OR (
+                p.cpf = c.cpf
+                AND COALESCE(p.nb_matricula, '') = COALESCE(c.nb_matricula, '')
+           )
+    """
+
+    if termo:
+        like = f"%{termo}%"
+        like_digitos = f"%{termo_digitos}%" if termo_digitos else like
+        where.append(
+            """
+            (
+                c.nome LIKE ?
+                OR c.cpf LIKE ?
+                OR c.nb_matricula LIKE ?
+                OR c.telefone LIKE ?
+                OR c.tipo_cliente LIKE ?
+                OR c.endereco LIKE ?
+                OR c.dados_bancarios LIKE ?
+                OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(c.cpf, ''), '.', ''), '-', ''), ' ', ''), '/', '') LIKE ?
+                OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(c.telefone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE ?
+            )
+            """
+        )
+        params.extend(
+            [
+                like,
+                like,
+                like,
+                like,
+                like,
+                like,
+                like,
+                like_digitos,
+                like_digitos,
+            ]
+        )
+
+    if vinculo == "com":
+        where.append(f"EXISTS ({vinculo_sql})")
+    elif vinculo == "sem":
+        where.append(f"NOT EXISTS ({vinculo_sql})")
+
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    db = get_db()
+    total_filtrado = db.execute(
+        f"SELECT COUNT(*) FROM clientes c {where_sql}",
+        params,
+    ).fetchone()[0]
+    total_paginas = max((total_filtrado + por_pagina - 1) // por_pagina, 1)
+    pagina = min(pagina, total_paginas)
+    offset = (pagina - 1) * por_pagina
+
+    clientes = db.execute(
+        f"""
+        SELECT
+            c.*,
+            (
+                SELECT COUNT(*)
+                FROM propostas p
+                WHERE p.cliente_id = c.id
+                   OR (
+                        p.cpf = c.cpf
+                        AND COALESCE(p.nb_matricula, '') = COALESCE(c.nb_matricula, '')
+                   )
+            ) AS propostas_total
+        FROM clientes c
+        {where_sql}
+        ORDER BY c.nome COLLATE NOCASE ASC, c.cpf ASC, c.nb_matricula ASC
+        LIMIT ? OFFSET ?
+        """,
+        (*params, por_pagina, offset),
+    ).fetchall()
+
+    resumo = db.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN EXISTS ({vinculo_sql}) THEN 1 ELSE 0 END) AS com_propostas,
+            SUM(CASE WHEN NOT EXISTS ({vinculo_sql}) THEN 1 ELSE 0 END) AS sem_propostas
+        FROM clientes c
+        """
+    ).fetchone()
+
+    return render_template(
+        "clientes.html",
+        clientes=clientes,
+        filtros={"q": termo, "vinculo": vinculo},
+        resumo=resumo,
+        total_filtrado=total_filtrado,
+        pagina=pagina,
+        total_paginas=total_paginas,
+    )
+
+
+@app.route("/cliente/<int:cliente_id>")
+def detalhe_cliente(cliente_id: int):
+    cliente = get_db().execute(
+        """
+        SELECT *
+        FROM clientes
+        WHERE id = ?
+        """,
+        (cliente_id,),
+    ).fetchone()
+    if not cliente:
+        abort(404)
+
+    propostas = get_db().execute(
+        """
+        SELECT id, nome, cpf, nb_matricula, status, produto, banco_digitado,
+               banco_atual, banco_destino, data_atualizacao
+        FROM propostas
+        WHERE cliente_id = ?
+           OR (
+                cpf = ?
+                AND COALESCE(nb_matricula, '') = COALESCE(?, '')
+           )
+        ORDER BY data_atualizacao DESC, id DESC
+        """,
+        (cliente_id, cliente["cpf"], cliente["nb_matricula"]),
+    ).fetchall()
+    return render_template(
+        "detalhe_cliente.html",
+        cliente=cliente,
+        propostas=propostas,
+    )
+
+
+@app.route("/cliente/<int:cliente_id>/editar", methods=["GET", "POST"])
+def editar_cliente(cliente_id: int):
+    db = get_db()
+    cliente = db.execute(
+        "SELECT * FROM clientes WHERE id = ?",
+        (cliente_id,),
+    ).fetchone()
+    if not cliente:
+        abort(404)
+
+    origem = url_interna_segura(
+        request.values.get("origem"),
+        url_for("lista_clientes"),
+    )
+    formulario = {
+        "nome": cliente["nome"] or "",
+        "cpf": cliente["cpf"] or "",
+        "nascimento": cliente["nascimento"] or "",
+        "nb_matricula": cliente["nb_matricula"] or "",
+        "especie": cliente["especie"] or "",
+        "telefone": cliente["telefone"] or "",
+        "tipo_cliente": cliente["tipo_cliente"] or "",
+        "endereco": cliente["endereco"] or "",
+        "dados_bancarios": cliente["dados_bancarios"] or "",
+    }
+    erros: list[str] = []
+
+    if request.method == "POST":
+        formulario = {
+            "nome": limpar_texto(request.form.get("nome")),
+            "cpf": formatar_cpf(limpar_texto(request.form.get("cpf"))),
+            "nascimento": limpar_texto(request.form.get("nascimento")),
+            "nb_matricula": limpar_texto(request.form.get("nb_matricula")),
+            "especie": limpar_texto(request.form.get("especie")),
+            "telefone": limpar_texto(request.form.get("telefone")),
+            "tipo_cliente": limpar_texto(request.form.get("tipo_cliente")),
+            "endereco": limpar_texto(request.form.get("endereco")),
+            "dados_bancarios": limpar_texto(request.form.get("dados_bancarios")),
+        }
+        if not formulario["nome"]:
+            erros.append("Informe o nome do cliente.")
+        if not formulario["cpf"]:
+            erros.append("Informe o CPF do cliente.")
+        elif (
+            formulario["cpf"] != (cliente["cpf"] or "")
+            and not cpf_valido(formulario["cpf"])
+        ):
+            erros.append("Informe um CPF válido.")
+        if (
+            formulario["tipo_cliente"]
+            and formulario["tipo_cliente"] not in TIPOS_CLIENTE
+        ):
+            erros.append("Escolha um tipo de cliente válido.")
+
+        duplicado = db.execute(
+            """
+            SELECT id
+            FROM clientes
+            WHERE cpf = ?
+              AND COALESCE(nb_matricula, '') = COALESCE(?, '')
+              AND id <> ?
+            LIMIT 1
+            """,
+            (
+                formulario["cpf"],
+                formulario["nb_matricula"],
+                cliente_id,
+            ),
+        ).fetchone()
+        if duplicado:
+            erros.append("Já existe outro cliente com este CPF e matrícula.")
+
+        if not erros:
+            agora = agora_iso()
+            cpf_anterior = cliente["cpf"] or ""
+            matricula_anterior = cliente["nb_matricula"] or ""
+            db.execute(
+                """
+                UPDATE clientes
+                SET nome = ?,
+                    cpf = ?,
+                    nascimento = ?,
+                    nb_matricula = ?,
+                    especie = ?,
+                    telefone = ?,
+                    tipo_cliente = ?,
+                    endereco = ?,
+                    dados_bancarios = ?,
+                    data_atualizacao = ?
+                WHERE id = ?
+                """,
+                (
+                    formulario["nome"],
+                    formulario["cpf"],
+                    formulario["nascimento"],
+                    formulario["nb_matricula"],
+                    formulario["especie"],
+                    formulario["telefone"],
+                    formulario["tipo_cliente"],
+                    formulario["endereco"],
+                    formulario["dados_bancarios"],
+                    agora,
+                    cliente_id,
+                ),
+            )
+            propostas_atualizadas = db.execute(
+                """
+                UPDATE propostas
+                SET cliente_id = ?,
+                    nome = ?,
+                    cpf = ?,
+                    nascimento = ?,
+                    nb_matricula = ?,
+                    especie = ?,
+                    telefone = ?,
+                    tipo_cliente = ?,
+                    endereco = ?,
+                    dados_bancarios = ?,
+                    data_atualizacao = ?
+                WHERE cliente_id = ?
+                   OR (
+                        cpf = ?
+                        AND COALESCE(nb_matricula, '') = COALESCE(?, '')
+                   )
+                """,
+                (
+                    cliente_id,
+                    formulario["nome"],
+                    formulario["cpf"],
+                    formulario["nascimento"],
+                    formulario["nb_matricula"],
+                    formulario["especie"],
+                    formulario["telefone"],
+                    formulario["tipo_cliente"],
+                    formulario["endereco"],
+                    formulario["dados_bancarios"],
+                    agora,
+                    cliente_id,
+                    cpf_anterior,
+                    matricula_anterior,
+                ),
+            ).rowcount
+            db.commit()
+            complemento = (
+                f" {propostas_atualizadas} proposta(s) vinculada(s) também foram atualizadas."
+                if propostas_atualizadas
+                else ""
+            )
+            flash(f"Cliente atualizado com sucesso.{complemento}", "ok")
+            return redirect(
+                url_for(
+                    "detalhe_cliente",
+                    cliente_id=cliente_id,
+                    origem=origem,
+                )
+            )
+
+    return render_template(
+        "editar_cliente.html",
+        cliente=cliente,
+        formulario=formulario,
+        erros=erros,
+        origem=origem,
+    )
+
+
+@app.route("/cliente/<int:cliente_id>/excluir", methods=["POST"])
+def excluir_cliente(cliente_id: int):
+    db = get_db()
+    cliente = db.execute(
+        "SELECT * FROM clientes WHERE id = ?",
+        (cliente_id,),
+    ).fetchone()
+    destino = url_interna_segura(
+        request.form.get("next") or request.referrer,
+        url_for("lista_clientes"),
+    )
+    if not cliente:
+        flash("Cliente não encontrado.", "erro")
+        return redirect(destino)
+
+    propostas_total = db.execute(
+        """
+        SELECT COUNT(*)
+        FROM propostas
+        WHERE cliente_id = ?
+           OR (
+                cpf = ?
+                AND COALESCE(nb_matricula, '') = COALESCE(?, '')
+           )
+        """,
+        (cliente_id, cliente["cpf"], cliente["nb_matricula"]),
+    ).fetchone()[0]
+    if propostas_total:
+        flash(
+            f"Este cliente possui {propostas_total} proposta(s) vinculada(s) e não pode ser excluído.",
+            "erro",
+        )
+        return redirect(destino)
+
+    db.execute("DELETE FROM clientes WHERE id = ?", (cliente_id,))
+    db.commit()
+    flash("Cliente excluído da base com sucesso.", "ok")
+    return redirect(destino)
+
+
+@app.route("/api/pesquisa-global")
+def api_pesquisa_global():
+    termo_original = limpar_texto(request.args.get("q"))
+    termo = termo_original.lower()
+    termo_digitos = re.sub(r"\D", "", termo_original)
+    if len(termo_original) < 2:
+        return jsonify([])
+
+    like = f"%{termo_original}%"
+    like_digitos = f"%{termo_digitos}%" if termo_digitos else like
+    db = get_db()
+    clientes = db.execute(
+        """
+        SELECT id, nome, cpf, nb_matricula, telefone, tipo_cliente, endereco, data_atualizacao
+        FROM clientes
+        WHERE nome LIKE ?
+           OR cpf LIKE ?
+           OR telefone LIKE ?
+           OR nb_matricula LIKE ?
+           OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', ''), ' ', ''), '/', '') LIKE ?
+           OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(telefone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE ?
+        ORDER BY data_atualizacao DESC, id DESC
+        LIMIT 10
+        """,
+        (like, like, like, like, like_digitos, like_digitos),
+    ).fetchall()
+    propostas = db.execute(
+        """
+        SELECT id, nome, cpf, telefone, status, produto, banco_digitado, banco_atual, banco_destino,
+               numero_proposta, numero_port_vinculada, numero_refin_vinculada
+        FROM propostas
+        WHERE nome LIKE ?
+           OR cpf LIKE ?
+           OR telefone LIKE ?
+           OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', ''), ' ', ''), '/', '') LIKE ?
+           OR REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(telefone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE ?
+           OR COALESCE(numero_proposta, '') LIKE ?
+           OR COALESCE(numero_port_vinculada, '') LIKE ?
+           OR COALESCE(numero_refin_vinculada, '') LIKE ?
+        ORDER BY data_atualizacao DESC, id DESC
+        LIMIT 10
+        """,
+        (like, like, like, like_digitos, like_digitos, like, like, like),
+    ).fetchall()
+
+    def match_info_cliente(cliente: sqlite3.Row) -> tuple[str, str]:
+        campos = [
+            ("CPF", cliente["cpf"] or "", True),
+            ("Telefone", cliente["telefone"] or "", True),
+            ("Matrícula", cliente["nb_matricula"] or "", False),
+            ("Nome", cliente["nome"] or "", False),
+        ]
+        for rotulo, valor, comparar_digitos in campos:
+            valor_texto = str(valor)
+            if comparar_digitos and termo_digitos:
+                if termo_digitos in re.sub(r"\D", "", valor_texto):
+                    return rotulo, valor_texto
+            if termo and termo in valor_texto.lower():
+                return rotulo, valor_texto
+        return "Resultado", termo_original
+
+    def match_info_proposta(proposta: sqlite3.Row) -> tuple[str, str]:
+        campos = [
+            ("Telefone", proposta["telefone"] or "", True),
+            ("CPF", proposta["cpf"] or "", True),
+            ("Nº proposta", proposta["numero_proposta"] or "", False),
+            ("Nº port vinculada", proposta["numero_port_vinculada"] or "", False),
+            ("Nº refin vinculado", proposta["numero_refin_vinculada"] or "", False),
+            ("Nome", proposta["nome"] or "", False),
+        ]
+        for rotulo, valor, comparar_digitos in campos:
+            valor_texto = str(valor)
+            if comparar_digitos and termo_digitos:
+                if termo_digitos in re.sub(r"\D", "", valor_texto):
+                    return rotulo, valor_texto
+            if termo and termo in valor_texto.lower():
+                return rotulo, valor_texto
+        return "Resultado", termo_original
+
+    resultados = []
+    for cliente in clientes:
+        campo, valor = match_info_cliente(cliente)
+        resultados.append(
+            {
+                "id": cliente["id"],
+                "tipo_resultado": "cliente",
+                "nome": cliente["nome"] or "",
+                "cpf": cliente["cpf"] or "",
+                "telefone": cliente["telefone"] or "",
+                "matricula": cliente["nb_matricula"] or "",
+                "status": "Cliente cadastrado",
+                "produto": cliente["tipo_cliente"] or "",
+                "banco": "",
+                "match_campo": campo,
+                "match_valor": valor,
+                "url": url_for("detalhe_cliente", cliente_id=cliente["id"]),
+            }
+        )
+
+    for proposta in propostas:
+        campo, valor = match_info_proposta(proposta)
+        resultados.append(
+            {
+                "id": proposta["id"],
+                "tipo_resultado": "proposta",
+                "nome": proposta["nome"] or "",
+                "cpf": proposta["cpf"] or "",
+                "telefone": proposta["telefone"] or "",
+                "matricula": "",
+                "status": proposta["status"] or "",
+                "produto": proposta["produto"] or "",
+                "banco": banco_digitado_exibicao(proposta) or "",
+                "match_campo": campo,
+                "match_valor": valor,
+                "url": url_for("detalhe_proposta", proposta_id=proposta["id"]),
+            }
+        )
+    return jsonify(resultados)
+
+
 
 @app.route("/api/clientes/por-cpf")
 def api_clientes_por_cpf():
@@ -2786,7 +3378,8 @@ def api_clientes_por_cpf():
         return jsonify([])
     clientes = get_db().execute(
         """
-        SELECT id, nome, cpf, nb_matricula, telefone, tipo_cliente, endereco, dados_bancarios, data_atualizacao
+        SELECT id, nome, cpf, nascimento, nb_matricula, especie, telefone,
+               tipo_cliente, endereco, dados_bancarios, data_atualizacao
         FROM clientes
         WHERE cpf = ?
         ORDER BY
@@ -2821,7 +3414,9 @@ def api_clientes_por_cpf():
             "label": label,
             "nome": c["nome"] or "",
             "cpf": c["cpf"] or "",
+            "nascimento": c["nascimento"] or "",
             "nb_matricula": c["nb_matricula"] or "",
+            "especie": c["especie"] or "",
             "telefone": c["telefone"] or "",
             "tipo_cliente": c["tipo_cliente"] or "",
             "endereco": c["endereco"] or "",

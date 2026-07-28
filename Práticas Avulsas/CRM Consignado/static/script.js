@@ -11,13 +11,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const usados = new Set();
         const fragment = document.createDocumentFragment();
         grupos.forEach(([titulo, campos]) => {
+            const camposEncontrados = campos
+                .map((name) => localizarCampo(name))
+                .filter(Boolean);
+            if (!camposEncontrados.length) return;
             const coluna = document.createElement('section');
             coluna.className = 'proposal-form-column';
             coluna.innerHTML = `<h3>${titulo}</h3><div class="proposal-form-column-fields"></div>`;
             const destino = coluna.querySelector('.proposal-form-column-fields');
-            campos.forEach((name) => {
-                const campo = localizarCampo(name);
-                if (campo) { destino.appendChild(campo); usados.add(campo); }
+            camposEncontrados.forEach((campo) => {
+                destino.appendChild(campo);
+                usados.add(campo);
             });
             fragment.appendChild(coluna);
         });
@@ -240,7 +244,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function preencherDadosCliente(cliente, novaMatricula = false) {
         if (!cliente) return;
         setFieldValue('nome', cliente.nome || '');
+        setFieldValue('nascimento', cliente.nascimento || '');
         setFieldValue('telefone', cliente.telefone || '');
+        setFieldValue('especie', cliente.especie || '');
         setFieldValue('tipo_cliente', cliente.tipo_cliente || '');
         setFieldValue('endereco', cliente.endereco || '');
         setFieldValue('dados_bancarios', cliente.dados_bancarios || '');
@@ -1205,7 +1211,10 @@ document.addEventListener('DOMContentLoaded', () => {
             <a class="quick-search-item" href="${appendOrigin(item.url)}">
                 <strong>${escapeHtml(item.nome)}</strong>
                 <small>${escapeHtml(item.cpf || 'CPF não informado')} · ${escapeHtml(item.status || '')}</small>
-                <span>${escapeHtml(item.produto || '')}${item.banco ? ' · Banco: ' + escapeHtml(item.banco) : ''}</span>
+                <span>${item.tipo_resultado === 'cliente'
+                    ? `${escapeHtml(item.matricula ? 'Matrícula: ' + item.matricula : 'Sem matrícula')}${item.telefone ? ' · ' + escapeHtml(item.telefone) : ''}`
+                    : `${escapeHtml(item.produto || '')}${item.banco ? ' · Banco: ' + escapeHtml(item.banco) : ''}`
+                }</span>
                 <em class="quick-search-match">Encontrado em ${escapeHtml(item.match_campo || 'resultado')}: ${escapeHtml(item.match_valor || '')}</em>
             </a>
         `).join('');

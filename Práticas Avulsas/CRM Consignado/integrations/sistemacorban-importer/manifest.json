@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Sistemacorban para CRM Consignado",
-  "version": "1.0.0",
-  "description": "Importa manualmente o benefício visível no Sistemacorban para a tela Nova Proposta do CRM local.",
+  "version": "1.1.0",
+  "description": "Importa manualmente o benefício visível no Sistemacorban para a Nova Proposta ou edição de cliente do CRM local.",
   "permissions": [
     "storage",
     "scripting"
