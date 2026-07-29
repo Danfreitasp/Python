@@ -21,29 +21,35 @@
             <label>Modelo salvo
                 <select id="gerModeloSelect">
                     {% for nome in modelos_gerador.keys() %}
-                        <option value="{{ nome }}">{{ nome }}</option>
+                        <option value="{{ nome }}" {% if nome == 'Anuência - Qualibanking (Port + Refin)' %}selected{% endif %}>{{ nome }}</option>
                     {% endfor %}
                 </select>
             </label>
-            <label>Atendente
+            <label data-ger-variables="{atendente}">Atendente
                 <input id="gerAtendente" type="text" value="Poliana" placeholder="Nome do atendente">
             </label>
-            <label>Nome do cliente
+            <label data-ger-variables="{nome}|{nome_maiusculo}">Nome do cliente
                 <input id="gerNome" type="text" placeholder="Nome do cliente">
             </label>
-            <label>Banco
-                <input id="gerBanco" type="text" placeholder="Banco do contrato">
+            <label data-ger-variables="{cpf}">CPF
+                <input id="gerCpf" class="cpf-mask" type="text" inputmode="numeric" maxlength="14" placeholder="000.000.000-00">
             </label>
-            <label>Parcela antiga
-                <input id="gerParcelaAntiga" class="money-mask" type="text" placeholder="Ex.: 650,00">
+            <label data-ger-variables="{banco}">Banco atual / originador
+                <input id="gerBanco" type="text" placeholder="Ex.: C6">
             </label>
-            <label>Nova parcela
+            <label data-ger-variables="{parcela_antiga}">Parcela ativa
+                <input id="gerParcelaAntiga" class="money-mask" type="text" placeholder="Ex.: 421,00">
+            </label>
+            <label data-ger-variables="{parcela_nova}">Nova parcela
                 <input id="gerParcelaNova" class="money-mask" type="text" placeholder="Ex.: 520,00">
             </label>
-            <label>Valor / troco liberado
-                <input id="gerTroco" class="money-mask" type="text" placeholder="Ex.: 2.800,00">
+            <label data-ger-variables="{troco}|{valor}">Valor / troco liberado
+                <input id="gerTroco" class="money-mask" type="text" placeholder="Ex.: 1.229,77">
             </label>
-            <label>Economia mensal
+            <label data-ger-variables="{prazo}">Prazo (meses)
+                <input id="gerPrazo" type="number" min="1" step="1" value="108" placeholder="Ex.: 108">
+            </label>
+            <label data-ger-variables="{economia}">Economia mensal
                 <input id="gerEconomia" type="text" readonly placeholder="Calculada automaticamente">
             </label>
         </div>
@@ -124,6 +130,8 @@
     <p>Use estas variáveis nos modelos salvos. O CRM troca automaticamente pelos campos preenchidos acima.</p>
     <div class="variable-grid">
         <code>{nome}</code>
+        <code>{nome_maiusculo}</code>
+        <code>{cpf}</code>
         <code>{banco}</code>
         <code>{parcela_antiga}</code>
         <code>{parcela_nova}</code>
@@ -131,6 +139,7 @@
         <code>{valor}</code>
         <code>{economia}</code>
         <code>{atendente}</code>
+        <code>{prazo}</code>
     </div>
 </section>
 {% endblock %}

@@ -1420,7 +1420,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    activateTab('resumo');
+    const requestedTab = new URLSearchParams(window.location.search).get('aba');
+    const initialTab = Array.from(tabs).some((tab) => tab.dataset.tabTarget === requestedTab)
+        ? requestedTab
+        : 'resumo';
+    activateTab(initialTab);
 });
 
 // v35 - Editor visual de etapas: arrastar, reordenar e salvar tudo de uma vez.
@@ -1851,10 +1855,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const modeloSelect = document.getElementById('gerModeloSelect');
     const nome = document.getElementById('gerNome');
+    const cpf = document.getElementById('gerCpf');
     const banco = document.getElementById('gerBanco');
     const parcelaAntiga = document.getElementById('gerParcelaAntiga');
     const parcelaNova = document.getElementById('gerParcelaNova');
     const troco = document.getElementById('gerTroco');
+    const prazo = document.getElementById('gerPrazo');
     const atendente = document.getElementById('gerAtendente');
     const economia = document.getElementById('gerEconomia');
     const saida = document.getElementById('gerMensagemResultado');
@@ -1889,15 +1895,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function preencherModelo(modelo, dados) {
-        return String(modelo || '').replace(/\{(nome|banco|parcela_antiga|parcela_nova|troco|valor|economia|atendente)\}/g, (match, key) => dados[key] ?? '');
+        return String(modelo || '').replace(/\{(nome|nome_maiusculo|cpf|banco|parcela_antiga|parcela_nova|troco|valor|economia|atendente|prazo)\}/g, (match, key) => dados[key] ?? '');
+    }
+
+    function atualizarCamposVisiveis(modelo) {
+        root.querySelectorAll('[data-ger-variables]').forEach((label) => {
+            const variaveis = String(label.dataset.gerVariables || '').split('|').filter(Boolean);
+            label.hidden = variaveis.length > 0 && !variaveis.some((variavel) => modelo.includes(variavel));
+        });
     }
 
     function gerarMensagem() {
         const modeloNome = modeloSelect?.value || Object.keys(modelos)[0];
         const modelo = modelos[modeloNome] || '';
+        atualizarCamposVisiveis(modelo);
         const eco = calcularEconomia();
         const dados = {
             nome: nome?.value.trim() || '',
+            nome_maiusculo: nome?.value.trim().toLocaleUpperCase('pt-BR') || '',
+            cpf: cpf?.value.trim() || '',
             banco: banco?.value.trim() || '',
             parcela_antiga: brl(parseMoneyGerador(parcelaAntiga?.value)),
             parcela_nova: brl(parseMoneyGerador(parcelaNova?.value)),
@@ -1905,6 +1921,7 @@ document.addEventListener('DOMContentLoaded', () => {
             valor: brl(parseMoneyGerador(troco?.value)),
             economia: brl(eco),
             atendente: atendente?.value.trim() || '',
+            prazo: prazo?.value.trim() || '108',
         };
         const mensagem = preencherModelo(modelo, dados);
         if (saida) saida.value = mensagem;
@@ -1912,7 +1929,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return mensagem;
     }
 
-    [modeloSelect, nome, banco, parcelaAntiga, parcelaNova, troco, atendente].forEach((field) => {
+    [modeloSelect, nome, cpf, banco, parcelaAntiga, parcelaNova, troco, prazo, atendente].forEach((field) => {
         if (!field) return;
         field.addEventListener('input', gerarMensagem);
         field.addEventListener('change', gerarMensagem);
@@ -1922,7 +1939,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (gerar) gerar.addEventListener('click', gerarMensagem);
     if (limpar) {
         limpar.addEventListener('click', () => {
-            [nome, banco, parcelaAntiga, parcelaNova, troco].forEach((field) => { if (field) field.value = ''; });
+            [nome, cpf, banco, parcelaAntiga, parcelaNova, troco].forEach((field) => { if (field) field.value = ''; });
+            if (prazo) prazo.value = '108';
             if (atendente) atendente.value = 'Poliana';
             if (economia) economia.value = '';
             if (saida) saida.value = '';

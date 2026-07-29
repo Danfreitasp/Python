@@ -28,7 +28,7 @@ from openpyxl import Workbook, load_workbook
 from werkzeug.utils import secure_filename
 
 BASE_DIR = Path(__file__).resolve().parent
-DATABASE = BASE_DIR / "database.db"
+DATABASE = Path(os.environ.get("CRM_DATABASE", BASE_DIR / "database.db"))
 DATA_DIR = BASE_DIR / "data"
 MODELOS_PATH = DATA_DIR / "modelos_mensagens.json"
 BACKUP_DIR = BASE_DIR / "backups"
@@ -400,6 +400,17 @@ def init_db() -> None:
             texto TEXT NOT NULL,
             ordem INTEGER NOT NULL DEFAULT 0,
             data_atualizacao TEXT
+        )
+        """
+    )
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS modelos_excluidos (
+            contexto TEXT NOT NULL,
+            nome TEXT NOT NULL COLLATE NOCASE,
+            data_exclusao TEXT NOT NULL,
+            PRIMARY KEY (contexto, nome)
         )
         """
     )
@@ -789,6 +800,38 @@ def carregar_modelos_arquivo() -> dict[str, str]:
     return modelos_padrao()
 
 
+def nomes_modelos_excluidos(db: sqlite3.Connection, contexto: str) -> set[str]:
+    rows = db.execute(
+        "SELECT nome FROM modelos_excluidos WHERE contexto = ?",
+        (contexto,),
+    ).fetchall()
+    return {limpar_texto(row["nome"]).casefold() for row in rows}
+
+
+def registrar_modelo_excluido(db: sqlite3.Connection, contexto: str, nome: Any) -> None:
+    nome_limpo = limpar_texto(nome)
+    if not nome_limpo:
+        return
+    db.execute(
+        """
+        INSERT INTO modelos_excluidos (contexto, nome, data_exclusao)
+        VALUES (?, ?, ?)
+        ON CONFLICT(contexto, nome)
+        DO UPDATE SET data_exclusao = excluded.data_exclusao
+        """,
+        (contexto, nome_limpo, agora_iso()),
+    )
+
+
+def reativar_modelo_excluido(db: sqlite3.Connection, contexto: str, nome: Any) -> None:
+    nome_limpo = limpar_texto(nome)
+    if nome_limpo:
+        db.execute(
+            "DELETE FROM modelos_excluidos WHERE contexto = ? AND nome = ?",
+            (contexto, nome_limpo),
+        )
+
+
 def sincronizar_modelos_banco(db: sqlite3.Connection) -> None:
     """Cria/preserva modelos no banco.
 
@@ -797,10 +840,13 @@ def sincronizar_modelos_banco(db: sqlite3.Connection) -> None:
     - Se o banco já tem modelos, mantém os textos editados pelo usuário.
     - Novos modelos padrão podem ser adicionados em versões futuras sem apagar os existentes.
     """
+    excluidos = nomes_modelos_excluidos(db, "proposta")
     existentes = db.execute("SELECT nome, texto FROM modelos_mensagens ORDER BY ordem, nome").fetchall()
     if not existentes:
         origem = carregar_modelos_arquivo()
         for ordem, (nome, texto) in enumerate(origem.items(), start=1):
+            if nome.casefold() in excluidos:
+                continue
             db.execute(
                 """
                 INSERT OR REPLACE INTO modelos_mensagens (nome, texto, ordem, data_atualizacao)
@@ -813,7 +859,7 @@ def sincronizar_modelos_banco(db: sqlite3.Connection) -> None:
     nomes_existentes = {row["nome"] for row in existentes}
     maior_ordem = db.execute("SELECT COALESCE(MAX(ordem), 0) AS maior FROM modelos_mensagens").fetchone()["maior"]
     for nome, texto in modelos_padrao().items():
-        if nome not in nomes_existentes:
+        if nome not in nomes_existentes and nome.casefold() not in excluidos:
             maior_ordem += 1
             db.execute(
                 """
@@ -827,6 +873,15 @@ def sincronizar_modelos_banco(db: sqlite3.Connection) -> None:
 
 def modelos_gerador_padrao() -> dict[str, str]:
     return {
+        "Anuência - Qualibanking (Port + Refin)": """BANCO QUALIBANKING (PORT COM REFIN)
+Port + Refin
+Sr. (a) {nome_maiusculo}, CPF: {cpf}, sou a {atendente}, supervisora comercial da Empresa Facilita Brasil Oficial - CNPJ 27.187.527/0001-23.
+O motivo do contato é para confirmar a Port + Refin, parcela ativa de {parcela_antiga} do Banco {banco} para o Qualibanking/QI SCD. Valor do troco aproximado de {troco} no prazo de {prazo} meses.
+O saldo devedor é uma estimativa aproximada e a proposta inicial ofertada poderá sofrer alterações mediante o saldo devedor real enviado por sua instituição financeira atual credora (banco originador).
+Lembrando que essa operação é gratuita e a empresa não solicita nenhum valor de pagamento ou comissão (via Pix, depósito bancário ou boleto) para realização desta portabilidade.
+O (a) sr. (a) confirma o envio da documentação e autoriza o andamento da proposta?
+1 - SIM
+2 - NÃO""",
         "Portabilidade com redução de parcela": """Olá, {nome},
 
 Meu nome é {atendente} e entrei em contato para falar sobre a portabilidade do seu contrato, com redução da taxa de juros e liberação de troco.
@@ -872,9 +927,12 @@ Posso atualizar essa simulação para você?""",
 
 
 def sincronizar_modelos_gerador_banco(db: sqlite3.Connection) -> None:
+    excluidos = nomes_modelos_excluidos(db, "gerador")
     existentes = db.execute("SELECT nome FROM modelos_gerador_mensagens ORDER BY ordem, nome").fetchall()
     if not existentes:
         for ordem, (nome, texto) in enumerate(modelos_gerador_padrao().items(), start=1):
+            if nome.casefold() in excluidos:
+                continue
             db.execute(
                 """
                 INSERT OR REPLACE INTO modelos_gerador_mensagens (nome, texto, ordem, data_atualizacao)
@@ -887,7 +945,7 @@ def sincronizar_modelos_gerador_banco(db: sqlite3.Connection) -> None:
     nomes_existentes = {row["nome"] for row in existentes}
     maior_ordem = db.execute("SELECT COALESCE(MAX(ordem), 0) AS maior FROM modelos_gerador_mensagens").fetchone()["maior"]
     for nome, texto in modelos_gerador_padrao().items():
-        if nome not in nomes_existentes:
+        if nome not in nomes_existentes and nome.casefold() not in excluidos:
             maior_ordem += 1
             db.execute(
                 """
@@ -2069,6 +2127,88 @@ def buscar_propostas_vinculadas(proposta: sqlite3.Row) -> list[sqlite3.Row]:
     return vinculadas
 
 
+def buscar_portabilidade_origem_refin(proposta: sqlite3.Row) -> sqlite3.Row | None:
+    """Localiza a portabilidade exata que originou um refin vinculado."""
+    if not proposta_eh_refin_vinculado(proposta):
+        return None
+
+    numero_port = normalizar_numero_proposta(proposta["numero_port_vinculada"])
+    if not numero_port:
+        return None
+
+    candidatas = get_db().execute(
+        """
+        SELECT *
+        FROM propostas
+        WHERE id <> ?
+          AND UPPER(TRIM(COALESCE(numero_proposta, ''))) = ?
+        ORDER BY id DESC
+        """,
+        (proposta["id"], numero_port),
+    ).fetchall()
+    return next((row for row in candidatas if produto_eh_portabilidade_com_refin(row)), None)
+
+
+def montar_anuencia_refin(
+    refin: sqlite3.Row,
+    portabilidade: sqlite3.Row | None,
+) -> dict[str, Any] | None:
+    """Monta a anuência usando dados do refin e da portabilidade que o originou."""
+    if not portabilidade:
+        return None
+
+    nome = limpar_texto(refin["nome"] or portabilidade["nome"]).upper()
+    cpf = formatar_cpf(limpar_texto(refin["cpf"] or portabilidade["cpf"]))
+    banco_atual = limpar_texto(portabilidade["banco_atual"])
+    banco_digitado = limpar_texto(portabilidade["banco_digitado"])
+    parcela = float(portabilidade["parcela_atual"] or 0)
+    troco = float(refin["troco"] or 0)
+    prazo = 108
+    banco_digitado_normalizado = remover_acentos(banco_digitado).upper()
+    if banco_digitado_normalizado in {"QUALI", "QUALIBANKING", "QI", "QI SCD"}:
+        banco_destino_mensagem = "Qualibanking/QI SCD"
+        banco_cabecalho = "QUALIBANKING"
+    else:
+        banco_destino_mensagem = banco_digitado
+        banco_cabecalho = banco_digitado.upper() if banco_digitado else "BANCO DESTINO NÃO INFORMADO"
+
+    campos = {
+        "nome": nome,
+        "cpf": cpf,
+        "banco_atual": banco_atual,
+        "banco_digitado": banco_digitado,
+        "banco_destino_mensagem": banco_destino_mensagem,
+        "parcela": parcela,
+        "troco": troco,
+        "prazo": prazo,
+        "portabilidade_id": portabilidade["id"],
+    }
+    faltantes = []
+    for chave, rotulo in (
+        ("nome", "nome"),
+        ("cpf", "CPF"),
+        ("banco_atual", "banco atual"),
+        ("banco_digitado", "banco digitado"),
+    ):
+        if not campos[chave]:
+            faltantes.append(rotulo)
+    if parcela <= 0:
+        faltantes.append("parcela da portabilidade")
+    if troco <= 0:
+        faltantes.append("troco do refinanciamento")
+
+    texto = f"""BANCO {banco_cabecalho} (PORT COM REFIN)
+Port + Refin
+Sr. (a) {nome}, CPF: {cpf}, sou a Poliana, supervisora comercial da Empresa Facilita Brasil Oficial - CNPJ 27.187.527/0001-23.
+O motivo do contato é para confirmar a Port + Refin, parcela ativa de {br_moeda(parcela)} do Banco {banco_atual} para o {banco_destino_mensagem}. Valor do troco aproximado de {br_moeda(troco)} no prazo de {prazo} meses.
+O saldo devedor é uma estimativa aproximada e a proposta inicial ofertada poderá sofrer alterações mediante o saldo devedor real enviado por sua instituição financeira atual credora (banco originador).
+Lembrando que essa operação é gratuita e a empresa não solicita nenhum valor de pagamento ou comissão (via Pix, depósito bancário ou boleto) para realização desta portabilidade.
+O (a) sr. (a) confirma o envio da documentação e autoriza o andamento da proposta?
+1 - SIM
+2 - NÃO"""
+    return {**campos, "texto": texto, "faltantes": faltantes}
+
+
 def produto_eh_portabilidade_com_refin(proposta: sqlite3.Row | dict[str, Any]) -> bool:
     """Retorna True somente para a operação que exige um refin vinculado."""
     try:
@@ -2816,6 +2956,8 @@ def detalhe_proposta(proposta_id: int):
         (proposta_id,),
     ).fetchall()
     vinculadas = buscar_propostas_vinculadas(proposta)
+    portabilidade_origem = buscar_portabilidade_origem_refin(proposta)
+    anuencia_refin = montar_anuencia_refin(proposta, portabilidade_origem)
     mensagens = montar_mensagens(proposta)
     return render_template(
         "detalhe_proposta.html",
@@ -2824,10 +2966,54 @@ def detalhe_proposta(proposta_id: int):
         anotacoes=anotacoes,
         anexos=anexos,
         vinculadas=vinculadas,
+        anuencia_refin=anuencia_refin,
         pasta_anexos=pasta_cliente(proposta),
         mensagens=mensagens,
         modelos_mensagens=carregar_modelos(),
     )
+
+
+@app.route("/proposta/<int:proposta_id>/anuencia/troco", methods=["POST"])
+def atualizar_troco_anuencia(proposta_id: int):
+    proposta = buscar_proposta(proposta_id)
+    origem = limpar_texto(request.form.get("origem"))
+    destino = url_for(
+        "detalhe_proposta",
+        proposta_id=proposta_id,
+        aba="anuencia",
+        origem=origem or None,
+    )
+    if not proposta:
+        flash("Proposta não encontrada.", "erro")
+        return redirect(url_for("index"))
+    if not proposta_eh_refin_vinculado(proposta) or not buscar_portabilidade_origem_refin(proposta):
+        flash("O troco da anuência só pode ser alterado no refinanciamento vinculado.", "erro")
+        return redirect(url_for("detalhe_proposta", proposta_id=proposta_id))
+
+    troco_informado = limpar_texto(request.form.get("troco"))
+    novo_troco = parse_moeda(troco_informado)
+    if not troco_informado or novo_troco <= 0:
+        flash("Informe um valor de troco maior que zero.", "erro")
+        return redirect(destino)
+
+    troco_anterior = float(proposta["troco"] or 0)
+    if round(troco_anterior, 2) == round(novo_troco, 2):
+        flash("O troco informado já está atualizado.", "ok")
+        return redirect(destino)
+
+    get_db().execute(
+        "UPDATE propostas SET troco = ?, data_atualizacao = ? WHERE id = ?",
+        (novo_troco, agora_iso(), proposta_id),
+    )
+    get_db().commit()
+    registrar_historico(
+        proposta_id,
+        proposta["status"],
+        proposta["status"],
+        f"Troco do refinanciamento atualizado pela anuência: {br_moeda(troco_anterior)} para {br_moeda(novo_troco)}.",
+    )
+    flash("Troco atualizado e anuência regenerada.", "ok")
+    return redirect(destino)
 
 
 @app.route("/api/propostas/buscar")
@@ -3839,6 +4025,7 @@ def adicionar_modelo_mensagem():
         """,
         (nome, texto, maior_ordem + 1, agora_iso()),
     )
+    reativar_modelo_excluido(db, "proposta", nome)
     db.commit()
     exportar_modelos_para_json()
     flash("Modelo de mensagem adicionado.", "ok")
@@ -3875,6 +4062,9 @@ def editar_modelo_mensagem():
         """,
         (nome_novo, texto, agora_iso(), nome_original),
     )
+    if nome_novo.casefold() != nome_original.casefold():
+        registrar_modelo_excluido(db, "proposta", nome_original)
+        reativar_modelo_excluido(db, "proposta", nome_novo)
     db.commit()
     exportar_modelos_para_json()
     flash("Modelo de mensagem atualizado.", "ok")
@@ -3890,7 +4080,11 @@ def excluir_modelo_mensagem():
         flash("Mantenha pelo menos um modelo de mensagem cadastrado.", "erro")
         return redirect(request.form.get("next") or request.referrer or url_for("index"))
 
-    db.execute("DELETE FROM modelos_mensagens WHERE nome = ?", (nome,))
+    excluido = db.execute("DELETE FROM modelos_mensagens WHERE nome = ?", (nome,))
+    if not excluido.rowcount:
+        flash("Modelo de mensagem não encontrado.", "erro")
+        return redirect(request.form.get("next") or request.referrer or url_for("index"))
+    registrar_modelo_excluido(db, "proposta", nome)
     db.commit()
     exportar_modelos_para_json()
     flash("Modelo de mensagem excluído.", "ok")
@@ -3931,6 +4125,7 @@ def adicionar_modelo_gerador():
         """,
         (nome, texto, maior_ordem + 1, agora_iso()),
     )
+    reativar_modelo_excluido(db, "gerador", nome)
     db.commit()
     flash("Modelo do gerador adicionado.", "ok")
     return redirect(url_for("gerador_mensagens_page"))
@@ -3965,6 +4160,9 @@ def editar_modelo_gerador():
         """,
         (nome_novo, texto, agora_iso(), nome_original),
     )
+    if nome_novo.casefold() != nome_original.casefold():
+        registrar_modelo_excluido(db, "gerador", nome_original)
+        reativar_modelo_excluido(db, "gerador", nome_novo)
     db.commit()
     flash("Modelo do gerador atualizado.", "ok")
     return redirect(url_for("gerador_mensagens_page"))
@@ -3978,7 +4176,11 @@ def excluir_modelo_gerador():
     if total <= 1:
         flash("Mantenha pelo menos um modelo no gerador.", "erro")
         return redirect(url_for("gerador_mensagens_page"))
-    db.execute("DELETE FROM modelos_gerador_mensagens WHERE nome = ?", (nome,))
+    excluido = db.execute("DELETE FROM modelos_gerador_mensagens WHERE nome = ?", (nome,))
+    if not excluido.rowcount:
+        flash("Modelo do gerador não encontrado.", "erro")
+        return redirect(url_for("gerador_mensagens_page"))
+    registrar_modelo_excluido(db, "gerador", nome)
     db.commit()
     flash("Modelo do gerador excluído.", "ok")
     return redirect(url_for("gerador_mensagens_page"))

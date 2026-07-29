@@ -289,6 +289,77 @@ textarea:focus-visible {
 .btn-danger:hover { border-color: #fca5a5; background: #fee2e2; }
 .detail-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .detail-actions form { margin: 0; }
+.consent-title-row { align-items: flex-start; }
+.consent-source-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.consent-source-grid .summary-card { min-height: 90px; }
+.consent-value-card {
+    border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+    background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+.consent-value-form {
+    display: grid;
+    align-content: center;
+    gap: 8px;
+    margin: 0;
+}
+.consent-value-form > label {
+    color: var(--muted);
+    font-size: 12px;
+}
+.consent-value-edit-row {
+    display: grid;
+    gap: 8px;
+}
+.consent-value-edit-row input {
+    width: 100%;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-weight: 700;
+}
+.consent-value-edit-row .mini-btn {
+    min-height: 39px;
+    justify-content: center;
+    width: 100%;
+}
+.consent-warning { margin-bottom: 14px; }
+.consent-output {
+    width: 100%;
+    min-height: 360px;
+    resize: vertical;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    line-height: 1.6;
+}
+.consent-origin-note {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 13px;
+}
+@media (max-width: 900px) {
+    .consent-source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+    .consent-source-grid { grid-template-columns: 1fr; }
+    .consent-origin-note { align-items: flex-start; flex-direction: column; }
+}
 .kanban-delete-form { display: flex !important; grid-template-columns: none !important; justify-content: flex-end; margin-top: 6px !important; }
 .kanban-delete-form .mini-btn { min-height: 28px; padding: 5px 8px; }
 

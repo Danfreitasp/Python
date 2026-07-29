@@ -81,6 +81,9 @@
             <button class="proposal-tab" type="button" data-tab-target="anotacoes">Anotações <span>{{ anotacoes|length }}</span></button>
             <button class="proposal-tab" type="button" data-tab-target="anexos">Anexos <span>{{ anexos|length }}</span></button>
             <button class="proposal-tab" type="button" data-tab-target="mensagens">Mensagens</button>
+            {% if anuencia_refin %}
+                <button class="proposal-tab" type="button" data-tab-target="anuencia">Anuência</button>
+            {% endif %}
             <button class="proposal-tab" type="button" data-tab-target="historico">Histórico</button>
         </nav>
 
@@ -333,6 +336,55 @@
                 <small>Os modelos são cadastrados em uma tela separada no menu lateral.</small>
             </div>
         </section>
+
+        {% if anuencia_refin %}
+        <section class="proposal-tab-panel" data-tab-panel="anuencia" hidden>
+            <div class="section-title-row consent-title-row">
+                <div>
+                    <h2>Anuência da Port + Refin</h2>
+                    <small>Dados combinados automaticamente da portabilidade e do refinanciamento vinculados.</small>
+                </div>
+                <button class="btn btn-primary copy-btn" type="button" data-copy="{{ anuencia_refin.texto|e }}"><i class="bi bi-clipboard" aria-hidden="true"></i><span>Copiar anuência</span></button>
+            </div>
+
+            <div class="consent-source-grid">
+                <div class="summary-card">
+                    <small>Banco atual da portabilidade</small>
+                    <strong>{{ anuencia_refin.banco_atual or '-' }}</strong>
+                </div>
+                <div class="summary-card">
+                    <small>Banco digitado da portabilidade</small>
+                    <strong>{{ anuencia_refin.banco_digitado or '-' }}</strong>
+                </div>
+                <div class="summary-card">
+                    <small>Parcela da portabilidade</small>
+                    <strong>{{ br_moeda(anuencia_refin.parcela) }}</strong>
+                </div>
+                <form method="post" action="{{ url_for('atualizar_troco_anuencia', proposta_id=proposta.id) }}" class="summary-card consent-value-card consent-value-form">
+                    <input type="hidden" name="origem" value="{{ url_retorno_padrao() }}">
+                    <label for="consentTrocoInput">Troco do refinanciamento</label>
+                    <div class="consent-value-edit-row">
+                        <input id="consentTrocoInput" class="money-mask" type="text" name="troco" value="{{ br_moeda(anuencia_refin.troco) }}" inputmode="decimal" required>
+                        <button class="mini-btn btn-primary" type="submit"><i class="bi bi-check-circle" aria-hidden="true"></i><span>Salvar troco</span></button>
+                    </div>
+                </form>
+            </div>
+
+            {% if anuencia_refin.faltantes %}
+                <div class="alert aviso consent-warning">
+                    <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                    <span>Revise antes de enviar. Dados não preenchidos: {{ anuencia_refin.faltantes|join(', ') }}.</span>
+                </div>
+            {% endif %}
+
+            <textarea class="consent-output" rows="16" readonly aria-label="Mensagem de anuência gerada">{{ anuencia_refin.texto }}</textarea>
+
+            <div class="consent-origin-note">
+                <span><i class="bi bi-link-45deg" aria-hidden="true"></i> Portabilidade de origem nº {{ proposta.numero_port_vinculada }}</span>
+                <a class="mini-btn" href="{{ url_for('detalhe_proposta', proposta_id=anuencia_refin.portabilidade_id, origem=url_retorno_padrao()) }}"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span>Abrir portabilidade</span></a>
+            </div>
+        </section>
+        {% endif %}
 
 
         <section class="proposal-tab-panel" data-tab-panel="historico" hidden>
