@@ -1900,6 +1900,36 @@ def chave_cliente(cpf: Any, nb_matricula: Any) -> tuple[str, str]:
     return formatar_cpf(limpar_texto(cpf)), limpar_texto(nb_matricula)
 
 
+def reaproveitar_cadastro_cliente(dados: dict[str, Any]) -> dict[str, Any]:
+    """Reaproveita somente os dados cadastrais do cliente em uma nova proposta."""
+    cpf, nb = chave_cliente(dados.get("cpf"), dados.get("nb_matricula"))
+    if not cpf:
+        return dados
+
+    cliente = get_db().execute(
+        """
+        SELECT nome, cpf, nascimento, nb_matricula, especie, telefone,
+               tipo_cliente, endereco, dados_bancarios
+        FROM clientes
+        WHERE cpf = ? AND COALESCE(nb_matricula, '') = ?
+        LIMIT 1
+        """,
+        (cpf, nb),
+    ).fetchone()
+    if not cliente:
+        return dados
+
+    resultado = dict(dados)
+    for campo in (
+        "nome", "cpf", "nascimento", "nb_matricula", "especie", "telefone",
+        "tipo_cliente", "endereco", "dados_bancarios",
+    ):
+        valor_cadastrado = cliente[campo]
+        if limpar_texto(valor_cadastrado):
+            resultado[campo] = valor_cadastrado
+    return resultado
+
+
 def salvar_cliente_dos_dados(dados: dict[str, Any] | sqlite3.Row) -> int | None:
     """Cria ou atualiza o cadastro do cliente a partir dos dados da proposta.
 
@@ -2746,7 +2776,7 @@ def index():
 @app.route("/nova", methods=["GET", "POST"])
 def nova_proposta():
     if request.method == "POST":
-        dados = dados_nova_proposta()
+        dados = reaproveitar_cadastro_cliente(dados_nova_proposta())
         pendentes = validar_nova_proposta(dados)
         if pendentes:
             flash("Preencha os campos obrigatórios: " + ", ".join(pendentes) + ".", "erro")

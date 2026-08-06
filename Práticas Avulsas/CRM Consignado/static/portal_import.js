@@ -17,6 +17,23 @@
         estaAguardando: () => aguardando,
     };
 
+    document.addEventListener('crm:cliente-reaproveitado', (event) => {
+        const novaMatricula = Boolean(event.detail?.novaMatricula);
+        if (novaMatricula) {
+            atualizarEstado(false, 'Dados cadastrais reaproveitados. Informe somente a nova matrícula e os dados da nova proposta.');
+            return;
+        }
+        atualizarEstado(false, 'Cadastro existente reaproveitado. Preencha somente os dados da nova proposta.');
+    });
+
+    document.addEventListener('crm:clientes-localizados', () => {
+        atualizarEstado(false, 'Cadastro existente encontrado. Selecione a matrícula para reaproveitar os dados.');
+    });
+
+    document.addEventListener('crm:cliente-nao-localizado', () => {
+        atualizarEstado(true, 'Cliente não cadastrado. Aguardando dados do Sistemacorban nesta aba.');
+    });
+
     atualizarEstado(true, 'Aguardando dados do Sistemacorban nesta aba.');
 
     // Ponte chamada pela extensão no contexto principal da aba do CRM.

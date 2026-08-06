@@ -257,6 +257,24 @@ document.addEventListener('DOMContentLoaded', () => {
             matriculaField.value = '';
             matriculaField.focus();
         }
+        document.dispatchEvent(new CustomEvent('crm:cliente-reaproveitado', {
+            detail: { cliente, novaMatricula },
+        }));
+    }
+
+    function normalizarMatricula(value) {
+        return String(value || '').trim().toLocaleUpperCase('pt-BR');
+    }
+
+    function clienteCorrespondente(clientes) {
+        const matriculaInformada = normalizarMatricula(matriculaField?.value);
+        if (matriculaInformada) {
+            const correspondencia = clientes.find(
+                (cliente) => normalizarMatricula(cliente.nb_matricula) === matriculaInformada,
+            );
+            if (correspondencia) return correspondencia;
+        }
+        return clientes.length === 1 ? clientes[0] : null;
     }
 
     let clientesCPFCache = [];
@@ -304,12 +322,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!clientesCPFCache.length) {
                 if (clienteAjuda) clienteAjuda.textContent = 'Nenhum cliente cadastrado para este CPF. Cadastre normalmente.';
+                document.dispatchEvent(new CustomEvent('crm:cliente-nao-localizado'));
                 return;
             }
 
             montarSelectMatriculas(clientesCPFCache);
             matriculaSelect.classList.remove('hidden');
-            if (clienteAjuda) clienteAjuda.textContent = 'Cliente encontrado';
+            const cliente = clienteCorrespondente(clientesCPFCache);
+            if (cliente) {
+                const index = clientesCPFCache.indexOf(cliente);
+                matriculaSelect.value = String(index);
+                preencherDadosCliente(cliente, false);
+                if (clienteAjuda) clienteAjuda.textContent = 'Cliente encontrado · cadastro reaproveitado automaticamente.';
+            } else {
+                if (clienteAjuda) clienteAjuda.textContent = 'Cliente encontrado · selecione a matrícula para reaproveitar o cadastro.';
+                document.dispatchEvent(new CustomEvent('crm:clientes-localizados', {
+                    detail: { total: clientesCPFCache.length },
+                }));
+            }
         } catch (error) {
             console.error(error);
             if (consultaAtual === ultimaConsultaClientes && clienteAjuda) clienteAjuda.textContent = 'Não foi possível consultar matrículas agora.';
@@ -388,6 +418,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return Number(text.replace(/\./g, '').replace(',', '.')) || 0;
     }
 
+    function parsePercentInputValue(value) {
+        let text = String(value || '').replace('%', '').replace(/\s/g, '').trim();
+        if (!text) return 0;
+        if (text.includes(',')) {
+            text = text.replace(/\./g, '').replace(',', '.');
+        }
+        return Number(text) || 0;
+    }
+
     function formatBRL(number) {
         return Number(number || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     }
@@ -405,7 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!percentualTexto) return;
 
         const valor = parseBRNumber(trocoInput.value);
-        const percentual = parseBRNumber(percentualTexto);
+        const percentual = parsePercentInputValue(percentualTexto);
         const comissao = valor * (percentual / 100);
         comissaoInput.value = formatBRL(comissao);
     }

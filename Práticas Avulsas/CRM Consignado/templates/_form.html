@@ -64,7 +64,7 @@
         <input name="troco" class="money-mask" value="{{ br_moeda(proposta.troco or proposta['troco'] or 0) }}">
     </label>
     <label>% comissão
-        <input name="comissao_percentual" class="percent-mask" value="{{ proposta.comissao_percentual or proposta['comissao_percentual'] or '' }}" placeholder="Ex.: 3,5">
+        <input name="comissao_percentual" class="percent-mask" value="{{ br_percentual(proposta.comissao_percentual or proposta['comissao_percentual'] or 0) | replace('%', '') }}" placeholder="Ex.: 3,5">
     </label>
     <label>Comissão
         <input name="comissao" class="money-mask" value="{{ br_moeda(proposta.comissao or proposta['comissao'] or 0) }}">

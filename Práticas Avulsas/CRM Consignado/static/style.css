@@ -3552,6 +3552,30 @@ html[data-theme="escuro"] .simulator-results .highlight-card {
     margin-top: 5px;
 }
 
+/* Mantém os cards de Encerradas dentro da largura útil da coluna. */
+.encerradas-kanban .kanban-cards,
+.encerradas-kanban .encerrada-card,
+.encerradas-kanban .encerrada-card > * {
+    min-width: 0;
+}
+
+.encerradas-kanban .encerrada-card {
+    width: 100%;
+}
+
+.encerradas-kanban .encerrada-finance-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.encerradas-kanban .encerrada-finance-form .btn-small {
+    grid-column: 1 / -1;
+}
+
+.encerradas-kanban .encerrada-card > span,
+.encerradas-kanban .encerrada-card > em {
+    overflow-wrap: anywhere;
+}
+
 @media (max-width: 900px) {
     .btn-back {
         order: 5;
