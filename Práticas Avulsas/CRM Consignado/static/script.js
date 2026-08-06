@@ -1573,7 +1573,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const valorOut = document.getElementById('simValorEstimado');
     const parcelaOut = document.getElementById('simParcelaEstimativa');
     const coefOut = document.getElementById('simCoeficiente');
-    const prazosJson = document.getElementById('simPrazosJson');
     const adicionarPrazo = document.getElementById('simAdicionarPrazo');
     const editarCoeficiente = document.getElementById('simEditarCoeficiente');
     const prazoEditor = document.getElementById('simPrazoEditor');
@@ -1581,9 +1580,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const prazoCoefInput = document.getElementById('simPrazoCoeficiente');
     const salvarPrazo = document.getElementById('simSalvarPrazo');
     const cancelarPrazo = document.getElementById('simCancelarPrazo');
+    const prazoStatus = document.getElementById('simPrazoStatus');
     const resumoTexto = document.getElementById('simResumoTexto');
     const copiarResumo = form.querySelector('[data-copy]');
-    const storageKey = 'crmSimuladorInssPrazos';
     let prazoEmEdicao = null;
 
     function parseBR(value) {
@@ -1603,20 +1602,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return Number(String(value || '').trim().replace(',', '.')) || 0;
     }
 
-    function sincronizarPrazos() {
-        if (prazosJson) prazosJson.value = JSON.stringify(dados.novo || {});
-        try { localStorage.setItem(storageKey, JSON.stringify(dados.novo || {})); } catch (e) {}
-    }
-
-    function aplicarPrazosSalvos() {
-        try {
-            const salvos = JSON.parse(localStorage.getItem(storageKey) || '{}');
-            if (salvos && typeof salvos === 'object') {
-                dados.novo = { ...(dados.novo || {}), ...salvos };
-            }
-        } catch (e) {}
-    }
-
     function atualizarOpcoesPrazo(valorSelecionado = null) {
         if (!prazo) return;
         const atual = valorSelecionado || prazo.value;
@@ -1634,7 +1619,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (atual && prazo.querySelector(`option[value="${CSS.escape(atual)}"]`)) {
             prazo.value = atual;
         }
-        sincronizarPrazos();
+    }
+
+    async function carregarPrazosGlobais() {
+        try {
+            const response = await fetch('/api/simulador-inss/prazos', { headers: { Accept: 'application/json' } });
+            if (!response.ok) throw new Error('Falha ao consultar os coeficientes globais.');
+            const payload = await response.json();
+            if (!payload.novo || typeof payload.novo !== 'object') return;
+            dados.novo = payload.novo;
+            atualizarOpcoesPrazo(prazo ? prazo.value : null);
+            calcular(tipo && tipo.value === 'novo_margem' ? margem : valorBase);
+        } catch (error) {
+            console.error(error);
+            if (prazoStatus) prazoStatus.textContent = 'Não foi possível atualizar os coeficientes globais agora.';
+        }
     }
 
     function prazoLabel() {
@@ -1704,7 +1703,7 @@ document.addEventListener('DOMContentLoaded', () => {
         prazoEmEdicao = null;
     }
 
-    function salvarEdicaoPrazo() {
+    async function salvarEdicaoPrazo() {
         if (!prazoLabelInput || !prazoCoefInput || !prazo) return;
         const label = prazoLabelInput.value.trim();
         const coeficiente = parseCoeficiente(prazoCoefInput.value);
@@ -1712,12 +1711,28 @@ document.addEventListener('DOMContentLoaded', () => {
             window.alert('Informe o nome do prazo e um coeficiente válido.');
             return;
         }
-        const codigo = prazoEmEdicao || `custom_${Date.now()}`;
-        dados.novo[codigo] = { label, coeficiente, idade: '' };
-        atualizarOpcoesPrazo(codigo);
-        prazo.value = codigo;
-        fecharEditor();
-        calcular(tipo && tipo.value === 'novo_margem' ? margem : valorBase);
+        if (salvarPrazo) salvarPrazo.disabled = true;
+        if (prazoStatus) prazoStatus.textContent = 'Salvando para todos os acessos...';
+        try {
+            const response = await fetch('/api/simulador-inss/prazos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ codigo: prazoEmEdicao || '', label, coeficiente }),
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.erro || 'Falha ao salvar o coeficiente global.');
+            dados.novo = payload.novo || dados.novo;
+            atualizarOpcoesPrazo(payload.codigo);
+            prazo.value = payload.codigo;
+            fecharEditor();
+            calcular(tipo && tipo.value === 'novo_margem' ? margem : valorBase);
+            if (prazoStatus) prazoStatus.textContent = 'Coeficiente salvo globalmente para todos os acessos.';
+        } catch (error) {
+            console.error(error);
+            if (prazoStatus) prazoStatus.textContent = error.message;
+        } finally {
+            if (salvarPrazo) salvarPrazo.disabled = false;
+        }
     }
 
     if (valorBase) {
@@ -1735,9 +1750,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (editarCoeficiente) editarCoeficiente.addEventListener('click', () => abrirEditor('editar'));
     if (salvarPrazo) salvarPrazo.addEventListener('click', salvarEdicaoPrazo);
     if (cancelarPrazo) cancelarPrazo.addEventListener('click', fecharEditor);
-    form.addEventListener('submit', sincronizarPrazos);
-
-    aplicarPrazosSalvos();
+    window.addEventListener('focus', carregarPrazosGlobais);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') carregarPrazosGlobais();
+    });
+    try { localStorage.removeItem('crmSimuladorInssPrazos'); } catch (e) {}
     atualizarOpcoesPrazo(prazo ? prazo.value : null);
     calcular(tipo && tipo.value === 'novo_margem' ? margem : valorBase);
 });

@@ -186,8 +186,9 @@ INSS_NOVO_COEFICIENTES = {
     "84": {"label": "84x", "coeficiente": 0.024995, "idade": "Até 74 anos"},
     "96": {"label": "96x", "coeficiente": 0.023720, "idade": "Até 73 anos"},
     "108": {"label": "108x", "coeficiente": 0.022227, "idade": "Até 72 anos"},
-    "108_carencia": {"label": "108x com carência 90d", "coeficiente": 0.024088, "idade": "Até 71 anos"},
+    "108_carencia": {"label": "108x com carência 90d", "coeficiente": 0.023280, "idade": "Até 71 anos"},
 }
+CONFIG_INSS_NOVO_COEFICIENTES = "simulador_inss_novo_coeficientes"
 
 # Cartão INSS por margem, conforme aba INSS do simulador.
 INSS_CARTAO_COEFICIENTES = {
@@ -2538,16 +2539,10 @@ def api_notificacoes():
 
 
 
-def prazos_simulador_inss(prazos_json: str | None = None) -> dict[str, dict[str, Any]]:
-    prazos = {codigo: dict(info) for codigo, info in INSS_NOVO_COEFICIENTES.items()}
-    if not prazos_json:
-        return prazos
-    try:
-        enviados = json.loads(prazos_json)
-    except json.JSONDecodeError:
-        return prazos
+def normalizar_prazos_simulador_inss(enviados: Any) -> dict[str, dict[str, Any]]:
+    normalizados = {}
     if not isinstance(enviados, dict):
-        return prazos
+        return normalizados
 
     for codigo, info in enviados.items():
         codigo_limpo = re.sub(r"[^a-zA-Z0-9_-]", "", str(codigo or ""))[:40]
@@ -2562,12 +2557,24 @@ def prazos_simulador_inss(prazos_json: str | None = None) -> dict[str, dict[str,
             continue
         if coeficiente <= 0 or coeficiente > 1:
             continue
-        idade = limpar_texto(info.get("idade"))[:80]
-        prazos[codigo_limpo] = {
+        normalizados[codigo_limpo] = {
             "label": label,
             "coeficiente": coeficiente,
-            "idade": idade,
+            "idade": limpar_texto(info.get("idade"))[:80],
         }
+    return normalizados
+
+
+def prazos_simulador_inss() -> dict[str, dict[str, Any]]:
+    prazos = {codigo: dict(info) for codigo, info in INSS_NOVO_COEFICIENTES.items()}
+    prazos_json = obter_configuracao(CONFIG_INSS_NOVO_COEFICIENTES, "")
+    if not prazos_json:
+        return prazos
+    try:
+        enviados = json.loads(prazos_json)
+    except json.JSONDecodeError:
+        return prazos
+    prazos.update(normalizar_prazos_simulador_inss(enviados))
     return prazos
 
 
@@ -2589,7 +2596,6 @@ def dados_simulador_inss() -> dict[str, Any]:
         "tipo_operacao": tipo_operacao,
         "prazo": prazo,
         "faixa_cartao": faixa_cartao,
-        "prazos_json": request.form.get("prazos_json") or "",
         "valor_base": valor_base,
         "margem": margem,
         "observacoes": limpar_texto(request.form.get("observacoes")),
@@ -2600,7 +2606,7 @@ def calcular_simulador_inss(dados: dict[str, Any]) -> dict[str, Any]:
     tipo = dados.get("tipo_operacao") or "novo_valor"
     prazo = dados.get("prazo") or INSS_PRAZO_PADRAO
     faixa_cartao = dados.get("faixa_cartao") or "ate_74"
-    prazos = prazos_simulador_inss(dados.get("prazos_json"))
+    prazos = prazos_simulador_inss()
     coef_info = prazos.get(prazo) or prazos[INSS_PRAZO_PADRAO]
     coeficiente = float(coef_info["coeficiente"])
     valor = float(dados.get("valor_base") or 0)
@@ -2676,13 +2682,13 @@ def simulador_inss():
     dados = {
         "nome": "", "cpf": "", "telefone": "", "nb_matricula": "", "banco_digitado": "", "promotora": "",
         "tipo_operacao": "novo_valor", "prazo": INSS_PRAZO_PADRAO, "faixa_cartao": "ate_74", "valor_base": 0,
-        "margem": 0, "observacoes": "", "prazos_json": "",
+        "margem": 0, "observacoes": "",
     }
     resultado = None
     if request.method == "POST":
         dados = dados_simulador_inss()
         resultado = calcular_simulador_inss(dados)
-    prazos = prazos_simulador_inss(dados.get("prazos_json"))
+    prazos = prazos_simulador_inss()
     return render_template(
         "simulador_inss.html",
         dados=dados,
@@ -2756,11 +2762,46 @@ def simulador_inss_criar_proposta():
         proposta_id,
         agora,
     )
+
+
     db.commit()
     registrar_historico(proposta_id, None, dados_prop["status"], "Proposta criada a partir do Simulador INSS.")
     registrar_anotacao(proposta_id, dados_prop["observacoes"], agora)
     flash("Proposta criada a partir da simulação INSS.", "ok")
     return redirect(url_for("detalhe_proposta", proposta_id=proposta_id))
+
+
+@app.route("/api/simulador-inss/prazos", methods=["GET", "POST"])
+def api_prazos_simulador_inss():
+    if request.method == "GET":
+        return jsonify({"novo": prazos_simulador_inss()})
+
+    payload = request.get_json(silent=True) or {}
+    codigo = re.sub(r"[^a-zA-Z0-9_-]", "", limpar_texto(payload.get("codigo")))[:40]
+    label = limpar_texto(payload.get("label"))[:80]
+    try:
+        coeficiente = float(str(payload.get("coeficiente") or "").replace(",", "."))
+    except (TypeError, ValueError):
+        coeficiente = 0
+
+    if not label or coeficiente <= 0 or coeficiente > 1:
+        return jsonify({"erro": "Informe o nome do prazo e um coeficiente válido."}), 400
+    if not codigo:
+        codigo = f"custom_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+
+    prazos = prazos_simulador_inss()
+    idade_atual = limpar_texto((prazos.get(codigo) or {}).get("idade"))
+    prazos[codigo] = {
+        "label": label,
+        "coeficiente": coeficiente,
+        "idade": idade_atual,
+    }
+    salvar_configuracao(
+        CONFIG_INSS_NOVO_COEFICIENTES,
+        json.dumps(prazos, ensure_ascii=False, sort_keys=True),
+    )
+    get_db().commit()
+    return jsonify({"sucesso": True, "codigo": codigo, "novo": prazos})
 
 
 @app.route("/")

@@ -12,8 +12,6 @@
 
     <form method="post" class="stack simulator-form" id="simuladorInssForm">
         <input type="hidden" name="tipo_operacao" id="simTipoOperacao" value="{{ dados.tipo_operacao or 'novo_valor' }}">
-        <input type="hidden" name="prazos_json" id="simPrazosJson" value="{{ dados.prazos_json|e }}">
-
         <div class="form-grid form-grid-three">
             <div class="simulator-prazo-field">
                 <label>Prazo
@@ -65,6 +63,7 @@
                 <button class="btn" type="button" id="simCancelarPrazo"><i class="bi bi-x-circle" aria-hidden="true"></i><span>Cancelar</span></button>
             </div>
         </section>
+        <small class="muted" id="simPrazoStatus" role="status"></small>
 
         <div class="actions">
             <button class="btn btn-primary" type="submit"><i class="bi bi-calculator" aria-hidden="true"></i><span>Calcular</span></button>
