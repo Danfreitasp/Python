@@ -1248,6 +1248,8 @@ def cpf_valido(valor: Any) -> bool:
 def parse_moeda(valor: Any) -> float:
     if valor is None:
         return 0.0
+    if isinstance(valor, (int, float)):
+        return float(valor)
     texto = str(valor).strip()
     if not texto:
         return 0.0
@@ -1423,7 +1425,13 @@ def normalizar_status_importacao(valor: Any) -> str:
         "AG REAPRESENTACAO": "Aguardando Reapresentação",
         "AG. REAPRESENTACAO": "Aguardando Reapresentação",
         "PAGO": "Pago",
+        "QUITADO": "Pago",
+        "A RECEBER": "Aguardando Pagamento",
+        "BN BLOQUEADO": "Aguardando desbloqueio",
+        "BENEFICIO BLOQUEADO": "Aguardando desbloqueio",
+        "EM ANDAMENTO": "Em atendimento",
         "REPROVADO": "Perdido / Cancelado",
+        "REPROVADA": "Perdido / Cancelado",
         "PERDIDO": "Perdido / Cancelado",
         "CANCELADO": "Perdido / Cancelado",
     }
@@ -1557,11 +1565,14 @@ def linha_no_mes(row: dict[str, Any], mes_importacao: str) -> bool:
 def normalizar_produto_importacao(valor: Any) -> str:
     original = limpar_texto(valor)
     texto = remover_acentos(original).upper()
+    texto = re.sub(r"\s+PAGO\s*$", "", texto).strip()
     aliases = {
         "PORT": "Portabilidade",
+        "PORT PURA": "Portabilidade",
         "PORTABILIDADE": "Portabilidade",
         "PORT COM REFIN": "Portabilidade com Refinanciamento",
         "PORT + REFIN": "Portabilidade com Refinanciamento",
+        "PORT/REFIN": "Portabilidade com Refinanciamento",
         "PORTABILIDADE COM REFIN": "Portabilidade com Refinanciamento",
         "PORTABILIDADE COM REFINANCIAMENTO": "Portabilidade com Refinanciamento",
         "REFIN": "Refinanciamento",
@@ -1569,7 +1580,10 @@ def normalizar_produto_importacao(valor: Any) -> str:
         "REFINANCIAMENTO": "Refinanciamento",
         "NOVO": "Novo",
         "CARTAO": "Cartão",
+        "RCC": "Cartão",
+        "RMC": "Cartão",
         "SAQUE COMPLEMENTAR": "Saque Complementar",
+        "SAQUE": "Saque Complementar",
     }
     return aliases.get(texto, original or "Outro")
 
@@ -6254,6 +6268,8 @@ def normalizar_cabecalho(cabecalho: Any) -> str:
         "tipo": "tipo_cliente",
         "banco_origem": "banco_atual",
         "banco_atual": "banco_atual",
+        "banco_portado": "banco_atual",
+        "banco_a_ser_comprado": "banco_atual",
         "banco": "banco_digitado",
         "banco_digitado": "banco_digitado",
         "banco_de_digitacao": "banco_digitado",
@@ -6266,6 +6282,7 @@ def normalizar_cabecalho(cabecalho: Any) -> str:
         "beneficio_bloqueado": "beneficio_bloqueado",
         "beneficio": "beneficio_bloqueado",
         "valor": "troco",
+        "saldo_valor": "troco",
         "parcela": "parcela_atual",
         "valor_da_parcela_atual": "parcela_atual",
         "valor_da_nova_parcela": "nova_parcela",
@@ -6282,12 +6299,15 @@ def normalizar_cabecalho(cabecalho: Any) -> str:
         "valor_da_comissao": "comissao",
         "valor_da_comissão": "comissao",
         "pontos": "comissao",
+        "comissao_prevista": "comissao",
         "saldo_pmt": "valor_caiu_promotora",
         "saldo_pmt_": "valor_caiu_promotora",
+        "saldo_na_promotora": "valor_caiu_promotora",
         "valor_caiu_na_promotora": "valor_caiu_promotora",
         "caiu_na_promotora": "valor_caiu_promotora",
         "valor_caiu_promotora": "valor_caiu_promotora",
         "acerto": "valor_sacado",
+        "acerto_na_facilita": "valor_sacado",
         "sacado": "valor_sacado",
         "valor_ja_foi_sacado": "valor_sacado",
         "valor_sacado": "valor_sacado",
@@ -6300,8 +6320,10 @@ def normalizar_cabecalho(cabecalho: Any) -> str:
         "previsao_saldo": "data_retorno",
         "data_previsao_saldo": "data_retorno",
         "observacao": "observacoes",
+        "obs": "observacoes",
         "motivo": "observacoes",
         "motivos": "observacoes",
+        "quem_digitou": "responsavel",
         "numero_proposta": "numero_proposta",
         "n_proposta": "numero_proposta",
         "n_da_proposta": "numero_proposta",
@@ -6326,6 +6348,194 @@ def normalizar_cabecalho(cabecalho: Any) -> str:
         "dados_da_conta": "dados_bancarios",
     }
     return aliases.get(texto, texto)
+
+
+MESES_ABAS_IMPORTACAO = {
+    "jan": 1,
+    "janeiro": 1,
+    "fev": 2,
+    "fevereiro": 2,
+    "mar": 3,
+    "marco": 3,
+    "abr": 4,
+    "abril": 4,
+    "mai": 5,
+    "maio": 5,
+    "jun": 6,
+    "junh": 6,
+    "junho": 6,
+    "jul": 7,
+    "julho": 7,
+    "ago": 8,
+    "agos": 8,
+    "agosto": 8,
+    "set": 9,
+    "setembro": 9,
+    "out": 10,
+    "outubro": 10,
+    "nov": 11,
+    "novembro": 11,
+    "dez": 12,
+    "dezembro": 12,
+}
+
+
+def mes_ano_titulo_aba(titulo: Any) -> tuple[int | None, int | None]:
+    """Reconhece títulos como AGOSTO, ago 25, agos 26 e março 2026."""
+    texto = remover_acentos(limpar_texto(titulo)).casefold()
+    tokens = re.findall(r"[a-z]+|\d{2,4}", texto)
+    mes = next((MESES_ABAS_IMPORTACAO[token] for token in tokens if token in MESES_ABAS_IMPORTACAO), None)
+    ano = None
+    for token in tokens:
+        if not token.isdigit():
+            continue
+        numero = int(token)
+        if len(token) == 4 and 2000 <= numero <= 2100:
+            ano = numero
+            break
+        if len(token) == 2:
+            ano = 2000 + numero
+            break
+    return mes, ano
+
+
+def localizar_cabecalho_importacao(ws: Any) -> tuple[int | None, list[str]]:
+    for indice, possivel_header in enumerate(ws.iter_rows(min_row=1, max_row=10, values_only=True), start=1):
+        headers = [normalizar_cabecalho(valor) for valor in possivel_header]
+        if "nome" in headers and "cpf" in headers:
+            return indice, headers
+    return None, []
+
+
+def selecionar_aba_importacao_xlsx(wb: Any, mes_importacao: str) -> tuple[Any, int, list[str], str]:
+    """Seleciona a aba do mês sem cair em abas auxiliares da planilha OF."""
+    try:
+        ano_desejado, mes_desejado = (int(parte) for parte in mes_importacao.split("-", 1))
+    except (TypeError, ValueError):
+        ano_desejado, mes_desejado = date.today().year, date.today().month
+
+    candidatas: list[tuple[Any, int, list[str], int | None, int | None]] = []
+    total_abas_mensais = 0
+    for ws in wb.worksheets:
+        mes_aba, ano_aba = mes_ano_titulo_aba(ws.title)
+        if mes_aba is not None:
+            total_abas_mensais += 1
+        header_idx, headers = localizar_cabecalho_importacao(ws)
+        if header_idx is not None:
+            candidatas.append((ws, header_idx, headers, mes_aba, ano_aba))
+
+    exatas = [
+        item
+        for item in candidatas
+        if item[3] == mes_desejado and item[4] == ano_desejado
+    ]
+    sem_ano = [
+        item
+        for item in candidatas
+        if item[3] == mes_desejado and item[4] is None
+    ]
+    if exatas or sem_ano:
+        ws, header_idx, headers, _, _ = (exatas or sem_ano)[0]
+        return ws, header_idx, headers, "OF mensal"
+
+    # Em arquivos com várias abas mensais, nunca usa outra aba por aproximação:
+    # isso evita importar AGENDAMENTO, MARGEM AUMENTO ou um mês incorreto.
+    if total_abas_mensais >= 2:
+        raise ValueError(
+            f"Não encontrei uma aba correspondente a {nome_mes_pt(mes_importacao).title()} de {ano_desejado}."
+        )
+
+    genericas = [item for item in candidatas if "data_criacao" in item[2]]
+    if not genericas:
+        genericas = [item for item in candidatas if "status" in item[2]]
+    if not genericas:
+        raise ValueError("Não encontrei uma aba com as colunas NOME/CLIENTE e CPF.")
+
+    ws, header_idx, headers, _, _ = genericas[0]
+    return ws, header_idx, headers, "padrão CRM"
+
+
+def data_planilha_no_mes(valor: Any, mes_importacao: str) -> str:
+    """Converte dia, DATA/ASO ou data completa para uma data ISO do mês escolhido."""
+    data_iso = parse_data_iso(valor)
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", data_iso):
+        return data_iso
+
+    if isinstance(valor, (int, float)) and float(valor) > 31:
+        try:
+            return (datetime(1899, 12, 30) + timedelta(days=float(valor))).strftime("%Y-%m-%d")
+        except (OverflowError, ValueError):
+            pass
+
+    texto = texto_planilha(valor)
+    match = re.match(r"\s*(\d{1,2})(?:\D|$)", texto)
+    dia = int(match.group(1)) if match else 1
+    try:
+        ano, mes = (int(parte) for parte in mes_importacao.split("-", 1))
+        ultimo_dia = calendar.monthrange(ano, mes)[1]
+        return date(ano, mes, min(max(dia, 1), ultimo_dia)).strftime("%Y-%m-%d")
+    except (TypeError, ValueError):
+        return agora_iso()
+
+
+def linha_xlsx_para_importacao(
+    row: tuple[Any, ...],
+    headers: list[str],
+    mes_importacao: str,
+    modelo: str,
+) -> dict[str, Any]:
+    dados: dict[str, Any] = {"_modelo_importacao": modelo}
+    observacoes: list[str] = []
+    data_origem: Any = None
+
+    for indice, header in enumerate(headers):
+        valor = row[indice] if indice < len(row) else None
+        if valor in (None, ""):
+            continue
+        if not header:
+            # No modelo OF, a coluna imediatamente anterior a DATA/ASO identifica
+            # a responsável (por exemplo, ASO ou TATY).
+            if indice + 1 < len(headers) and headers[indice + 1] == "data_aso":
+                dados.setdefault("responsavel", texto_planilha(valor))
+            # A primeira aba histórica usa a primeira coluna sem título apenas
+            # para o dia do mês, seguida diretamente por CLIENTE.
+            elif modelo == "OF mensal" and indice == 0 and len(headers) > 1 and headers[1] == "nome":
+                data_origem = valor
+            continue
+        if header in {"data_aso", "data_criacao"}:
+            data_origem = valor
+            continue
+        if header == "observacoes":
+            texto = texto_planilha(valor)
+            if texto and texto not in observacoes:
+                observacoes.append(texto)
+            continue
+        if header in {"senha_gov", "login_digitador"}:
+            continue
+        if header not in dados or dados[header] in (None, ""):
+            dados[header] = valor
+
+    if observacoes:
+        dados["observacoes"] = " | ".join(observacoes)
+    dados["data_criacao"] = data_planilha_no_mes(data_origem, mes_importacao)
+
+    if texto_planilha(dados.get("banco_atual")).strip().upper() in {"0", "0.0", "O"}:
+        dados["banco_atual"] = ""
+
+    produto_original = texto_planilha(dados.get("produto"))
+    if not limpar_texto(dados.get("status")) and "PAGO" in remover_acentos(produto_original).upper():
+        dados["status"] = "PAGO"
+
+    telefone_principal = texto_planilha(dados.get("telefone"))
+    if not telefone_principal:
+        dados["telefone"] = texto_planilha(dados.get("tel_reserva"))
+    dados.pop("tel_reserva", None)
+
+    troco = parse_moeda(dados.get("troco"))
+    comissao = parse_moeda(dados.get("comissao"))
+    if troco > 0 and comissao > 0 and not limpar_texto(dados.get("comissao_percentual")):
+        dados["comissao_percentual"] = round((comissao / troco) * 100, 6)
+    return dados
 
 
 
@@ -6436,8 +6646,9 @@ def importar():
 
     nome = arquivo.filename.lower()
     mes_importacao = limpar_texto(request.form.get("mes_importacao")) or mes_atual()
-    aba_preferida = nome_mes_pt(mes_importacao)
     linhas: list[dict[str, Any]] = []
+    modelo_importacao = "CSV padrão"
+    aba_importada = ""
     try:
         if nome.endswith(".csv"):
             conteudo = arquivo.read().decode("utf-8-sig")
@@ -6447,33 +6658,13 @@ def importar():
             for row in reader:
                 linhas.append({normalizar_cabecalho(k): v for k, v in row.items()})
         elif nome.endswith(".xlsx"):
-            wb = load_workbook(arquivo, data_only=True)
-            planilha_encontrada = False
-            worksheets = wb.worksheets
-            if aba_preferida:
-                preferidas = [ws for ws in worksheets if remover_acentos(ws.title).upper() == remover_acentos(aba_preferida).upper()]
-                outras = [ws for ws in worksheets if ws not in preferidas]
-                worksheets = preferidas + outras
-            for ws in worksheets:
-                rows = list(ws.iter_rows(values_only=True))
-                if not rows:
-                    continue
-                header_idx = None
-                for idx, possivel_header in enumerate(rows[:10]):
-                    headers_teste = [normalizar_cabecalho(h) for h in possivel_header]
-                    if "nome" in headers_teste and ("cpf" in headers_teste or "status" in headers_teste):
-                        header_idx = idx
-                        break
-                if header_idx is None:
-                    continue
-                headers = [normalizar_cabecalho(h) for h in rows[header_idx]]
-                for row in rows[header_idx + 1:]:
-                    linhas.append({headers[i]: row[i] if i < len(row) else "" for i in range(len(headers))})
-                planilha_encontrada = True
-                break
-            if not planilha_encontrada:
-                flash("Não encontrei uma aba com cabeçalhos como NOME, CPF e STATUS.", "erro")
-                return redirect(url_for("index"))
+            wb = load_workbook(arquivo, data_only=True, read_only=True)
+            ws, header_idx, headers, modelo_importacao = selecionar_aba_importacao_xlsx(wb, mes_importacao)
+            aba_importada = ws.title
+            for row in ws.iter_rows(min_row=header_idx + 1, values_only=True):
+                linha = linha_xlsx_para_importacao(row, headers, mes_importacao, modelo_importacao)
+                if any(valor not in (None, "") for chave, valor in linha.items() if not chave.startswith("_")):
+                    linhas.append(linha)
         else:
             flash("Formato inválido. Use CSV ou XLSX.", "erro")
             return redirect(url_for("index"))
@@ -6485,10 +6676,15 @@ def importar():
 
     importadas = 0
     ignoradas_mes = len(linhas) - len(linhas_filtradas)
+    ignoradas_sem_cpf = 0
     db = get_db()
     for row in linhas_filtradas:
         nome_cliente = limpar_texto(row.get("nome"))
         if not nome_cliente:
+            continue
+        cpf_importado = formatar_cpf(texto_planilha(row.get("cpf")))
+        if row.get("_modelo_importacao") == "OF mensal" and not cpf_importado:
+            ignoradas_sem_cpf += 1
             continue
         status_original = limpar_texto(row.get("status"))
         status = normalizar_status_importacao(status_original)
@@ -6505,31 +6701,33 @@ def importar():
             else beneficio_bloqueado_global(nb_importado)
         )
         agora = agora_iso()
+        data_criacao_importada = parse_data_iso(row.get("data_criacao")) or agora
+        dados_cliente_importados = reaproveitar_cadastro_cliente({
+            "nome": nome_cliente,
+            "cpf": cpf_importado,
+            "nb_matricula": nb_importado,
+            "telefone": texto_planilha(row.get("telefone")),
+            "tipo_cliente": texto_planilha(row.get("tipo_cliente")),
+            "endereco": texto_planilha(row.get("endereco")),
+            "dados_bancarios": texto_planilha(row.get("dados_bancarios")),
+        })
         cursor = db.execute(
             """
             INSERT INTO propostas (
                 cliente_id, nome, cpf, nb_matricula, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
                 promotora, beneficio_bloqueado, valor_caiu_promotora, valor_sacado, data_verificacao, parcela_atual, nova_parcela, troco, comissao_percentual, comissao, margem_apos, status, responsavel,
-                telefone, endereco, dados_bancarios, data_criacao, data_atualizacao, proxima_acao, data_retorno, observacoes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                telefone, endereco, dados_bancarios, data_criacao, data_atualizacao, data_encerramento, proxima_acao, data_retorno, observacoes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                salvar_cliente_dos_dados({
-                    "nome": nome_cliente,
-                    "cpf": formatar_cpf(texto_planilha(row.get("cpf"))),
-                    "nb_matricula": nb_importado,
-                    "telefone": texto_planilha(row.get("telefone")),
-                    "tipo_cliente": texto_planilha(row.get("tipo_cliente")),
-                    "endereco": texto_planilha(row.get("endereco")),
-                    "dados_bancarios": texto_planilha(row.get("dados_bancarios")),
-                }),
+                salvar_cliente_dos_dados(dados_cliente_importados),
                 nome_cliente,
-                formatar_cpf(texto_planilha(row.get("cpf"))),
+                cpf_importado,
                 nb_importado,
                 texto_planilha(row.get("numero_proposta")),
                 texto_planilha(row.get("numero_port_vinculada")),
                 texto_planilha(row.get("numero_refin_vinculada")),
-                texto_planilha(row.get("tipo_cliente")),
+                texto_planilha(dados_cliente_importados.get("tipo_cliente")),
                 texto_planilha(row.get("banco_atual")),
                 banco_destino_importado,
                 banco_digitado_importado,
@@ -6547,11 +6745,12 @@ def importar():
                 limpar_texto(row.get("margem_apos")),
                 status,
                 texto_planilha(row.get("responsavel")),
-                texto_planilha(row.get("telefone")),
-                texto_planilha(row.get("endereco")),
-                texto_planilha(row.get("dados_bancarios")),
-                parse_data_iso(row.get("data_criacao")) or agora,
+                texto_planilha(dados_cliente_importados.get("telefone")),
+                texto_planilha(dados_cliente_importados.get("endereco")),
+                texto_planilha(dados_cliente_importados.get("dados_bancarios")),
+                data_criacao_importada,
                 agora,
+                data_criacao_importada if status_encerrado(status) else None,
                 texto_planilha(row.get("proxima_acao")),
                 parse_data_iso(row.get("data_retorno")) or extrair_data_do_status(limpar_texto(row.get("status")), row.get("data_criacao")),
                 texto_planilha(row.get("observacoes")),
@@ -6563,15 +6762,18 @@ def importar():
             cursor.lastrowid,
             agora,
         )
-        db.commit()
         registrar_historico(cursor.lastrowid, None, status, "Proposta importada")
         observacao_importada = texto_planilha(row.get("observacoes"))
         if observacao_importada:
             registrar_anotacao(cursor.lastrowid, observacao_importada, agora)
+        db.commit()
         importadas += 1
 
     complemento = f" Ignoradas por mês diferente: {ignoradas_mes}." if ignoradas_mes else ""
-    flash(f"Importação concluída: {importadas} proposta(s) importada(s) de {mes_importacao}.{complemento}", "ok")
+    if ignoradas_sem_cpf:
+        complemento += f" Ignoradas sem CPF: {ignoradas_sem_cpf}."
+    origem = f" da aba '{aba_importada}' ({modelo_importacao})" if aba_importada else ""
+    flash(f"Importação concluída: {importadas} proposta(s){origem}, referentes a {mes_importacao}.{complemento}", "ok")
     return redirect(url_for("index"))
 
 

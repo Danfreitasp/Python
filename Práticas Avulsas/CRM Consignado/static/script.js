@@ -1838,8 +1838,8 @@ document.addEventListener('DOMContentLoaded', () => {
         totalNode.textContent = isMoney ? money(series.total) : quantity(series.total);
         totalLabel.textContent = isMoney ? 'comissão paga' : 'digitadas no mês';
         note.textContent = isMoney
-            ? 'Comissão paga considera as propostas encerradas como Pago no mês. Variações como “ÚNICA” e “UNICA - Adriano” são agrupadas em Única.'
-            : 'Propostas digitadas considera o mês de criação. Portabilidade com Refinanciamento + Refin vinculado contam como uma única proposta.';
+            ? 'Comissão paga considera somente propostas encerradas como Pago no mês selecionado. Todo nome iniciado por “Única” — como “Unica - Sub” ou “Unica - Adriano” — é agrupado em Única; Vieira permanece separada.'
+            : 'Propostas digitadas considera somente o mês de criação. Todo nome iniciado por “Única” é agrupado em Única; Vieira permanece separada. Portabilidade com Refinanciamento + Refin vinculado contam como uma única proposta.';
 
         let angle = 0;
         if (!Number(series.total)) {
