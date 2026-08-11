@@ -1095,6 +1095,77 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const dragAutoScroll = {
+        kanban: null,
+        velocidade: 0,
+        frame: null,
+        ultimoTempo: 0,
+    };
+
+    function pararRolagemAutomaticaDoFunil() {
+        if (dragAutoScroll.frame) cancelAnimationFrame(dragAutoScroll.frame);
+        dragAutoScroll.kanban = null;
+        dragAutoScroll.velocidade = 0;
+        dragAutoScroll.frame = null;
+        dragAutoScroll.ultimoTempo = 0;
+    }
+
+    function executarRolagemAutomaticaDoFunil(tempo) {
+        const { kanban, velocidade } = dragAutoScroll;
+        if (!draggedCard || !kanban || !velocidade) {
+            pararRolagemAutomaticaDoFunil();
+            return;
+        }
+
+        const anterior = dragAutoScroll.ultimoTempo || tempo;
+        const intervalo = Math.min(32, Math.max(0, tempo - anterior));
+        dragAutoScroll.ultimoTempo = tempo;
+        const scrollAnterior = kanban.scrollLeft;
+        kanban.scrollLeft += velocidade * intervalo;
+
+        if (kanban.scrollLeft === scrollAnterior) {
+            dragAutoScroll.velocidade = 0;
+        }
+        dragAutoScroll.frame = requestAnimationFrame(executarRolagemAutomaticaDoFunil);
+    }
+
+    function atualizarRolagemAutomaticaDoFunil(event) {
+        if (!draggedCard) return;
+        const kanban = draggedCard.closest('.kanban[data-modulo="funil"]');
+        if (!kanban) return;
+
+        const limites = kanban.getBoundingClientRect();
+        const zonaDeAtivacao = Math.min(120, Math.max(72, limites.width * 0.09));
+        let velocidade = 0;
+
+        if (event.clientX <= limites.left + zonaDeAtivacao) {
+            const intensidade = Math.min(1, Math.max(0, (limites.left + zonaDeAtivacao - event.clientX) / zonaDeAtivacao));
+            velocidade = -(0.18 + intensidade * 0.72);
+        } else if (event.clientX >= limites.right - zonaDeAtivacao) {
+            const intensidade = Math.min(1, Math.max(0, (event.clientX - (limites.right - zonaDeAtivacao)) / zonaDeAtivacao));
+            velocidade = 0.18 + intensidade * 0.72;
+        }
+
+        dragAutoScroll.kanban = kanban;
+        dragAutoScroll.velocidade = velocidade;
+
+        if (velocidade) {
+            const passoPorEvento = Math.sign(velocidade) * (3 + Math.abs(velocidade) * 10);
+            kanban.scrollLeft += passoPorEvento;
+        }
+
+        if (velocidade && !dragAutoScroll.frame) {
+            dragAutoScroll.frame = requestAnimationFrame(executarRolagemAutomaticaDoFunil);
+        } else if (!velocidade && dragAutoScroll.frame) {
+            pararRolagemAutomaticaDoFunil();
+        }
+    }
+
+    document.addEventListener('dragover', atualizarRolagemAutomaticaDoFunil);
+    document.addEventListener('dragenter', atualizarRolagemAutomaticaDoFunil);
+    document.addEventListener('drop', pararRolagemAutomaticaDoFunil, true);
+    window.addEventListener('blur', pararRolagemAutomaticaDoFunil);
+
     document.querySelectorAll('.kanban-card[draggable="true"]').forEach((card) => {
         card.addEventListener('dragstart', (event) => {
             if (card.dataset.busy === 'true') {
@@ -1107,7 +1178,10 @@ document.addEventListener('DOMContentLoaded', () => {
             event.dataTransfer.setData('text/plain', card.dataset.propostaId || '');
         });
 
+        card.addEventListener('drag', atualizarRolagemAutomaticaDoFunil);
+
         card.addEventListener('dragend', () => {
+            pararRolagemAutomaticaDoFunil();
             card.classList.remove('dragging');
             draggedCard = null;
             document.querySelectorAll('.kanban-cards.drop-target').forEach((column) => {
