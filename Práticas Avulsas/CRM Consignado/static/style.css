@@ -442,8 +442,9 @@ label { display: flex; flex-direction: column; gap: 7px; color: #374151; font-si
 .filters { align-items: end; }
 .toolbar { display: flex; justify-content: space-between; gap: 14px; align-items: center; flex-wrap: wrap; }
 .import-area { display: grid; gap: 6px; justify-items: end; }
-.import-form { display: flex; gap: 10px; align-items: center; }
+.import-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .import-form input { max-width: 280px; }
+.import-form select { min-width: 180px; }
 .import-help { max-width: 620px; text-align: right; }
 
 @media (max-width: 760px) {

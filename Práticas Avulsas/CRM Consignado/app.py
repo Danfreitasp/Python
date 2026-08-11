@@ -1882,9 +1882,7 @@ def dados_formulario(proposta_atual: sqlite3.Row | dict[str, Any] | None = None)
 
 
 def dados_nova_proposta() -> dict[str, Any]:
-    dados = dados_formulario()
-    dados["status"] = status_entrada_proposta()
-    return dados
+    return dados_formulario()
 
 
 def proposta_vazia(status: str | None = None) -> dict[str, Any]:
@@ -2844,12 +2842,12 @@ def nova_proposta():
             INSERT INTO propostas (
                 cliente_id, nome, cpf, nascimento, nb_matricula, especie, numero_proposta, numero_port_vinculada, numero_refin_vinculada, tipo_cliente, banco_atual, banco_destino, banco_digitado, produto,
                 promotora, beneficio_bloqueado, valor_caiu_promotora, valor_sacado, data_verificacao, parcela_atual, nova_parcela, troco, comissao_percentual, comissao, margem_apos, status, responsavel,
-                telefone, endereco, dados_bancarios, data_criacao, data_atualizacao, proxima_acao, data_retorno, observacoes
+                telefone, endereco, dados_bancarios, data_criacao, data_atualizacao, data_encerramento, proxima_acao, data_retorno, observacoes
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -2858,6 +2856,7 @@ def nova_proposta():
                 dados["banco_atual"], dados["banco_destino"], dados["banco_digitado"], dados["produto"],
                 dados["promotora"], dados["beneficio_bloqueado"], dados["valor_caiu_promotora"], dados["valor_sacado"], hoje_iso(), dados["parcela_atual"], dados["nova_parcela"], dados["troco"], dados["comissao_percentual"], dados["comissao"], dados["margem_apos"],
                 dados["status"], dados["responsavel"], dados["telefone"], dados["endereco"], dados["dados_bancarios"], agora, agora,
+                data_encerramento_para_status(None, dados["status"]),
                 dados["proxima_acao"], dados["data_retorno"], dados["observacoes"],
             ),
         )
@@ -2869,7 +2868,12 @@ def nova_proposta():
             agora,
         )
         db.commit()
-        registrar_historico(proposta_id, None, dados["status"], "Proposta criada em Aguardando inserção")
+        registrar_historico(
+            proposta_id,
+            None,
+            dados["status"],
+            f"Proposta criada em {dados['status']}",
+        )
         if dados.get("observacoes"):
             registrar_anotacao(proposta_id, dados["observacoes"], agora)
 
@@ -6404,6 +6408,14 @@ def localizar_cabecalho_importacao(ws: Any) -> tuple[int | None, list[str]]:
         headers = [normalizar_cabecalho(valor) for valor in possivel_header]
         if "nome" in headers and "cpf" in headers:
             return indice, headers
+        # Em dez/2025 do modelo OF, a célula NOME foi substituída por um link.
+        # A posição ainda é inequívoca: NOME fica imediatamente antes de CPF e
+        # a mesma linha contém produto, valor e pontos.
+        if {"cpf", "produto", "troco", "comissao"}.issubset(headers):
+            indice_cpf = headers.index("cpf")
+            if indice_cpf > 0:
+                headers[indice_cpf - 1] = "nome"
+                return indice, headers
     return None, []
 
 
@@ -6455,11 +6467,68 @@ def selecionar_aba_importacao_xlsx(wb: Any, mes_importacao: str) -> tuple[Any, i
     return ws, header_idx, headers, "padrão CRM"
 
 
+def selecionar_abas_importacao_completa_xlsx(
+    wb: Any,
+    ano_referencia: int | None = None,
+) -> list[tuple[Any, int, list[str], str, str]]:
+    """Retorna todas as abas mensais válidas com o período de cada uma.
+
+    Abas auxiliares podem conter nomes de meses no título (por exemplo,
+    ``gasto agos``), mas não entram porque não possuem NOME/CLIENTE e CPF.
+    """
+    candidatas: list[tuple[Any, int, list[str], int, int | None]] = []
+    for ws in wb.worksheets:
+        mes_aba, ano_aba = mes_ano_titulo_aba(ws.title)
+        if mes_aba is None:
+            continue
+        header_idx, headers = localizar_cabecalho_importacao(ws)
+        if header_idx is not None:
+            candidatas.append((ws, header_idx, headers, mes_aba, ano_aba))
+
+    if not candidatas:
+        raise ValueError("Não encontrei abas mensais com as colunas NOME/CLIENTE e CPF.")
+
+    ano_padrao = ano_referencia or date.today().year
+    resultado: list[tuple[Any, int, list[str], str, str]] = []
+    for indice, (ws, header_idx, headers, mes_aba, ano_aba) in enumerate(candidatas):
+        if ano_aba is None:
+            anterior = next(
+                (
+                    (item[3], item[4])
+                    for item in reversed(candidatas[:indice])
+                    if item[4] is not None
+                ),
+                None,
+            )
+            posterior = next(
+                (
+                    (item[3], item[4])
+                    for item in candidatas[indice + 1:]
+                    if item[4] is not None
+                ),
+                None,
+            )
+            if anterior:
+                mes_anterior, ano_anterior = anterior
+                ano_aba = int(ano_anterior) + (1 if mes_aba < mes_anterior else 0)
+            elif posterior:
+                mes_posterior, ano_posterior = posterior
+                ano_aba = int(ano_posterior) - (1 if mes_aba > mes_posterior else 0)
+            else:
+                ano_aba = ano_padrao
+
+        periodo = f"{int(ano_aba):04d}-{mes_aba:02d}"
+        resultado.append((ws, header_idx, headers, "OF mensal", periodo))
+    return resultado
+
+
 def data_planilha_no_mes(valor: Any, mes_importacao: str) -> str:
     """Converte dia, DATA/ASO ou data completa para uma data ISO do mês escolhido."""
     data_iso = parse_data_iso(valor)
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", data_iso):
-        return data_iso
+        ano_data = int(data_iso[:4])
+        if 2000 <= ano_data <= 2100:
+            return data_iso
 
     if isinstance(valor, (int, float)) and float(valor) > 31:
         try:
@@ -6645,12 +6714,19 @@ def importar():
         return redirect(url_for("index"))
 
     nome = arquivo.filename.lower()
+    escopo_importacao = limpar_texto(request.form.get("escopo_importacao")).lower() or "mes"
+    if escopo_importacao not in {"mes", "todas"}:
+        escopo_importacao = "mes"
     mes_importacao = limpar_texto(request.form.get("mes_importacao")) or mes_atual()
     linhas: list[dict[str, Any]] = []
     modelo_importacao = "CSV padrão"
     aba_importada = ""
+    abas_importadas: list[str] = []
+    periodos_importados: list[str] = []
     try:
         if nome.endswith(".csv"):
+            if escopo_importacao == "todas":
+                raise ValueError("A opção Planilha inteira está disponível somente para arquivos XLSX.")
             conteudo = arquivo.read().decode("utf-8-sig")
             sample = conteudo[:2048]
             delimiter = ";" if sample.count(";") >= sample.count(",") else ","
@@ -6659,12 +6735,29 @@ def importar():
                 linhas.append({normalizar_cabecalho(k): v for k, v in row.items()})
         elif nome.endswith(".xlsx"):
             wb = load_workbook(arquivo, data_only=True, read_only=True)
-            ws, header_idx, headers, modelo_importacao = selecionar_aba_importacao_xlsx(wb, mes_importacao)
-            aba_importada = ws.title
-            for row in ws.iter_rows(min_row=header_idx + 1, values_only=True):
-                linha = linha_xlsx_para_importacao(row, headers, mes_importacao, modelo_importacao)
-                if any(valor not in (None, "") for chave, valor in linha.items() if not chave.startswith("_")):
-                    linhas.append(linha)
+            if escopo_importacao == "todas":
+                try:
+                    ano_referencia = int(mes_importacao.split("-", 1)[0])
+                except (TypeError, ValueError):
+                    ano_referencia = date.today().year
+                selecoes = selecionar_abas_importacao_completa_xlsx(wb, ano_referencia)
+            else:
+                ws, header_idx, headers, modelo_importacao = selecionar_aba_importacao_xlsx(wb, mes_importacao)
+                selecoes = [(ws, header_idx, headers, modelo_importacao, mes_importacao)]
+
+            for ws, header_idx, headers, modelo_importacao, periodo_aba in selecoes:
+                abas_importadas.append(ws.title)
+                periodos_importados.append(periodo_aba)
+                for row in ws.iter_rows(min_row=header_idx + 1, values_only=True):
+                    linha = linha_xlsx_para_importacao(row, headers, periodo_aba, modelo_importacao)
+                    if any(
+                        valor not in (None, "")
+                        for chave, valor in linha.items()
+                        if not chave.startswith("_") and chave != "data_criacao"
+                    ):
+                        linhas.append(linha)
+            if len(abas_importadas) == 1:
+                aba_importada = abas_importadas[0]
         else:
             flash("Formato inválido. Use CSV ou XLSX.", "erro")
             return redirect(url_for("index"))
@@ -6672,7 +6765,11 @@ def importar():
         flash(f"Erro ao ler arquivo: {exc}", "erro")
         return redirect(url_for("index"))
 
-    linhas_filtradas = [row for row in linhas if linha_no_mes(row, mes_importacao)]
+    linhas_filtradas = (
+        linhas
+        if escopo_importacao == "todas"
+        else [row for row in linhas if linha_no_mes(row, mes_importacao)]
+    )
 
     importadas = 0
     ignoradas_mes = len(linhas) - len(linhas_filtradas)
@@ -6772,8 +6869,15 @@ def importar():
     complemento = f" Ignoradas por mês diferente: {ignoradas_mes}." if ignoradas_mes else ""
     if ignoradas_sem_cpf:
         complemento += f" Ignoradas sem CPF: {ignoradas_sem_cpf}."
-    origem = f" da aba '{aba_importada}' ({modelo_importacao})" if aba_importada else ""
-    flash(f"Importação concluída: {importadas} proposta(s){origem}, referentes a {mes_importacao}.{complemento}", "ok")
+    if escopo_importacao == "todas" and abas_importadas:
+        periodo_inicial = min(periodos_importados)
+        periodo_final = max(periodos_importados)
+        origem = f" de {len(abas_importadas)} aba(s) mensais ({periodo_inicial} a {periodo_final})"
+        referencia = " da planilha inteira"
+    else:
+        origem = f" da aba '{aba_importada}' ({modelo_importacao})" if aba_importada else ""
+        referencia = f", referentes a {mes_importacao}"
+    flash(f"Importação concluída: {importadas} proposta(s){origem}{referencia}.{complemento}", "ok")
     return redirect(url_for("index"))
 
 

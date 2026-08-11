@@ -55,15 +55,39 @@
     </div>
     <div class="import-area">
         <form action="{{ url_for('importar') }}" method="post" enctype="multipart/form-data" class="import-form">
-            <label class="compact-label">Mês da importação
-                <input type="month" name="mes_importacao" value="{{ mes_atual() }}" required>
+            <label class="compact-label">O que importar
+                <select name="escopo_importacao" data-import-scope>
+                    <option value="todas" selected>Planilha inteira</option>
+                    <option value="mes">Somente um mês</option>
+                </select>
+            </label>
+            <label class="compact-label" data-import-month hidden>Mês da importação
+                <input type="month" name="mes_importacao" value="{{ mes_atual() }}" disabled>
             </label>
             <input type="file" name="arquivo" accept=".csv,.xlsx" required>
             <button class="btn" type="submit"><i class="bi bi-upload" aria-hidden="true"></i><span>Importar</span></button>
         </form>
-        <small class="muted import-help">O CRM identifica o modelo da planilha e importa somente a aba do mês escolhido. Senhas não são importadas.</small>
+        <small class="muted import-help">Na planilha inteira, o CRM importa todas as abas mensais e ignora abas auxiliares, despesas e senhas.</small>
     </div>
 </section>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const scope = document.querySelector('[data-import-scope]');
+    const monthField = document.querySelector('[data-import-month]');
+    const monthInput = monthField?.querySelector('input');
+    if (!scope || !monthField || !monthInput) return;
+
+    const updateImportScope = () => {
+        const wholeWorkbook = scope.value === 'todas';
+        monthField.hidden = wholeWorkbook;
+        monthInput.disabled = wholeWorkbook;
+        monthInput.required = !wholeWorkbook;
+    };
+    scope.addEventListener('change', updateImportScope);
+    updateImportScope();
+});
+</script>
 
 <section class="card table-card">
     <div class="table-wrap">

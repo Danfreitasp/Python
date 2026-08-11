@@ -47,7 +47,7 @@
             <option value="SIM" {% if sacado == 'SIM' %}selected{% endif %}>SIM</option>
         </select>
     </label>
-    <label>Status
+    <label>{% if modo_nova %}Etapa inicial{% else %}Status{% endif %}
         <select name="status">
             {% for status in STATUS_LIST %}
                 <option value="{{ status }}" {% if (proposta.status or proposta['status'] or '') == status %}selected{% endif %}>{{ status }}</option>
