@@ -2117,12 +2117,15 @@ def sincronizar_beneficio_bloqueado(
 
 
 def buscar_propostas_vinculadas(proposta: sqlite3.Row) -> list[sqlite3.Row]:
-    """Busca propostas vinculadas manualmente por número de proposta.
+    """Busca somente o par válido de Port com Refin/Refin vinculado.
 
-    A vinculação é flexível: basta preencher o número próprio em uma proposta e,
-    na outra, preencher esse número no campo de portabilidade/refin vinculado.
-    Propostas do mesmo CPF sem um número em comum não formam vínculo.
+    O CPF e um número de proposta isolado nunca criam vínculo. A relação exige
+    uma Portabilidade com Refinanciamento e o Refinanciamento que referencia
+    explicitamente o número da portabilidade ou é referenciado por ela.
     """
+    if not (produto_eh_portabilidade_com_refin(proposta) or proposta_eh_refin_vinculado(proposta)):
+        return []
+
     dados = dict(proposta)
     numeros = {
         normalizar_numero_proposta(dados.get("numero_proposta")),
@@ -2135,7 +2138,7 @@ def buscar_propostas_vinculadas(proposta: sqlite3.Row) -> list[sqlite3.Row]:
 
     placeholders = ",".join("?" for _ in numeros)
     numeros_ordenados = sorted(numeros)
-    return get_db().execute(
+    candidatas = get_db().execute(
         f"""
         SELECT * FROM propostas
         WHERE id <> ?
@@ -2148,6 +2151,11 @@ def buscar_propostas_vinculadas(proposta: sqlite3.Row) -> list[sqlite3.Row]:
         """,
         [proposta["id"], *numeros_ordenados, *numeros_ordenados, *numeros_ordenados],
     ).fetchall()
+    return [
+        candidata
+        for candidata in candidatas
+        if propostas_formam_par_port_refin(proposta, candidata)
+    ]
 
 
 def buscar_portabilidade_origem_refin(proposta: sqlite3.Row) -> sqlite3.Row | None:
