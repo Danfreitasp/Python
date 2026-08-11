@@ -2121,6 +2121,7 @@ def buscar_propostas_vinculadas(proposta: sqlite3.Row) -> list[sqlite3.Row]:
 
     A vinculação é flexível: basta preencher o número próprio em uma proposta e,
     na outra, preencher esse número no campo de portabilidade/refin vinculado.
+    Propostas do mesmo CPF sem um número em comum não formam vínculo.
     """
     dados = dict(proposta)
     numeros = {
@@ -2132,42 +2133,21 @@ def buscar_propostas_vinculadas(proposta: sqlite3.Row) -> list[sqlite3.Row]:
     if not numeros:
         return []
 
-    cpf = limpar_texto(dados.get("cpf"))
     placeholders = ",".join("?" for _ in numeros)
-    params: list[Any] = [proposta["id"], *sorted(numeros)]
-    where_cpf = ""
-    if cpf:
-        where_cpf = " OR cpf = ?"
-        params.append(cpf)
-
-    # Busca por referência cruzada ou mesmo CPF. Depois filtra em Python para
-    # reduzir falsos positivos em clientes com mais de uma proposta independente.
-    rows = get_db().execute(
+    numeros_ordenados = sorted(numeros)
+    return get_db().execute(
         f"""
         SELECT * FROM propostas
         WHERE id <> ?
           AND (
-                UPPER(COALESCE(numero_proposta, '')) IN ({placeholders})
-             OR UPPER(COALESCE(numero_port_vinculada, '')) IN ({placeholders})
-             OR UPPER(COALESCE(numero_refin_vinculada, '')) IN ({placeholders})
-             {where_cpf}
+                UPPER(TRIM(COALESCE(numero_proposta, ''))) IN ({placeholders})
+             OR UPPER(TRIM(COALESCE(numero_port_vinculada, ''))) IN ({placeholders})
+             OR UPPER(TRIM(COALESCE(numero_refin_vinculada, ''))) IN ({placeholders})
           )
         ORDER BY data_criacao ASC, id ASC
         """,
-        params[:1] + sorted(numeros) + sorted(numeros) + sorted(numeros) + ([cpf] if cpf else []),
+        [proposta["id"], *numeros_ordenados, *numeros_ordenados, *numeros_ordenados],
     ).fetchall()
-
-    vinculadas = []
-    for row in rows:
-        row_nums = {
-            normalizar_numero_proposta(row["numero_proposta"]),
-            normalizar_numero_proposta(row["numero_port_vinculada"]),
-            normalizar_numero_proposta(row["numero_refin_vinculada"]),
-        }
-        row_nums.discard("")
-        if numeros.intersection(row_nums) or (cpf and row["cpf"] == cpf and (dados.get("numero_port_vinculada") or dados.get("numero_refin_vinculada") or row["numero_port_vinculada"] or row["numero_refin_vinculada"])):
-            vinculadas.append(row)
-    return vinculadas
 
 
 def buscar_portabilidade_origem_refin(proposta: sqlite3.Row) -> sqlite3.Row | None:
