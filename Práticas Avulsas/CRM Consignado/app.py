@@ -266,6 +266,7 @@ def init_db() -> None:
             numero_proposta TEXT,
             numero_port_vinculada TEXT,
             numero_refin_vinculada TEXT,
+            portabilidade_id INTEGER,
             tipo_cliente TEXT,
             banco_atual TEXT,
             banco_destino TEXT,
@@ -468,6 +469,8 @@ def init_db() -> None:
         db.execute("ALTER TABLE propostas ADD COLUMN numero_port_vinculada TEXT")
     if "numero_refin_vinculada" not in colunas_propostas:
         db.execute("ALTER TABLE propostas ADD COLUMN numero_refin_vinculada TEXT")
+    if "portabilidade_id" not in colunas_propostas:
+        db.execute("ALTER TABLE propostas ADD COLUMN portabilidade_id INTEGER")
     if "comissao" not in colunas_propostas:
         db.execute("ALTER TABLE propostas ADD COLUMN comissao REAL DEFAULT 0")
     if "comissao_percentual" not in colunas_propostas:
@@ -494,6 +497,26 @@ def init_db() -> None:
         db.execute("ALTER TABLE propostas ADD COLUMN especie TEXT")
     if "nascimento" not in colunas_propostas:
         db.execute("ALTER TABLE propostas ADD COLUMN nascimento TEXT")
+
+    # Mantém o vínculo Port + Refin por ID. Os números antigos continuam
+    # disponíveis para compatibilidade, mas deixam de ser necessários na tela.
+    db.execute(
+        """
+        UPDATE propostas AS refin
+        SET portabilidade_id = (
+            SELECT port.id
+            FROM propostas AS port
+            WHERE UPPER(TRIM(COALESCE(port.produto, ''))) = 'PORTABILIDADE COM REFINANCIAMENTO'
+              AND UPPER(TRIM(COALESCE(port.numero_proposta, ''))) = UPPER(TRIM(refin.numero_port_vinculada))
+            ORDER BY port.id DESC
+            LIMIT 1
+        )
+        WHERE UPPER(TRIM(COALESCE(refin.produto, ''))) = 'REFINANCIAMENTO'
+          AND refin.portabilidade_id IS NULL
+          AND COALESCE(TRIM(refin.numero_port_vinculada), '') <> ''
+        """
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_propostas_portabilidade_id ON propostas(portabilidade_id)")
 
     colunas_clientes = {
         row["name"] for row in db.execute("PRAGMA table_info(clientes)").fetchall()
@@ -1485,18 +1508,17 @@ def status_ativos() -> list[str]:
 
 
 def resumo_coluna_funil(status: str) -> dict[str, Any]:
-    row = get_db().execute(
-        """
-        SELECT COUNT(*) AS quantidade, COALESCE(SUM(comissao), 0) AS comissao
-        FROM propostas
-        WHERE status = ?
-        """,
-        (status,),
-    ).fetchone()
-    comissao = float(row["comissao"] or 0) if row else 0.0
+    status_visiveis = status_ativos()
+    placeholders = ",".join("?" for _ in status_visiveis)
+    propostas = get_db().execute(
+        f"SELECT * FROM propostas WHERE status IN ({placeholders}) ORDER BY data_retorno ASC, id DESC",
+        status_visiveis,
+    ).fetchall()
+    _, totais_status = agrupar_cards_funil(propostas, status_visiveis)
+    resumo = totais_status.get(status, {"qtd": 0, "comissao": 0.0})
     return {
-        "quantidade": int(row["quantidade"] or 0) if row else 0,
-        "comissao": br_moeda(comissao),
+        "quantidade": int(resumo["qtd"] or 0),
+        "comissao": br_moeda(float(resumo["comissao"] or 0)),
     }
 
 
@@ -1846,11 +1868,12 @@ def dados_formulario(proposta_atual: sqlite3.Row | dict[str, Any] | None = None)
     status = limpar_texto(request.form.get("status")) or "Novo lead"
     if not status_valido(status):
         status = status_padrao()
+    atual = dict(proposta_atual) if proposta_atual else {}
     dados = {
         "nome": limpar_texto(request.form.get("nome")), "cpf": formatar_cpf(limpar_texto(request.form.get("cpf"))),
         "nascimento": limpar_texto(request.form.get("nascimento")),
         "nb_matricula": limpar_texto(request.form.get("nb_matricula")), "especie": limpar_texto(request.form.get("especie")), "numero_proposta": limpar_texto(request.form.get("numero_proposta")),
-        "numero_port_vinculada": limpar_texto(request.form.get("numero_port_vinculada")), "numero_refin_vinculada": limpar_texto(request.form.get("numero_refin_vinculada")),
+        "numero_port_vinculada": limpar_texto(atual.get("numero_port_vinculada")), "numero_refin_vinculada": limpar_texto(atual.get("numero_refin_vinculada")),
         "tipo_cliente": limpar_texto(request.form.get("tipo_cliente")), "banco_atual": limpar_texto(request.form.get("banco_atual")),
         "banco_destino": limpar_texto(request.form.get("banco_destino")), "banco_digitado": limpar_texto(request.form.get("banco_digitado")),
         "produto": limpar_texto(request.form.get("produto")), "promotora": limpar_texto(request.form.get("promotora")),
@@ -1862,13 +1885,16 @@ def dados_formulario(proposta_atual: sqlite3.Row | dict[str, Any] | None = None)
         "telefone": limpar_texto(request.form.get("telefone")), "endereco": limpar_texto(request.form.get("endereco")),
         "dados_bancarios": limpar_texto(request.form.get("dados_bancarios")), "proxima_acao": "",
         "data_retorno": limpar_texto(request.form.get("data_retorno")), "observacoes": limpar_texto(request.form.get("observacoes")),
+        "refin_numero_proposta": limpar_texto(request.form.get("refin_numero_proposta")),
+        "refin_troco": parse_moeda(request.form.get("refin_troco")),
+        "refin_comissao_percentual": parse_percentual(request.form.get("refin_comissao_percentual")),
+        "refin_comissao": parse_moeda(request.form.get("refin_comissao")),
     }
     if not produto_tem_campos_portabilidade(dados["produto"]):
         dados["banco_atual"] = ""
         dados["nova_parcela"] = 0
         dados["margem_apos"] = ""
     if not produto_tem_campos_vinculo(dados["produto"]):
-        atual = dict(proposta_atual) if proposta_atual else {}
         refin_vinculado = proposta_eh_refin_vinculado(atual)
         if refin_vinculado:
             dados["numero_port_vinculada"] = limpar_texto(atual.get("numero_port_vinculada"))
@@ -2127,6 +2153,20 @@ def buscar_propostas_vinculadas(proposta: sqlite3.Row) -> list[sqlite3.Row]:
         return []
 
     dados = dict(proposta)
+    if produto_eh_portabilidade_com_refin(proposta):
+        por_id = get_db().execute(
+            "SELECT * FROM propostas WHERE portabilidade_id = ? ORDER BY data_criacao ASC, id ASC",
+            (proposta["id"],),
+        ).fetchall()
+        if por_id:
+            return [row for row in por_id if propostas_formam_par_port_refin(proposta, row)]
+    elif dados.get("portabilidade_id"):
+        origem = get_db().execute(
+            "SELECT * FROM propostas WHERE id = ?",
+            (dados["portabilidade_id"],),
+        ).fetchone()
+        return [origem] if origem and propostas_formam_par_port_refin(proposta, origem) else []
+
     numeros = {
         normalizar_numero_proposta(dados.get("numero_proposta")),
         normalizar_numero_proposta(dados.get("numero_port_vinculada")),
@@ -2162,6 +2202,15 @@ def buscar_portabilidade_origem_refin(proposta: sqlite3.Row) -> sqlite3.Row | No
     """Localiza a portabilidade exata que originou um refin vinculado."""
     if not proposta_eh_refin_vinculado(proposta):
         return None
+
+    dados = dict(proposta)
+    if dados.get("portabilidade_id"):
+        origem = get_db().execute(
+            "SELECT * FROM propostas WHERE id = ?",
+            (dados["portabilidade_id"],),
+        ).fetchone()
+        if origem and produto_eh_portabilidade_com_refin(origem):
+            return origem
 
     numero_port = normalizar_numero_proposta(proposta["numero_port_vinculada"])
     if not numero_port:
@@ -2257,7 +2306,7 @@ def proposta_eh_refin_vinculado(proposta: sqlite3.Row | dict[str, Any]) -> bool:
         dados = {}
     return (
         remover_acentos(limpar_texto(dados.get("produto"))).casefold() == "refinanciamento"
-        and bool(limpar_texto(dados.get("numero_port_vinculada")))
+        and bool(dados.get("portabilidade_id") or limpar_texto(dados.get("numero_port_vinculada")))
     )
 
 
@@ -2276,6 +2325,8 @@ def propostas_formam_par_port_refin(
     numero_port = normalizar_numero_proposta(port.get("numero_proposta"))
     numero_refin = normalizar_numero_proposta(refin.get("numero_proposta"))
     return bool(
+        (refin.get("portabilidade_id") and refin.get("portabilidade_id") == port.get("id"))
+        or
         (
             numero_port
             and normalizar_numero_proposta(refin.get("numero_port_vinculada")) == numero_port
@@ -2326,6 +2377,161 @@ def pode_criar_refin_vinculado(proposta: sqlite3.Row | dict[str, Any]) -> bool:
     except (KeyError, IndexError, TypeError):
         numero = ""
     return produto_eh_portabilidade_com_refin(proposta) and bool(incrementar_numero_proposta(numero))
+
+
+def sincronizar_refin_da_portabilidade(
+    proposta_id: int,
+    dados: dict[str, Any],
+    atualizado_em: str,
+) -> tuple[int | None, bool, str | None]:
+    """Cria ou atualiza o Refin financeiro sem expor controles de vínculo na tela."""
+    if not produto_eh_portabilidade_com_refin(dados):
+        return None, False, None
+
+    db = get_db()
+    port = db.execute("SELECT * FROM propostas WHERE id = ?", (proposta_id,)).fetchone()
+    if not port:
+        return None, False, None
+
+    refin = db.execute(
+        "SELECT * FROM propostas WHERE portabilidade_id = ? ORDER BY id ASC LIMIT 1",
+        (proposta_id,),
+    ).fetchone()
+    if not refin:
+        refin = next(
+            (
+                vinculada
+                for vinculada in buscar_propostas_vinculadas(port)
+                if proposta_eh_refin_vinculado(vinculada)
+            ),
+            None,
+        )
+
+    numero_port = limpar_texto(dados.get("numero_proposta"))
+    numero_refin = (
+        limpar_texto(dados.get("refin_numero_proposta"))
+        or (limpar_texto(refin["numero_proposta"]) if refin else "")
+        or incrementar_numero_proposta(numero_port)
+    )
+    banco_refin = limpar_texto(dados.get("banco_digitado")) or limpar_texto(dados.get("banco_atual"))
+
+    if refin:
+        status_refin = refin["status"]
+        db.execute(
+            """
+            UPDATE propostas SET
+                cliente_id = ?, nome = ?, cpf = ?, nascimento = ?, nb_matricula = ?, especie = ?,
+                numero_proposta = ?, numero_port_vinculada = ?, portabilidade_id = ?, tipo_cliente = ?,
+                banco_digitado = ?, promotora = ?, beneficio_bloqueado = ?, troco = ?,
+                comissao_percentual = ?, comissao = ?, telefone = ?, endereco = ?, dados_bancarios = ?,
+                data_atualizacao = ?
+            WHERE id = ?
+            """,
+            (
+                port["cliente_id"], dados["nome"], dados["cpf"], dados["nascimento"], dados["nb_matricula"], dados["especie"],
+                numero_refin, numero_port, proposta_id, dados["tipo_cliente"], banco_refin, dados["promotora"],
+                dados["beneficio_bloqueado"], dados["refin_troco"], dados["refin_comissao_percentual"],
+                dados["refin_comissao"], dados["telefone"], dados["endereco"], dados["dados_bancarios"],
+                atualizado_em, refin["id"],
+            ),
+        )
+        refin_id = refin["id"]
+        criado = False
+    else:
+        status_refin = "Refin da Port" if status_valido("Refin da Port") else status_padrao()
+        cursor = db.execute(
+            """
+            INSERT INTO propostas (
+                cliente_id, nome, cpf, nascimento, nb_matricula, especie, numero_proposta,
+                numero_port_vinculada, numero_refin_vinculada, portabilidade_id, tipo_cliente,
+                banco_atual, banco_destino, banco_digitado, produto, promotora, beneficio_bloqueado,
+                valor_caiu_promotora, valor_sacado, data_verificacao, parcela_atual, nova_parcela,
+                troco, comissao_percentual, comissao, margem_apos, status, responsavel, telefone,
+                endereco, dados_bancarios, data_criacao, data_atualizacao, data_encerramento,
+                proxima_acao, data_retorno, observacoes
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            (
+                port["cliente_id"], dados["nome"], dados["cpf"], dados["nascimento"], dados["nb_matricula"], dados["especie"], numero_refin,
+                numero_port, "", proposta_id, dados["tipo_cliente"], "", "", banco_refin, "Refinanciamento",
+                dados["promotora"], dados["beneficio_bloqueado"], "NÃO", "NÃO", hoje_iso(), 0, 0,
+                dados["refin_troco"], dados["refin_comissao_percentual"], dados["refin_comissao"], "",
+                status_refin, dados["responsavel"], dados["telefone"], dados["endereco"], dados["dados_bancarios"],
+                atualizado_em, atualizado_em, None, "", dados["data_retorno"], "",
+            ),
+        )
+        refin_id = cursor.lastrowid
+        criado = True
+
+    db.execute(
+        "UPDATE propostas SET numero_refin_vinculada = ?, data_atualizacao = ? WHERE id = ?",
+        (numero_refin, atualizado_em, proposta_id),
+    )
+    return refin_id, criado, status_refin
+
+
+def agrupar_cards_funil(
+    propostas: list[sqlite3.Row],
+    status_visiveis: list[str],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, dict[str, Any]]]:
+    """Une visualmente Port + Refin sem fundir os registros financeiros."""
+    registros = list(propostas)
+    refin_por_port: dict[int, sqlite3.Row] = {}
+    refins_agrupados: set[int] = set()
+
+    for port in registros:
+        if not produto_eh_portabilidade_com_refin(port):
+            continue
+        candidatas = [
+            refin
+            for refin in registros
+            if refin["id"] not in refins_agrupados
+            and propostas_formam_par_port_refin(port, refin)
+        ]
+        if not candidatas:
+            continue
+
+        numero_refin = normalizar_numero_proposta(port["numero_refin_vinculada"])
+        refin = next(
+            (
+                candidata
+                for candidata in candidatas
+                if numero_refin
+                and normalizar_numero_proposta(candidata["numero_proposta"]) == numero_refin
+            ),
+            candidatas[0],
+        )
+        refin_por_port[port["id"]] = refin
+        refins_agrupados.add(refin["id"])
+
+    por_status: dict[str, list[dict[str, Any]]] = {status: [] for status in status_visiveis}
+    for proposta in registros:
+        if proposta["id"] in refins_agrupados:
+            continue
+
+        card = dict(proposta)
+        refin = refin_por_port.get(proposta["id"])
+        card["port_refin_unificado"] = bool(refin)
+        card["refin_vinculado"] = dict(refin) if refin else None
+        card["valor_portabilidade"] = float(proposta["troco"] or 0)
+        card["troco_refinanciamento"] = float(refin["troco"] or 0) if refin else 0.0
+        card["comissao_total"] = float(proposta["comissao"] or 0) + (
+            float(refin["comissao"] or 0) if refin else 0.0
+        )
+        card["previsao_saldo"] = proposta["data_retorno"] or (refin["data_retorno"] if refin else "")
+        por_status.setdefault(proposta["status"], []).append(card)
+
+    totais_status = {
+        status: {
+            "qtd": len(itens),
+            "comissao": sum(float(item["comissao_total"] or 0) for item in itens),
+        }
+        for status, itens in por_status.items()
+    }
+    return por_status, totais_status
 
 
 def produto_tem_campos_portabilidade(produto: Any) -> bool:
@@ -2855,6 +3061,11 @@ def nova_proposta():
             proposta_id,
             agora,
         )
+        refin_id, refin_criado, refin_status = sincronizar_refin_da_portabilidade(
+            proposta_id,
+            dados,
+            agora,
+        )
         db.commit()
         registrar_historico(
             proposta_id,
@@ -2862,6 +3073,13 @@ def nova_proposta():
             dados["status"],
             f"Proposta criada em {dados['status']}",
         )
+        if refin_id and refin_criado:
+            registrar_historico(
+                refin_id,
+                None,
+                refin_status,
+                "Refinanciamento criado automaticamente com a Portabilidade com Refinanciamento.",
+            )
         if dados.get("observacoes"):
             registrar_anotacao(proposta_id, dados["observacoes"], agora)
 
@@ -3033,6 +3251,7 @@ def detalhe_proposta(proposta_id: int):
         (proposta_id,),
     ).fetchall()
     vinculadas = buscar_propostas_vinculadas(proposta)
+    refin_vinculado = next((item for item in vinculadas if proposta_eh_refin_vinculado(item)), None)
     portabilidade_origem = buscar_portabilidade_origem_refin(proposta)
     anuencia_refin = montar_anuencia_refin(proposta, portabilidade_origem)
     mensagens = montar_mensagens(proposta)
@@ -3043,6 +3262,7 @@ def detalhe_proposta(proposta_id: int):
         anotacoes=anotacoes,
         anexos=anexos,
         vinculadas=vinculadas,
+        refin_vinculado=refin_vinculado,
         anuencia_refin=anuencia_refin,
         pasta_anexos=pasta_cliente(proposta),
         mensagens=mensagens,
@@ -4331,11 +4551,23 @@ def editar_proposta(proposta_id: int):
             proposta_id,
             atualizado_em,
         )
+        refin_id, refin_criado, refin_status = sincronizar_refin_da_portabilidade(
+            proposta_id,
+            dados,
+            atualizado_em,
+        )
         db.commit()
         if status_anterior != dados["status"]:
             registrar_historico(proposta_id, status_anterior, dados["status"], "Status alterado na edição")
         else:
             registrar_historico(proposta_id, status_anterior, dados["status"], "Dados da proposta atualizados")
+        if refin_id:
+            registrar_historico(
+                refin_id,
+                None if refin_criado else refin_status,
+                refin_status,
+                "Dados financeiros do refinanciamento atualizados pela proposta unificada.",
+            )
         observacao_antiga = limpar_texto(proposta["observacoes"])
         if dados.get("observacoes") and dados["observacoes"] != observacao_antiga:
             registrar_anotacao(proposta_id, dados["observacoes"])
@@ -4354,7 +4586,9 @@ def editar_proposta(proposta_id: int):
             return redirect(origem)
         return redirect(url_for("detalhe_proposta", proposta_id=proposta_id, origem=origem))
 
-    return render_template("editar_proposta.html", proposta=proposta)
+    vinculadas = buscar_propostas_vinculadas(proposta)
+    refin_vinculado = next((item for item in vinculadas if proposta_eh_refin_vinculado(item)), None)
+    return render_template("editar_proposta.html", proposta=proposta, refin_vinculado=refin_vinculado)
 
 
 
@@ -4570,16 +4804,7 @@ def renderizar_funil(status_visiveis: list[str], titulo: str, subtitulo: str, mo
         f"SELECT * FROM propostas WHERE status IN ({placeholders}) ORDER BY data_retorno ASC, id DESC",
         status_visiveis,
     ).fetchall()
-    por_status = {status: [] for status in status_visiveis}
-    for proposta in propostas:
-        por_status.setdefault(proposta["status"], []).append(proposta)
-    totais_status = {
-        status: {
-            "qtd": len(itens),
-            "comissao": sum(float(item["comissao"] or 0) for item in itens),
-        }
-        for status, itens in por_status.items()
-    }
+    por_status, totais_status = agrupar_cards_funil(propostas, status_visiveis)
     return render_template(
         "funil.html",
         por_status=por_status,

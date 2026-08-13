@@ -267,10 +267,16 @@ textarea,
     box-shadow: var(--shadow-hover);
 }
 
+.metric-edit-form {
+    background: #ffffff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
 .kanban[data-modulo="funil"] {
     height: calc(100vh - 158px);
     min-height: 520px;
-    grid-auto-columns: 286px;
+    grid-auto-columns: 330px;
     gap: 11px;
     padding: 10px 10px 15px;
     border: 1px solid rgba(255, 255, 255, .84);
@@ -407,6 +413,16 @@ textarea,
 .kanban[data-modulo="funil"] .kanban-card:hover .card-values span {
     background: rgba(255, 255, 255, .86);
     transform: translateY(-1px);
+}
+
+.kanban[data-modulo="funil"] .port-refin-values {
+    background: rgba(246, 248, 250, .66);
+}
+
+.kanban[data-modulo="funil"] .card-values.port-refin-values span,
+.kanban[data-modulo="funil"] .kanban-card:hover .card-values.port-refin-values span {
+    background: transparent;
+    transform: none;
 }
 
 .verification-dot,
@@ -568,6 +584,10 @@ html[data-theme="escuro"] .proposal-form-column,
 html[data-theme="escuro"] .proposal-form-free-section {
     border-color: rgba(255, 255, 255, .1);
     background: rgba(35, 40, 45, .56);
+}
+
+html[data-theme="escuro"] .metric-edit-form {
+    background: #142b4e;
 }
 
 html[data-theme="escuro"] .kanban[data-modulo="funil"] {

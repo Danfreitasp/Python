@@ -34,11 +34,6 @@
                         <button class="btn btn-danger" type="submit"><i class="bi bi-x-circle" aria-hidden="true"></i><span>Perdido</span></button>
                     </form>
                 </div>
-                {% if pode_criar_refin_vinculado(proposta) %}
-                    <form method="post" action="{{ url_for('criar_refin_vinculado', proposta_id=proposta.id) }}" target="_blank" onsubmit="return confirm('Criar refinanciamento vinculado com nº {{ incrementar_numero_proposta(proposta.numero_proposta) }}?');">
-                        <button class="btn btn-primary" type="submit"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Criar refin vinculado</span></button>
-                    </form>
-                {% endif %}
                 <form method="post" action="{{ url_for('excluir_proposta', proposta_id=proposta.id) }}" onsubmit="return confirm('Excluir definitivamente este lead/proposta? Esta ação remove também anotações, histórico e anexos cadastrados no CRM.');">
                     <input type="hidden" name="next" value="{{ url_retorno_padrao() }}">
                     <button class="btn btn-danger" type="submit"><i class="bi bi-trash" aria-hidden="true"></i><span>Excluir lead</span></button>
@@ -118,41 +113,21 @@
             </div>
 
             <div class="quick-section-grid">
-                <section class="linked-box stack">
-                    <div class="section-title-row">
-                        <div>
-                            <h2>Propostas vinculadas</h2>
-                            <small>Portabilidade/refinanciamento relacionados pelo número da proposta.</small>
-                        </div>
-                        <small>{{ vinculadas|length }} vínculo(s)</small>
-                    </div>
-                    <div class="linked-list">
-                        {% for vinculada in vinculadas %}
-                            <a class="linked-item" href="{{ url_for('detalhe_proposta', proposta_id=vinculada.id, origem=url_retorno_padrao()) }}">
-                                <div>
-                                    <strong>{{ vinculada.produto or 'Proposta' }} · {{ vinculada.status }}</strong>
-                                    <small>{{ vinculada.nome }}{% if vinculada.numero_proposta %} · Nº {{ vinculada.numero_proposta }}{% endif %}</small>
-                                </div>
-                                <div>
-                                    <span>{{ br_moeda(vinculada.comissao) }}</span>
-                                    <small>Comissão</small>
-                                </div>
-                            </a>
-                        {% else %}
-                            <p class="empty small">Nenhuma proposta vinculada ainda.</p>
-                        {% endfor %}
-                    </div>
-                </section>
-
                 <section class="note-box compact-note finance-side-panel">
                     <div class="finance-highlight-box">
                         <div>
-                            <small>Valor</small>
+                            <small>{% if refin_vinculado %}Valor da portabilidade{% else %}Valor{% endif %}</small>
                             <strong>{{ br_moeda(proposta.troco) }}</strong>
                         </div>
+                        {% if refin_vinculado %}
+                        <div>
+                            <small>Valor do troco</small>
+                            <strong>{{ br_moeda(refin_vinculado.troco) }}</strong>
+                        </div>
+                        {% endif %}
                         <div>
                             <small>Comissão</small>
-                            <strong>{{ br_moeda(proposta.comissao) }}</strong>
+                            <strong>{{ br_moeda((proposta.comissao or 0) + (refin_vinculado.comissao or 0 if refin_vinculado else 0)) }}</strong>
                         </div>
                     </div>
 
@@ -181,8 +156,6 @@
                     <div><small>NB/Matrícula</small><span>{{ proposta.nb_matricula or '-' }}</span></div>
                     {% if proposta.nascimento %}<div><small>Nascimento</small><span>{{ proposta.nascimento }}</span></div>{% endif %}
                     {% if proposta.especie %}<div><small>Espécie do benefício</small><span>{{ proposta.especie }}</span></div>{% endif %}
-                    {% if proposta_eh_refin_vinculado(proposta) %}<div><small>Nº port vinculada</small><span>{{ proposta.numero_port_vinculada or '-' }}</span></div>{% endif %}
-                    {% if produto_tem_campos_vinculo(proposta.produto) %}<div><small>Nº refin vinculado</small><span>{{ proposta.numero_refin_vinculada or '-' }}</span></div>{% endif %}
                     <div><small>Tipo</small><span>{{ proposta.tipo_cliente or '-' }}</span></div>
                     {% if produto_tem_campos_portabilidade(proposta.produto) %}<div><small>Banco atual</small><span>{{ proposta.banco_atual or '-' }}</span></div>{% endif %}
                     <div><small>Promotora</small><span>{{ proposta.promotora or '-' }}</span></div>
@@ -192,8 +165,12 @@
                     <div class="wide-info"><small>Dados bancários</small><span>{{ proposta.dados_bancarios or '-' }}</span></div>
                     <div><small>Parcela atual</small><span>{{ br_moeda(proposta.parcela_atual) }}</span></div>
                     {% if produto_tem_campos_portabilidade(proposta.produto) %}<div><small>Nova parcela</small><span>{{ br_moeda(proposta.nova_parcela) }}</span></div>{% endif %}
-                    <div><small>Valor</small><span>{{ br_moeda(proposta.troco) }}</span></div>
-                    <div><small>% comissão</small><span>{{ br_percentual(proposta.comissao_percentual) }}</span></div>
+                    <div><small>{% if refin_vinculado %}Valor da portabilidade{% else %}Valor{% endif %}</small><span>{{ br_moeda(proposta.troco) }}</span></div>
+                    <div><small>{% if refin_vinculado %}% comissão da portabilidade{% else %}% comissão{% endif %}</small><span>{{ br_percentual(proposta.comissao_percentual) }}</span></div>
+                    {% if refin_vinculado %}
+                    <div><small>Valor do troco</small><span>{{ br_moeda(refin_vinculado.troco) }}</span></div>
+                    <div><small>% comissão do refinanciamento</small><span>{{ br_percentual(refin_vinculado.comissao_percentual) }}</span></div>
+                    {% endif %}
                     <div><small>Valor caiu na promotora</small><span>{{ proposta.valor_caiu_promotora or 'NÃO' }}</span></div>
                     <div><small>Valor já foi sacado</small><span>{{ proposta.valor_sacado or 'NÃO' }}</span></div>
                     {% if produto_tem_campos_portabilidade(proposta.produto) %}<div><small>Margem após</small><span>{{ proposta.margem_apos or '-' }}</span></div>{% endif %}

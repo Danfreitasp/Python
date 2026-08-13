@@ -5,8 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const localizarCampo = (name) => labels.find((label) => label.querySelector(`[name="${name}"]`));
         const grupos = [
             ['Dados do cliente', ['nome', 'cpf', 'nascimento', 'nb_matricula', 'especie', 'tipo_cliente', 'telefone']],
-            ['Dados da proposta', ['numero_proposta', 'produto', 'banco_atual', 'banco_digitado', 'status', 'parcela_atual', 'nova_parcela', 'margem_apos', 'troco', 'numero_port_vinculada', 'numero_refin_vinculada', 'data_retorno']],
-            ['Dados da promotora', ['promotora', 'beneficio_bloqueado', 'valor_caiu_promotora', 'valor_sacado', 'comissao_percentual', 'comissao']],
+            ['Dados da proposta', ['numero_proposta', 'produto', 'banco_atual', 'banco_digitado', 'status', 'parcela_atual', 'nova_parcela', 'margem_apos', 'troco', 'comissao_percentual', 'comissao', 'refin_troco', 'refin_comissao_percentual', 'refin_comissao', 'data_retorno']],
+            ['Dados da promotora', ['promotora', 'beneficio_bloqueado', 'valor_caiu_promotora', 'valor_sacado']],
         ];
         const usados = new Set();
         const fragment = document.createDocumentFragment();
@@ -23,6 +23,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 destino.appendChild(campo);
                 usados.add(campo);
             });
+
+            if (titulo === 'Dados da proposta') {
+                const criarGrupoRecolhivel = (rotulo, nomes, atributo) => {
+                    const camposDoGrupo = nomes
+                        .map((name) => destino.querySelector(`label:has([name="${name}"])`))
+                        .filter(Boolean);
+                    if (!camposDoGrupo.length) return null;
+
+                    const grupo = document.createElement('details');
+                    grupo.className = 'proposal-operation-group';
+                    grupo.open = true;
+                    grupo.setAttribute(atributo, '');
+                    grupo.innerHTML = `
+                        <summary>
+                            <span>${rotulo}</span>
+                            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                        </summary>
+                        <div class="proposal-operation-group-fields"></div>
+                    `;
+                    const camposContainer = grupo.querySelector('.proposal-operation-group-fields');
+                    camposDoGrupo.forEach((campo) => camposContainer.appendChild(campo));
+                    destino.appendChild(grupo);
+                    return grupo;
+                };
+
+                criarGrupoRecolhivel(
+                    'Informações da portabilidade',
+                    ['banco_atual', 'nova_parcela', 'troco', 'comissao_percentual', 'comissao'],
+                    'data-portability-group',
+                );
+                criarGrupoRecolhivel(
+                    'Informações do refinanciamento',
+                    ['refin_troco', 'refin_comissao_percentual', 'refin_comissao'],
+                    'data-refinancing-group',
+                );
+            }
             fragment.appendChild(coluna);
         });
         labels.filter((label) => !usados.has(label)).forEach((label) => fragment.appendChild(label));
@@ -36,10 +72,24 @@ document.addEventListener('DOMContentLoaded', () => {
             const produto = (produtoSelect.value || '').toLocaleLowerCase('pt-BR');
             const portabilidade = ['portabilidade', 'portabilidade com refinanciamento'].includes(produto);
             const portabilidadeComRefin = produto === 'portabilidade com refinanciamento';
-            const refinVinculado = propostaFormGrid?.dataset.refinVinculado === 'true';
             document.querySelectorAll('[data-portability-field]').forEach((campo) => { campo.hidden = !portabilidade; });
-            document.querySelectorAll('[data-linked-refin-field]').forEach((campo) => { campo.hidden = !portabilidadeComRefin; });
-            document.querySelectorAll('[data-refin-vinculado-field]').forEach((campo) => { campo.hidden = !(produto === 'refinanciamento' && refinVinculado); });
+            document.querySelectorAll('[data-port-refin-finance-field]').forEach((campo) => { campo.hidden = !portabilidadeComRefin; });
+            const grupoPortabilidade = document.querySelector('[data-portability-group]');
+            const grupoRefinanciamento = document.querySelector('[data-refinancing-group]');
+            if (grupoPortabilidade) {
+                const titulo = grupoPortabilidade.querySelector('summary span');
+                if (titulo) titulo.textContent = portabilidade ? 'Informações da portabilidade' : 'Informações financeiras';
+            }
+            if (grupoRefinanciamento) grupoRefinanciamento.hidden = !portabilidadeComRefin;
+            const rotulos = {
+                '[data-port-value-label]': portabilidadeComRefin ? 'Valor da portabilidade' : 'Valor',
+                '[data-port-percent-label]': portabilidadeComRefin ? '% comissão da portabilidade' : '% comissão',
+                '[data-port-commission-label]': portabilidadeComRefin ? 'Comissão da portabilidade' : 'Comissão',
+            };
+            Object.entries(rotulos).forEach(([seletor, texto]) => {
+                const elemento = document.querySelector(seletor);
+                if (elemento) elemento.textContent = texto;
+            });
         };
         produtoSelect.addEventListener('change', atualizarCamposPortabilidade);
         atualizarCamposPortabilidade();
@@ -433,11 +483,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Calcula comissão em qualquer formulário/tela que tenha Valor + % comissão + Comissão.
     // Isso cobre os formulários administrativos de edição da proposta.
-    function calcularComissaoNoEscopo(escopo) {
+    function calcularComissaoNoEscopo(escopo, nomes = ['troco', 'comissao_percentual', 'comissao']) {
         if (!escopo) return;
-        const trocoInput = escopo.querySelector('input[name="troco"]');
-        const percentualInput = escopo.querySelector('input[name="comissao_percentual"]');
-        const comissaoInput = escopo.querySelector('input[name="comissao"]');
+        const [nomeValor, nomePercentual, nomeComissao] = nomes;
+        const trocoInput = escopo.querySelector(`input[name="${nomeValor}"]`);
+        const percentualInput = escopo.querySelector(`input[name="${nomePercentual}"]`);
+        const comissaoInput = escopo.querySelector(`input[name="${nomeComissao}"]`);
         if (!trocoInput || !percentualInput || !comissaoInput) return;
 
         const percentualTexto = percentualInput.value.trim();
@@ -450,20 +501,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.querySelectorAll('form').forEach((form) => {
-        const trocoInput = form.querySelector('input[name="troco"]');
-        const percentualInput = form.querySelector('input[name="comissao_percentual"]');
-        const comissaoInput = form.querySelector('input[name="comissao"]');
+        [
+            ['troco', 'comissao_percentual', 'comissao'],
+            ['refin_troco', 'refin_comissao_percentual', 'refin_comissao'],
+        ].forEach((nomes) => {
+            const [nomeValor, nomePercentual, nomeComissao] = nomes;
+            const trocoInput = form.querySelector(`input[name="${nomeValor}"]`);
+            const percentualInput = form.querySelector(`input[name="${nomePercentual}"]`);
+            const comissaoInput = form.querySelector(`input[name="${nomeComissao}"]`);
 
-        if (!trocoInput || !percentualInput || !comissaoInput) return;
+            if (!trocoInput || !percentualInput || !comissaoInput) return;
 
-        percentualInput.addEventListener('input', () => calcularComissaoNoEscopo(form));
-        percentualInput.addEventListener('change', () => calcularComissaoNoEscopo(form));
-        percentualInput.addEventListener('blur', () => calcularComissaoNoEscopo(form));
-        trocoInput.addEventListener('input', () => {
-            if (percentualInput.value.trim()) calcularComissaoNoEscopo(form);
+            percentualInput.addEventListener('input', () => calcularComissaoNoEscopo(form, nomes));
+            percentualInput.addEventListener('change', () => calcularComissaoNoEscopo(form, nomes));
+            percentualInput.addEventListener('blur', () => calcularComissaoNoEscopo(form, nomes));
+            trocoInput.addEventListener('input', () => {
+                if (percentualInput.value.trim()) calcularComissaoNoEscopo(form, nomes);
+            });
+            trocoInput.addEventListener('change', () => calcularComissaoNoEscopo(form, nomes));
+            trocoInput.addEventListener('blur', () => calcularComissaoNoEscopo(form, nomes));
         });
-        trocoInput.addEventListener('change', () => calcularComissaoNoEscopo(form));
-        trocoInput.addEventListener('blur', () => calcularComissaoNoEscopo(form));
     });
 
     function mostrarAvisoCopiado(mensagem, tipo = 'ok') {
@@ -651,6 +708,45 @@ document.addEventListener('DOMContentLoaded', () => {
         link.addEventListener('click', () => {
             salvarContextoFunil(link.closest('.kanban-card'));
         });
+    });
+
+    const abreviarNomesLongosDosCards = () => {
+        const conectores = new Set(['da', 'das', 'de', 'do', 'dos', 'e']);
+        document.querySelectorAll('.kanban[data-modulo="funil"] [data-card-client-name]').forEach((link) => {
+            const nomeCompleto = (link.dataset.cardClientName || '').trim();
+            if (!nomeCompleto) return;
+
+            link.textContent = nomeCompleto;
+            link.title = nomeCompleto;
+            link.setAttribute('aria-label', nomeCompleto);
+            if (link.scrollWidth <= link.clientWidth) return;
+
+            const palavras = nomeCompleto.split(/\s+/);
+            const indices = palavras
+                .map((palavra, indice) => ({ palavra, indice }))
+                .filter(({ indice }) => indice > 0)
+                .sort((a, b) => {
+                    const aConector = conectores.has(a.palavra.toLocaleLowerCase('pt-BR'));
+                    const bConector = conectores.has(b.palavra.toLocaleLowerCase('pt-BR'));
+                    if (aConector !== bConector) return aConector ? 1 : -1;
+                    return b.indice - a.indice;
+                })
+                .map(({ indice }) => indice);
+
+            for (const indice of indices) {
+                const palavra = palavras[indice];
+                palavras[indice] = palavra.slice(0, 1).toLocaleUpperCase('pt-BR');
+                link.textContent = palavras.join(' ');
+                if (link.scrollWidth <= link.clientWidth) break;
+            }
+        });
+    };
+
+    abreviarNomesLongosDosCards();
+    let quadroNomesResizeFrame;
+    window.addEventListener('resize', () => {
+        window.cancelAnimationFrame(quadroNomesResizeFrame);
+        quadroNomesResizeFrame = window.requestAnimationFrame(abreviarNomesLongosDosCards);
     });
 
     restaurarContextoFunil();
@@ -1025,7 +1121,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const commissionEl = column.querySelector('[data-column-commission]');
         if (countEl) {
             const count = dados ? dados.quantidade : column.querySelectorAll('.kanban-card').length;
-            countEl.textContent = `${count} proposta(s)`;
+            countEl.textContent = `${count} ${count === 1 ? 'operação' : 'operações'}`;
         }
         if (commissionEl && dados?.comissao) {
             commissionEl.textContent = dados.comissao;
