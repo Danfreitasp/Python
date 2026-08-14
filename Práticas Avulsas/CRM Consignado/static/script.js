@@ -1,4 +1,43 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const botaoModoVisual = document.getElementById('visualModeToggle');
+    const seletorModoVisual = document.getElementById('settingsVisualMode');
+    const organicGlass = document.getElementById('organicGlassStylesheet');
+
+    function aplicarModoVisual(modo, salvar = true) {
+        const modoNormalizado = modo === 'lite' ? 'lite' : 'completo';
+        document.documentElement.setAttribute('data-visual-mode', modoNormalizado);
+        if (organicGlass) organicGlass.disabled = modoNormalizado === 'lite';
+        if (botaoModoVisual) {
+            const estaLite = modoNormalizado === 'lite';
+            botaoModoVisual.innerHTML = estaLite
+                ? '<i class="bi bi-bolt" aria-hidden="true"></i><span>Visual completo</span>'
+                : '<i class="bi bi-bolt" aria-hidden="true"></i><span>Modo Lite</span>';
+            botaoModoVisual.title = estaLite ? 'Ativar visual completo' : 'Ativar modo Lite';
+            botaoModoVisual.setAttribute('aria-pressed', String(estaLite));
+        }
+        if (seletorModoVisual) seletorModoVisual.value = modoNormalizado;
+
+        if (salvar) {
+            try {
+                localStorage.setItem('crmModoVisual', modoNormalizado);
+            } catch (error) {
+                // A troca continua funcionando durante a sessão atual.
+            }
+        }
+    }
+
+    const modoInicial = document.documentElement.getAttribute('data-visual-mode') || 'completo';
+    aplicarModoVisual(modoInicial, false);
+    if (botaoModoVisual) {
+        botaoModoVisual.addEventListener('click', () => {
+            const atual = document.documentElement.getAttribute('data-visual-mode') || 'completo';
+            aplicarModoVisual(atual === 'lite' ? 'completo' : 'lite');
+        });
+    }
+    if (seletorModoVisual) {
+        seletorModoVisual.addEventListener('change', () => aplicarModoVisual(seletorModoVisual.value));
+    }
+
     const sidebarToggle = document.getElementById('sidebarToggle');
     if (sidebarToggle) {
         const atualizarSidebar = (recolhida) => {
@@ -635,7 +674,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.querySelectorAll('.copy-btn').forEach((button) => {
         button.addEventListener('click', () => {
-            const texto = button.dataset.copy || '';
+            const alvo = button.dataset.copyTarget
+                ? document.querySelector(button.dataset.copyTarget)
+                : null;
+            const texto = alvo ? (alvo.innerText || alvo.textContent || '') : (button.dataset.copy || '');
             copiarTexto(texto, button);
         });
     });

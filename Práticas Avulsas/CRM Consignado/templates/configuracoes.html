@@ -60,15 +60,24 @@
             <span class="settings-icon"><i class="bi bi-moon" aria-hidden="true"></i></span>
             <div>
                 <h2>Aparência</h2>
-                <p class="muted">A preferência de tema fica salva neste navegador.</p>
+                <p class="muted">As preferências visuais ficam salvas somente neste navegador.</p>
             </div>
         </div>
-        <label>Tema do CRM
-            <select id="settingsTheme">
-                <option value="claro">Claro</option>
-                <option value="escuro">Escuro</option>
-            </select>
-        </label>
+        <div class="stack">
+            <label>Desempenho visual
+                <select id="settingsVisualMode">
+                    <option value="completo">Visual completo</option>
+                    <option value="lite">Modo Lite</option>
+                </select>
+                <small>O modo Lite usa o design clássico, ícones simples e remove transparências, desfoques e animações pesadas.</small>
+            </label>
+            <label>Tema do CRM
+                <select id="settingsTheme">
+                    <option value="claro">Claro</option>
+                    <option value="escuro">Escuro</option>
+                </select>
+            </label>
+        </div>
     </section>
 
     <section class="card settings-card settings-documents-card">

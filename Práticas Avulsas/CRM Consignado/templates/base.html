@@ -10,8 +10,17 @@
     <meta name="theme-color" content="#111827">
     <script>
         (function () {
-            const temaSalvo = localStorage.getItem('crmTema') || 'claro';
+            let temaSalvo = 'claro';
+            let modoVisualSalvo = 'completo';
+            try {
+                temaSalvo = localStorage.getItem('crmTema') || 'claro';
+                modoVisualSalvo = localStorage.getItem('crmModoVisual') || 'completo';
+            } catch (error) {
+                // O CRM usa as preferências padrão quando o armazenamento local não está disponível.
+            }
+            if (!['completo', 'lite'].includes(modoVisualSalvo)) modoVisualSalvo = 'completo';
             document.documentElement.setAttribute('data-theme', temaSalvo);
+            document.documentElement.setAttribute('data-visual-mode', modoVisualSalvo);
             try {
                 if (localStorage.getItem('crmSidebarRecolhida') === 'true') {
                     document.documentElement.classList.add('sidebar-collapsed');
@@ -23,12 +32,23 @@
     </script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='20260813-contract-picker') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='organic-glass.css', v='20260813-port-refin-dark') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='lite-mode.css', v='20260814-lite-v2') }}">
+    <script>
+        (function () {
+            const organicGlass = document.createElement('link');
+            organicGlass.id = 'organicGlassStylesheet';
+            organicGlass.rel = 'stylesheet';
+            organicGlass.href = "{{ url_for('static', filename='organic-glass.css', v='20260814-navigation-smooth') }}";
+            organicGlass.disabled = document.documentElement.getAttribute('data-visual-mode') === 'lite';
+            document.head.appendChild(organicGlass);
+        })();
+    </script>
 </head>
 <body>
     <aside class="sidebar">
         <div class="brand">
-            <img class="brand-mark brand-icon" src="{{ url_for('static', filename='icons/navigation/funil.png') }}" alt="" aria-hidden="true">
+            <span class="brand-mark brand-icon brand-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/funil.png') }}')" aria-hidden="true"></span>
+            <span class="brand-mark brand-icon brand-lite" aria-hidden="true">CC</span>
             <div class="brand-copy">
                 <p>CRM Consig</p>
                 <small>Funil local</small>
@@ -39,17 +59,17 @@
             <span>Minimizar menu</span>
         </button>
         <nav id="sidebarNavigation">
-		<a href="{{ url_for('funil') }}" class="nav-link {% if request.endpoint == 'funil' %}active{% endif %}" title="Funil"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/funil.png') }}" alt="" aria-hidden="true"><span>Funil</span></a>
-		<a href="{{ url_for('nova_proposta') }}" class="nav-link {% if request.endpoint == 'nova_proposta' %}active{% endif %}" title="Nova Proposta"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/nova_proposta.png') }}" alt="" aria-hidden="true"><span>Nova Proposta</span></a>
-		<a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" title="Propostas"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/propostas.png') }}" alt="" aria-hidden="true"><span>Propostas</span></a>
-		<a href="{{ url_for('lista_clientes') }}" class="nav-link {% if request.endpoint in ['lista_clientes', 'detalhe_cliente', 'editar_cliente'] %}active{% endif %}" title="Base de Clientes"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/base_clientes.png') }}" alt="" aria-hidden="true"><span>Base de Clientes</span></a>
-		<a href="{{ url_for('agenda') }}" class="nav-link {% if request.endpoint == 'agenda' %}active{% endif %}" data-agenda-nav title="{% if agenda_alerta_ativo %}{{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}" aria-label="{% if agenda_alerta_ativo %}Agenda: {{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/agenda.png') }}" alt="" aria-hidden="true"><span>Agenda</span><span class="agenda-alert-badge" data-agenda-alert {% if not agenda_alerta_ativo %}hidden{% endif %} aria-hidden="true">!</span></a>
-		<a href="{{ url_for('simulador_inss') }}" class="nav-link {% if request.endpoint == 'simulador_inss' %}active{% endif %}" title="Simulador INSS"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/simulador_inss.png') }}" alt="" aria-hidden="true"><span>Simulador INSS</span></a>
-		<a href="{{ url_for('gerador_mensagens_page') }}" class="nav-link {% if request.endpoint == 'gerador_mensagens_page' %}active{% endif %}" title="Gerador de Mensagens"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/gerador_mensagens.png') }}" alt="" aria-hidden="true"><span>Gerador de Mensagens</span></a>
-		<a href="{{ url_for('converter_contatos') }}" class="nav-link {% if request.endpoint == 'converter_contatos' %}active{% endif %}" title="Converter Contatos"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/converter_contatos.png') }}" alt="" aria-hidden="true"><span>Converter Contatos</span></a>
-		<a href="{{ url_for('encerradas') }}" class="nav-link {% if request.endpoint == 'encerradas' %}active{% endif %}" title="Encerradas"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/encerradas.png') }}" alt="" aria-hidden="true"><span>Encerradas</span></a>
-		<a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" title="Dashboard"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/dashboard.png') }}" alt="" aria-hidden="true"><span>Dashboard</span></a>
-		<a href="{{ url_for('configuracoes') }}" class="nav-link {% if request.endpoint in ['configuracoes', 'configurar_status', 'configurar_dashboard'] %}active{% endif %}" title="Configurações"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/configuracoes.png') }}" alt="" aria-hidden="true"><span>Configurações</span></a>
+		<a href="{{ url_for('funil') }}" class="nav-link {% if request.endpoint == 'funil' %}active{% endif %}" title="Funil"><span class="nav-icon nav-icon-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/funil.png') }}')" aria-hidden="true"></span><i class="bi bi-kanban nav-icon nav-icon-lite" aria-hidden="true"></i><span>Funil</span></a>
+		<a href="{{ url_for('nova_proposta') }}" class="nav-link {% if request.endpoint == 'nova_proposta' %}active{% endif %}" title="Nova Proposta"><span class="nav-icon nav-icon-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/nova_proposta.png') }}')" aria-hidden="true"></span><i class="bi bi-plus-circle nav-icon nav-icon-lite" aria-hidden="true"></i><span>Nova Proposta</span></a>
+		<a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" title="Propostas"><span class="nav-icon nav-icon-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/propostas.png') }}')" aria-hidden="true"></span><i class="bi bi-card-checklist nav-icon nav-icon-lite" aria-hidden="true"></i><span>Propostas</span></a>
+		<a href="{{ url_for('lista_clientes') }}" class="nav-link {% if request.endpoint in ['lista_clientes', 'detalhe_cliente', 'editar_cliente'] %}active{% endif %}" title="Base de Clientes"><span class="nav-icon nav-icon-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/base_clientes.png') }}')" aria-hidden="true"></span><i class="bi bi-people nav-icon nav-icon-lite" aria-hidden="true"></i><span>Base de Clientes</span></a>
+		<a href="{{ url_for('agenda') }}" class="nav-link {% if request.endpoint == 'agenda' %}active{% endif %}" data-agenda-nav title="{% if agenda_alerta_ativo %}{{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}" aria-label="{% if agenda_alerta_ativo %}Agenda: {{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}"><span class="nav-icon nav-icon-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/agenda.png') }}')" aria-hidden="true"></span><i class="bi bi-calendar3 nav-icon nav-icon-lite" aria-hidden="true"></i><span>Agenda</span><span class="agenda-alert-badge" data-agenda-alert {% if not agenda_alerta_ativo %}hidden{% endif %} aria-hidden="true">!</span></a>
+		<a href="{{ url_for('simulador_inss') }}" class="nav-link {% if request.endpoint == 'simulador_inss' %}active{% endif %}" title="Simulador INSS"><span class="nav-icon nav-icon-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/simulador_inss.png') }}')" aria-hidden="true"></span><i class="bi bi-calculator nav-icon nav-icon-lite" aria-hidden="true"></i><span>Simulador INSS</span></a>
+		<a href="{{ url_for('gerador_mensagens_page') }}" class="nav-link {% if request.endpoint == 'gerador_mensagens_page' %}active{% endif %}" title="Gerador de Mensagens"><span class="nav-icon nav-icon-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/gerador_mensagens.png') }}')" aria-hidden="true"></span><i class="bi bi-chat-left-text nav-icon nav-icon-lite" aria-hidden="true"></i><span>Gerador de Mensagens</span></a>
+		<a href="{{ url_for('converter_contatos') }}" class="nav-link {% if request.endpoint == 'converter_contatos' %}active{% endif %}" title="Converter Contatos"><span class="nav-icon nav-icon-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/converter_contatos.png') }}')" aria-hidden="true"></span><i class="bi bi-arrow-left-right nav-icon nav-icon-lite" aria-hidden="true"></i><span>Converter Contatos</span></a>
+		<a href="{{ url_for('encerradas') }}" class="nav-link {% if request.endpoint == 'encerradas' %}active{% endif %}" title="Encerradas"><span class="nav-icon nav-icon-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/encerradas.png') }}')" aria-hidden="true"></span><i class="bi bi-archive nav-icon nav-icon-lite" aria-hidden="true"></i><span>Encerradas</span></a>
+		<a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" title="Dashboard"><span class="nav-icon nav-icon-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/dashboard.png') }}')" aria-hidden="true"></span><i class="bi bi-bar-chart-line nav-icon nav-icon-lite" aria-hidden="true"></i><span>Dashboard</span></a>
+		<a href="{{ url_for('configuracoes') }}" class="nav-link {% if request.endpoint in ['configuracoes', 'configurar_status', 'configurar_dashboard'] %}active{% endif %}" title="Configurações"><span class="nav-icon nav-icon-full full-icon-image" style="--full-icon-image: url('{{ url_for('static', filename='icons/navigation/configuracoes.png') }}')" aria-hidden="true"></span><i class="bi bi-gear nav-icon nav-icon-lite" aria-hidden="true"></i><span>Configurações</span></a>
         </nav>
     </aside>
 
@@ -94,6 +114,7 @@
                         {% include '_notificacoes_panel.html' %}
                     </div>
                 </details>
+                <button type="button" id="visualModeToggle" class="btn visual-mode-toggle" title="Ativar modo Lite"><i class="bi bi-bolt" aria-hidden="true"></i><span>Modo Lite</span></button>
                 <button type="button" id="themeToggle" class="btn theme-toggle" title="Alternar modo claro/escuro"><i class="bi bi-moon" aria-hidden="true"></i><span>Modo escuro</span></button>
                 <a class="btn btn-primary" href="{{ url_for('nova_proposta') }}"><i class="bi bi-plus-circle" aria-hidden="true"></i><span>Nova Proposta</span></a>
             </div>
@@ -114,7 +135,7 @@
 
         {% block content %}{% endblock %}
     </main>
-    <script src="{{ url_for('static', filename='script.js', v='20260814-port-message') }}"></script>
+    <script src="{{ url_for('static', filename='script.js', v='20260814-copy-summary') }}"></script>
 </body>
 </html>
 

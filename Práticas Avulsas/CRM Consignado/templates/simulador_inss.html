@@ -125,7 +125,7 @@
             <button class="btn" id="portInserirProposta" type="submit" formaction="{{ url_for('simulador_inss_criar_proposta') }}" {% if not (resultado and modo == 'port_refin' and resultado.operacao_viavel) %}hidden{% endif %}>
                 <i class="bi bi-plus-circle" aria-hidden="true"></i><span>Inserir proposta com esses dados</span>
             </button>
-            <button class="btn copy-btn" type="button" data-copy="{{ resultado.mensagem if resultado else '' }}"><i class="bi bi-clipboard" aria-hidden="true"></i><span>Copiar resumo</span></button>
+            <button class="btn copy-btn" type="button" data-copy="{{ resultado.mensagem if resultado else '' }}" data-copy-target="#simResumoTexto"><i class="bi bi-clipboard" aria-hidden="true"></i><span>Copiar resumo</span></button>
         </div>
     </form>
 </section>

@@ -50,6 +50,16 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = "troque-esta-chave-em-producao-local"
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
+
+@app.after_request
+def cache_navigation_icons(response):
+    """Evita revalidar os mesmos ícones a cada troca de página do CRM."""
+    if request.path.startswith("/static/icons/navigation/") and response.status_code in (200, 304):
+        response.cache_control.public = True
+        response.cache_control.max_age = 7 * 24 * 60 * 60
+        response.cache_control.no_cache = None
+    return response
+
 DEFAULT_STATUS_ETAPAS = [
     {"nome": "Novo lead", "grupo": "geral", "ordem": 1},
     {"nome": "Em atendimento", "grupo": "geral", "ordem": 2},

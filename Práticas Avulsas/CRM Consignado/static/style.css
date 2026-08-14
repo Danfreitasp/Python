@@ -53,6 +53,7 @@ html { font-synthesis: none; }
 .bi-arrow-clockwise::before, .bi-arrow-repeat::before { content: 'refresh'; }
 .bi-bar-chart-line::before { content: 'bar_chart'; }
 .bi-bell::before { content: 'notifications'; }
+.bi-bolt::before { content: 'bolt'; }
 .bi-box-arrow-up-right::before { content: 'open_in_new'; }
 .bi-calculator::before { content: 'calculate'; }
 .bi-calendar3::before { content: 'calendar_month'; }
