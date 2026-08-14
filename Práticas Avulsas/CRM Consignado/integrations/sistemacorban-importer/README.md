@@ -1,13 +1,13 @@
 # Sistemacorban para CRM Consignado
 
-Extensão Chrome Manifest V3 para enviar manualmente os dados do benefício atualmente visível no Sistemacorban para a página **Nova Proposta** ou **Editar cliente** do CRM.
+Extensão Chrome Manifest V3 para enviar manualmente os dados do benefício atualmente visível no Sistemacorban para **Simulador INSS**, **Nova Proposta** ou **Editar cliente** do CRM.
 
 ## Instalação
 
 1. Abra `chrome://extensions` no Chrome.
 2. Ative **Modo do desenvolvedor**.
 3. Clique em **Carregar sem compactação**.
-4. Selecione esta pasta: `integrations/sistemacorban-importer`.
+4. Se você baixou a extensão pelo CRM, descompacte o arquivo `.zip` e selecione a pasta `sistemacorban-importer`. No projeto, essa pasta fica em `integrations/sistemacorban-importer`.
 5. Abra **Detalhes** da extensão e depois **Opções da extensão**.
 
 ## Configuração do CRM
@@ -18,11 +18,11 @@ A extensão declara origens HTTP/HTTPS como permissões opcionais para suportar 
 
 ## Uso
 
-1. No CRM, abra **Nova Proposta** ou **Editar cliente** e deixe a tela aguardando a importação.
+1. No CRM, abra **Simulador INSS**, **Nova Proposta** ou **Editar cliente** e deixe a tela aguardando a importação.
 2. Entre manualmente no Sistemacorban, consulte o CPF e selecione manualmente o benefício correto.
 3. Na tela de detalhes do benefício, clique no botão flutuante **Enviar para o CRM**.
 4. A extensão tenta clicar nos ícones de olho somente dentro de **Dados Cliente**, aguarda a atualização visual e lê os rótulos da tela. Telefones não são extraídos nem enviados ao CRM.
-5. Volte ao CRM, revise os campos destacados e salve somente se os dados estiverem corretos.
+5. No Simulador INSS, escolha na lista qual contrato bancário deseja usar; o banco de destino fica fixo como Quali. Se a margem disponível de 40% estiver negativa, ela será deduzida da parcela do contrato para formar a nova parcela; com margem positiva ou zerada, a nova parcela fica vazia e o CRM usa a parcela atual. Nas demais telas, revise os campos destacados e salve somente se estiverem corretos.
 
 A extensão não executa login, não pesquisa CPF, não escolhe benefício, não cria filas e não salva os dados.
 

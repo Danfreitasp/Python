@@ -12,33 +12,44 @@
         (function () {
             const temaSalvo = localStorage.getItem('crmTema') || 'claro';
             document.documentElement.setAttribute('data-theme', temaSalvo);
+            try {
+                if (localStorage.getItem('crmSidebarRecolhida') === 'true') {
+                    document.documentElement.classList.add('sidebar-collapsed');
+                }
+            } catch (error) {
+                // O menu continua expandido quando o armazenamento local não está disponível.
+            }
         })();
     </script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='organic-glass.css', v='20260813-port-card') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='20260813-contract-picker') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='organic-glass.css', v='20260813-port-refin-dark') }}">
 </head>
 <body>
     <aside class="sidebar">
         <div class="brand">
-            <span class="brand-mark brand-icon" aria-hidden="true">CC</span>
-            <div>
+            <img class="brand-mark brand-icon" src="{{ url_for('static', filename='icons/navigation/funil.png') }}" alt="" aria-hidden="true">
+            <div class="brand-copy">
                 <p>CRM Consig</p>
                 <small>Funil local</small>
             </div>
         </div>
-        <nav>
-		<a href="{{ url_for('funil') }}" class="nav-link {% if request.endpoint == 'funil' %}active{% endif %}"><i class="bi bi-kanban nav-icon" aria-hidden="true"></i><span>Funil</span></a>
-		<a href="{{ url_for('nova_proposta') }}" class="nav-link {% if request.endpoint == 'nova_proposta' %}active{% endif %}"><i class="bi bi-plus-circle nav-icon" aria-hidden="true"></i><span>Nova Proposta</span></a>
-		<a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}"><i class="bi bi-card-checklist nav-icon" aria-hidden="true"></i><span>Propostas</span></a>
-		<a href="{{ url_for('lista_clientes') }}" class="nav-link {% if request.endpoint in ['lista_clientes', 'detalhe_cliente', 'editar_cliente'] %}active{% endif %}"><i class="bi bi-people nav-icon" aria-hidden="true"></i><span>Base de Clientes</span></a>
-		<a href="{{ url_for('agenda') }}" class="nav-link {% if request.endpoint == 'agenda' %}active{% endif %}" data-agenda-nav title="{% if agenda_alerta_ativo %}{{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}" aria-label="{% if agenda_alerta_ativo %}Agenda: {{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}"><i class="bi bi-calendar3 nav-icon" aria-hidden="true"></i><span>Agenda</span><span class="agenda-alert-badge" data-agenda-alert {% if not agenda_alerta_ativo %}hidden{% endif %} aria-hidden="true">!</span></a>
-		<a href="{{ url_for('simulador_inss') }}" class="nav-link {% if request.endpoint == 'simulador_inss' %}active{% endif %}"><i class="bi bi-calculator nav-icon" aria-hidden="true"></i><span>Simulador INSS</span></a>
-		<a href="{{ url_for('gerador_mensagens_page') }}" class="nav-link {% if request.endpoint == 'gerador_mensagens_page' %}active{% endif %}"><i class="bi bi-chat-left-text nav-icon" aria-hidden="true"></i><span>Gerador de Mensagens</span></a>
-		<a href="{{ url_for('converter_contatos') }}" class="nav-link {% if request.endpoint == 'converter_contatos' %}active{% endif %}"><i class="bi bi-arrow-left-right nav-icon" aria-hidden="true"></i><span>Converter Contatos</span></a>
-		<a href="{{ url_for('encerradas') }}" class="nav-link {% if request.endpoint == 'encerradas' %}active{% endif %}"><i class="bi bi-archive nav-icon" aria-hidden="true"></i><span>Encerradas</span></a>
-		<a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}"><i class="bi bi-bar-chart-line nav-icon" aria-hidden="true"></i><span>Dashboard</span></a>
-		<a href="{{ url_for('configuracoes') }}" class="nav-link {% if request.endpoint in ['configuracoes', 'configurar_status', 'configurar_dashboard'] %}active{% endif %}"><i class="bi bi-gear nav-icon" aria-hidden="true"></i><span>Configurações</span></a>
+        <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-expanded="true" aria-controls="sidebarNavigation">
+            <i class="bi bi-chevron-left" aria-hidden="true"></i>
+            <span>Minimizar menu</span>
+        </button>
+        <nav id="sidebarNavigation">
+		<a href="{{ url_for('funil') }}" class="nav-link {% if request.endpoint == 'funil' %}active{% endif %}" title="Funil"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/funil.png') }}" alt="" aria-hidden="true"><span>Funil</span></a>
+		<a href="{{ url_for('nova_proposta') }}" class="nav-link {% if request.endpoint == 'nova_proposta' %}active{% endif %}" title="Nova Proposta"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/nova_proposta.png') }}" alt="" aria-hidden="true"><span>Nova Proposta</span></a>
+		<a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" title="Propostas"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/propostas.png') }}" alt="" aria-hidden="true"><span>Propostas</span></a>
+		<a href="{{ url_for('lista_clientes') }}" class="nav-link {% if request.endpoint in ['lista_clientes', 'detalhe_cliente', 'editar_cliente'] %}active{% endif %}" title="Base de Clientes"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/base_clientes.png') }}" alt="" aria-hidden="true"><span>Base de Clientes</span></a>
+		<a href="{{ url_for('agenda') }}" class="nav-link {% if request.endpoint == 'agenda' %}active{% endif %}" data-agenda-nav title="{% if agenda_alerta_ativo %}{{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}" aria-label="{% if agenda_alerta_ativo %}Agenda: {{ agenda_alerta_total }} compromisso(s) com horário próximo(s) ou vencido(s){% else %}Agenda{% endif %}"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/agenda.png') }}" alt="" aria-hidden="true"><span>Agenda</span><span class="agenda-alert-badge" data-agenda-alert {% if not agenda_alerta_ativo %}hidden{% endif %} aria-hidden="true">!</span></a>
+		<a href="{{ url_for('simulador_inss') }}" class="nav-link {% if request.endpoint == 'simulador_inss' %}active{% endif %}" title="Simulador INSS"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/simulador_inss.png') }}" alt="" aria-hidden="true"><span>Simulador INSS</span></a>
+		<a href="{{ url_for('gerador_mensagens_page') }}" class="nav-link {% if request.endpoint == 'gerador_mensagens_page' %}active{% endif %}" title="Gerador de Mensagens"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/gerador_mensagens.png') }}" alt="" aria-hidden="true"><span>Gerador de Mensagens</span></a>
+		<a href="{{ url_for('converter_contatos') }}" class="nav-link {% if request.endpoint == 'converter_contatos' %}active{% endif %}" title="Converter Contatos"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/converter_contatos.png') }}" alt="" aria-hidden="true"><span>Converter Contatos</span></a>
+		<a href="{{ url_for('encerradas') }}" class="nav-link {% if request.endpoint == 'encerradas' %}active{% endif %}" title="Encerradas"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/encerradas.png') }}" alt="" aria-hidden="true"><span>Encerradas</span></a>
+		<a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" title="Dashboard"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/dashboard.png') }}" alt="" aria-hidden="true"><span>Dashboard</span></a>
+		<a href="{{ url_for('configuracoes') }}" class="nav-link {% if request.endpoint in ['configuracoes', 'configurar_status', 'configurar_dashboard'] %}active{% endif %}" title="Configurações"><img class="nav-icon" src="{{ url_for('static', filename='icons/navigation/configuracoes.png') }}" alt="" aria-hidden="true"><span>Configurações</span></a>
         </nav>
     </aside>
 
@@ -103,7 +114,7 @@
 
         {% block content %}{% endblock %}
     </main>
-    <script src="{{ url_for('static', filename='script.js', v='20260813-card-names') }}"></script>
+    <script src="{{ url_for('static', filename='script.js', v='20260813-quali-saldo-devedor') }}"></script>
 </body>
 </html>
 

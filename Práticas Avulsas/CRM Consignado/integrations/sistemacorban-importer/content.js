@@ -207,6 +207,57 @@
     return String(valor || '').replace(/\s*[-–]\s*[A-Z]{2}\s*$/i, '').trim();
   }
 
+  function valorDoTexto(texto, rotulo) {
+    const escapado = rotulo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const correspondencia = String(texto || '').match(new RegExp(`${escapado}\\s*:\\s*([^\\n]+)`, 'i'));
+    return correspondencia?.[1]?.trim() || '';
+  }
+
+  function extrairContratosBancarios() {
+    const encontrados = new Map();
+    const candidatos = document.querySelectorAll(
+      '.container--consulta .content--consulta, .container--consulta .portlet-banco, [data-contrato-bancario]'
+    );
+    candidatos.forEach((elemento) => {
+      const texto = String(elemento.innerText || '').replace(/\r/g, '').trim();
+      if (!/saldo\s+devedor\s*:/i.test(texto) || !/prazo\s*:/i.test(texto) || !/contrato\s*:/i.test(texto)) return;
+      const numero = valorDoTexto(texto, 'Contrato');
+      if (!numero || encontrados.has(numero)) return;
+      const prazoTexto = valorDoTexto(texto, 'Prazo');
+      const prazo = prazoTexto.match(/(\d+)\s*\/\s*(\d+)(?:\s*\|\s*(\d+)\s*pagas?)?/i);
+      encontrados.set(numero, {
+        numero,
+        banco: valorDoTexto(texto, 'Banco'),
+        parcela: valorDoTexto(texto, 'Parcela'),
+        saldo_devedor: valorDoTexto(texto, 'Saldo devedor'),
+        prazo_restante: prazo?.[1] || '',
+        prazo_total: prazo?.[2] || '',
+        parcelas_pagas: prazo?.[3] || (prazo ? String(Math.max(0, Number(prazo[2]) - Number(prazo[1]))) : ''),
+        taxa: valorDoTexto(texto, 'Taxa'),
+        data_averbacao: valorDoTexto(texto, 'Data Averbação'),
+      });
+    });
+    return Array.from(encontrados.values());
+  }
+
+  function extrairMargemDisponivel40() {
+    const rotulo = Array.from(document.querySelectorAll('div, span, strong, p, label'))
+      .find((elemento) => visivel(elemento) && normalizar(textoLimpo(elemento)) === 'margem disponivel (40%)');
+    if (!rotulo) return '';
+    let container = rotulo;
+    for (let nivel = 0; nivel < 5 && container; nivel += 1) {
+      const textoNivel = textoLimpo(container);
+      if (/R\$\s*[+-]?\s*[\d.]+,\d{2}/i.test(textoNivel)) break;
+      container = container.parentElement;
+    }
+    container ||= rotulo.parentElement;
+    const texto = textoLimpo(container);
+    const valor = texto.match(/R\$\s*([+-]?\s*[\d.]+,\d{2})/i);
+    if (valor?.[1]) return valor[1].replace(/\s+/g, ' ').trim();
+    const irmao = rotulo.nextElementSibling;
+    return textoLimpo(irmao).replace(/^R\$\s*/i, '').trim();
+  }
+
   function extrairDados() {
     const bruto = Object.fromEntries(Object.keys(LABELS).map((chave) => [chave, encontrarValorPorRotulo(chave)]));
     return {
@@ -218,6 +269,8 @@
         especie: bruto.especie,
         endereco: montarEndereco(bruto),
         dados_bancarios: montarDadosBancarios(bruto),
+        margem_disponivel: extrairMargemDisponivel40(),
+        contratos: extrairContratosBancarios(),
       },
       encontrados: Object.keys(bruto).filter((chave) => Boolean(bruto[chave])),
     };

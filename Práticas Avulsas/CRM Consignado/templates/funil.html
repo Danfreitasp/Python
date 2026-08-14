@@ -21,8 +21,8 @@
                     {% endif %}
                 </div>
                 {% if p.cpf %}<small>CPF: {{ p.cpf }} <button class="mini-btn copy-btn card-copy" type="button" data-copy="{{ p.cpf }}"><i class="bi bi-clipboard" aria-hidden="true"></i><span>Copiar</span></button></small>{% endif %}
+                {% if p.produto %}<small class="product-label">{{ rotulo_produto_card(p.produto) }}</small>{% endif %}
                 {% if p.port_refin_unificado %}
-                    <small class="port-refin-label">PORT + REFIN</small>
                     <div class="card-values compact-card-values port-refin-values">
                         <span><small>Portabilidade</small><strong>{{ br_moeda(p.valor_portabilidade) }}</strong></span>
                         <span><small>Troco</small><strong>{{ br_moeda(p.troco_refinanciamento) }}</strong></span>

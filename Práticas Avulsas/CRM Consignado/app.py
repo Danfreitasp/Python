@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sqlite3
+import zipfile
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,7 @@ DATABASE = Path(os.environ.get("CRM_DATABASE", BASE_DIR / "database.db"))
 DATA_DIR = BASE_DIR / "data"
 MODELOS_PATH = DATA_DIR / "modelos_mensagens.json"
 BACKUP_DIR = BASE_DIR / "backups"
+EXTENSAO_CORBAN_DIR = BASE_DIR / "integrations" / "sistemacorban-importer"
 MAX_BACKUPS = 30
 _backup_checked_date: str | None = None
 
@@ -189,6 +191,20 @@ INSS_NOVO_COEFICIENTES = {
     "108_carencia": {"label": "108x com carência 90d", "coeficiente": 0.023280, "idade": "Até 71 anos"},
 }
 CONFIG_INSS_NOVO_COEFICIENTES = "simulador_inss_novo_coeficientes"
+
+# Tabelas Quali calibradas no NewCorban em 13/08/2026. No cálculo "com saldo
+# devedor", o banco aplica o coeficiente da tabela sobre a parcela e considera
+# 96,64% do saldo informado para a quitação.
+INSS_PORT_REFIN_TABELAS = {
+    "569": {"nome": "000569 PORT + REFIN 1,83% 108X MIN 6 MIL BEN INVALIDEZ", "taxa": 1.83, "prazo": 108, "coeficiente": 0.022684393854, "fator_saldo": 0.96639382},
+    "568": {"nome": "000568 PORT + REFIN 1,85% 108X MIN 6 MIL BEN INVALIDEZ", "taxa": 1.85, "prazo": 108, "coeficiente": 0.022859644302, "fator_saldo": 0.96639382},
+    "400": {"nome": "PORTABILIDADE + REFINANCIAMENTO 1,78% 108X SEM SEGURO min 8 mil", "taxa": 1.78, "prazo": 108, "coeficiente": 0.022249019931, "fator_saldo": 0.966384667010},
+    "401": {"nome": "PORTABILIDADE + REFINANCIAMENTO 1,75% 108x SEM SEGURO min 8 mil", "taxa": 1.75, "prazo": 108, "coeficiente": 0.021989298541, "fator_saldo": 0.966393820466},
+    "402": {"nome": "PORTABILIDADE + REFINANCIAMENTO 1,72% 108x SEM SEGURO min 8 mil", "taxa": 1.72, "prazo": 108, "coeficiente": 0.021730957705, "fator_saldo": 0.966401417834},
+    "406": {"nome": "PORTABILIDADE + REFINANCIAMENTO 1,85% 108x Saldo de 2mil a 6 mil - SEM SEGURO", "taxa": 1.85, "prazo": 108, "coeficiente": 0.022859630836, "fator_saldo": 0.96639382},
+    "407": {"nome": "PORTABILIDADE + REFINANCIAMENTO 1,83% 108x Saldo de 2mil a 6 mil - SEM SEGURO", "taxa": 1.83, "prazo": 108, "coeficiente": 0.022684419086, "fator_saldo": 0.96639382},
+    "408": {"nome": "PORTABILIDADE + REFINANCIAMENTO 1,80% 108x Saldo de 2mil a 6 mil - SEM SEGURO", "taxa": 1.80, "prazo": 108, "coeficiente": 0.022422658197, "fator_saldo": 0.96639382},
+}
 
 # Cartão INSS por margem, conforme aba INSS do simulador.
 INSS_CARTAO_COEFICIENTES = {
@@ -1509,10 +1525,8 @@ def status_ativos() -> list[str]:
 
 def resumo_coluna_funil(status: str) -> dict[str, Any]:
     status_visiveis = status_ativos()
-    placeholders = ",".join("?" for _ in status_visiveis)
     propostas = get_db().execute(
-        f"SELECT * FROM propostas WHERE status IN ({placeholders}) ORDER BY data_retorno ASC, id DESC",
-        status_visiveis,
+        "SELECT * FROM propostas ORDER BY data_retorno ASC, id DESC",
     ).fetchall()
     _, totais_status = agrupar_cards_funil(propostas, status_visiveis)
     resumo = totais_status.get(status, {"qtd": 0, "comissao": 0.0})
@@ -2511,6 +2525,8 @@ def agrupar_cards_funil(
     for proposta in registros:
         if proposta["id"] in refins_agrupados:
             continue
+        if proposta["status"] not in por_status:
+            continue
 
         card = dict(proposta)
         refin = refin_por_port.get(proposta["id"])
@@ -2679,6 +2695,21 @@ def status_verificacao_texto(proposta: sqlite3.Row | dict[str, Any]) -> str:
     return "Verificado hoje" if verificado_hoje(proposta) else "Não verificado hoje"
 
 
+def rotulo_produto_card(produto: Any) -> str:
+    texto = limpar_texto(produto)
+    chave = remover_acentos(texto).casefold()
+    rotulos = {
+        "portabilidade": "PORTABILIDADE",
+        "portabilidade com refinanciamento": "PORT + REFIN",
+        "refinanciamento": "REFINANCIAMENTO",
+        "novo": "NOVO",
+        "cartao": "CARTÃO",
+        "saque complementar": "SAQUE COMPLEMENTAR",
+        "outro": "OUTRO",
+    }
+    return rotulos.get(chave, texto.upper())
+
+
 @app.context_processor
 def helpers() -> dict[str, Any]:
     notificacoes = carregar_notificacoes_importantes()
@@ -2704,6 +2735,7 @@ def helpers() -> dict[str, Any]:
         "hoje_iso": hoje_iso,
         "verificado_hoje": verificado_hoje,
         "status_verificacao_texto": status_verificacao_texto,
+        "rotulo_produto_card": rotulo_produto_card,
         "pode_criar_refin_vinculado": pode_criar_refin_vinculado,
         "produto_tem_campos_portabilidade": produto_tem_campos_portabilidade,
         "produto_tem_campos_vinculo": produto_tem_campos_vinculo,
@@ -2785,6 +2817,9 @@ def prazos_simulador_inss() -> dict[str, dict[str, Any]]:
 
 
 def dados_simulador_inss() -> dict[str, Any]:
+    modo_simulacao = limpar_texto(request.form.get("modo_simulacao")) or "novo"
+    if modo_simulacao not in {"novo", "port_refin"}:
+        modo_simulacao = "novo"
     tipo_operacao = limpar_texto(request.form.get("tipo_operacao")) or "novo_valor"
     if tipo_operacao not in {"novo_valor", "novo_margem"}:
         tipo_operacao = "novo_valor"
@@ -2799,16 +2834,32 @@ def dados_simulador_inss() -> dict[str, Any]:
         "nb_matricula": limpar_texto(request.form.get("nb_matricula")),
         "banco_digitado": limpar_texto(request.form.get("banco_digitado")),
         "promotora": limpar_texto(request.form.get("promotora")),
+        "modo_simulacao": modo_simulacao,
         "tipo_operacao": tipo_operacao,
         "prazo": prazo,
         "faixa_cartao": faixa_cartao,
         "valor_base": valor_base,
         "margem": margem,
+        "banco_atual": limpar_texto(request.form.get("banco_atual")),
+        "numero_contrato": limpar_texto(request.form.get("numero_contrato")),
+        "parcela_atual": parse_moeda(request.form.get("parcela_atual")),
+        "saldo_quitacao": parse_moeda(request.form.get("saldo_quitacao")),
+        "prazo_contrato": max(0, int(parse_moeda(request.form.get("prazo_contrato")))),
+        "parcelas_pagas": max(0, int(parse_moeda(request.form.get("parcelas_pagas")))),
+        "banco_destino": "QUALI" if modo_simulacao == "port_refin" else limpar_texto(request.form.get("banco_destino")),
+        "tabela_port_refin": limpar_texto(request.form.get("tabela_port_refin")),
+        "novo_prazo": max(0, int(parse_moeda(request.form.get("novo_prazo")))),
+        "nova_parcela": parse_moeda(request.form.get("nova_parcela")),
+        "taxa_nova": parse_percentual(request.form.get("taxa_nova")),
+        "coeficiente_port_refin": parse_percentual(request.form.get("coeficiente_port_refin")),
         "observacoes": limpar_texto(request.form.get("observacoes")),
     }
 
 
 def calcular_simulador_inss(dados: dict[str, Any]) -> dict[str, Any]:
+    if dados.get("modo_simulacao") == "port_refin":
+        return calcular_simulador_port_refin(dados)
+
     tipo = dados.get("tipo_operacao") or "novo_valor"
     prazo = dados.get("prazo") or INSS_PRAZO_PADRAO
     faixa_cartao = dados.get("faixa_cartao") or "ate_74"
@@ -2852,6 +2903,97 @@ def montar_mensagem_simulador_inss(dados: dict[str, Any], produto: str, descrica
     )
 
 
+def calcular_simulador_port_refin(dados: dict[str, Any]) -> dict[str, Any]:
+    parcela_atual = float(dados.get("parcela_atual") or 0)
+    nova_parcela = float(dados.get("nova_parcela") or 0) or parcela_atual
+    saldo_quitacao = float(dados.get("saldo_quitacao") or 0)
+    novo_prazo = int(dados.get("novo_prazo") or 0)
+    taxa_nova = float(dados.get("taxa_nova") or 0)
+    coeficiente_informado = float(dados.get("coeficiente_port_refin") or 0)
+    tabela_codigo = limpar_texto(dados.get("tabela_port_refin"))
+    tabela = INSS_PORT_REFIN_TABELAS.get(tabela_codigo)
+    fator_saldo = 1.0
+    if tabela:
+        novo_prazo = int(tabela["prazo"])
+        taxa_nova = float(tabela["taxa"])
+        coeficiente_informado = float(tabela["coeficiente"])
+        fator_saldo = float(tabela.get("fator_saldo") or 1)
+        dados["novo_prazo"] = novo_prazo
+        dados["taxa_nova"] = taxa_nova
+        dados["coeficiente_port_refin"] = coeficiente_informado
+
+    erros = []
+    if parcela_atual <= 0:
+        erros.append("Informe a parcela atual do contrato.")
+    if saldo_quitacao <= 0:
+        erros.append("Informe o saldo para quitação.")
+    if novo_prazo <= 0:
+        erros.append("Informe o novo prazo.")
+
+    origem_coeficiente = f"Tabela Quali {tabela_codigo}" if tabela else "Coeficiente informado"
+    coeficiente = coeficiente_informado
+    if coeficiente <= 0 and taxa_nova > 0 and novo_prazo > 0:
+        taxa_decimal = taxa_nova / 100
+        coeficiente = taxa_decimal / (1 - (1 + taxa_decimal) ** (-novo_prazo))
+        origem_coeficiente = "Calculado pela taxa mensal"
+    if coeficiente <= 0:
+        erros.append("Informe o coeficiente do banco ou a nova taxa mensal.")
+    elif coeficiente > 1:
+        erros.append("O coeficiente precisa ser menor ou igual a 1.")
+
+    valor_contrato = nova_parcela / coeficiente if 0 < coeficiente <= 1 else 0.0
+    saldo_considerado = saldo_quitacao * fator_saldo
+    troco = valor_contrato - saldo_considerado
+    operacao_viavel = not erros and troco >= 0
+    parcelas_abertas = max(0, int(dados.get("prazo_contrato") or 0) - int(dados.get("parcelas_pagas") or 0))
+
+    resultado = {
+        "produto": "Portabilidade com Refinanciamento",
+        "descricao": "Portabilidade INSS com refinanciamento",
+        "tabela_codigo": tabela_codigo if tabela else "",
+        "tabela_nome": tabela["nome"] if tabela else "",
+        "coeficiente": round(coeficiente, 8),
+        "origem_coeficiente": origem_coeficiente,
+        "valor_contrato": round(valor_contrato, 2),
+        "saldo_quitacao": round(saldo_quitacao, 2),
+        "saldo_considerado": round(saldo_considerado, 2),
+        "fator_saldo": fator_saldo,
+        "troco": round(troco, 2),
+        "parcela_atual": round(parcela_atual, 2),
+        "nova_parcela": round(nova_parcela, 2),
+        "novo_prazo": novo_prazo,
+        "parcelas_abertas": parcelas_abertas,
+        "operacao_viavel": operacao_viavel,
+        "erros": erros,
+    }
+    resultado["mensagem"] = montar_mensagem_simulador_port_refin(dados, resultado)
+    return resultado
+
+
+def montar_mensagem_simulador_port_refin(dados: dict[str, Any], resultado: dict[str, Any]) -> str:
+    banco_atual = dados.get("banco_atual") or "não informado"
+    banco_destino = dados.get("banco_destino") or "não informado"
+    contrato = dados.get("numero_contrato") or "não informado"
+    situacao = "Operação viável" if resultado["operacao_viavel"] else "Revisar os dados da operação"
+    tabela_linha = (
+        f"Tabela Quali: {resultado['tabela_codigo']} - {resultado['tabela_nome']}\n"
+        if resultado.get("tabela_codigo") else ""
+    )
+    return (
+        "Simulação INSS - Portabilidade com Refinanciamento\n\n"
+        f"Banco atual: {banco_atual}\n"
+        f"Contrato: {contrato}\n"
+        f"Banco destino: {banco_destino}\n"
+        f"{tabela_linha}"
+        f"Saldo para quitação: {br_moeda(resultado['saldo_quitacao'])}\n"
+        f"Novo contrato: {br_moeda(resultado['valor_contrato'])}\n"
+        f"Troco estimado: {br_moeda(resultado['troco'])}\n"
+        f"Nova parcela: {br_moeda(resultado['nova_parcela'])} em {resultado['novo_prazo']}x\n"
+        "\n"
+        f"{situacao}. Valores sujeitos à confirmação da tabela e do banco."
+    )
+
+
 
 
 @app.route("/converter-contatos", methods=["GET", "POST"])
@@ -2883,12 +3025,59 @@ def converter_contatos():
     return render_template("converter_contatos.html")
 
 
+@app.route("/extensao-corban/download")
+def baixar_extensao_corban():
+    manifest_path = EXTENSAO_CORBAN_DIR / "manifest.json"
+    if not manifest_path.is_file():
+        abort(404, description="A extensão do Corban não está disponível nesta instalação.")
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        abort(500, description="Não foi possível preparar a extensão do Corban.")
+
+    versao = re.sub(r"[^0-9.]", "", str(manifest.get("version") or "")) or "atual"
+    extensoes_permitidas = {
+        ".css", ".html", ".ico", ".jpeg", ".jpg", ".js", ".json",
+        ".md", ".png", ".svg", ".webp",
+    }
+    arquivos = [
+        caminho
+        for caminho in EXTENSAO_CORBAN_DIR.rglob("*")
+        if caminho.is_file()
+        and not caminho.is_symlink()
+        and caminho.suffix.lower() in extensoes_permitidas
+        and not any(parte.startswith(".") for parte in caminho.relative_to(EXTENSAO_CORBAN_DIR).parts)
+    ]
+    if manifest_path not in arquivos:
+        abort(500, description="O pacote da extensão do Corban está incompleto.")
+
+    memoria = io.BytesIO()
+    with zipfile.ZipFile(memoria, "w", compression=zipfile.ZIP_DEFLATED) as pacote:
+        for caminho in sorted(arquivos):
+            relativo = caminho.relative_to(EXTENSAO_CORBAN_DIR).as_posix()
+            pacote.write(caminho, arcname=f"sistemacorban-importer/{relativo}")
+    memoria.seek(0)
+
+    resposta = send_file(
+        memoria,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"sistemacorban-importer-v{versao}.zip",
+    )
+    resposta.headers["Cache-Control"] = "no-store"
+    return resposta
+
+
 @app.route("/simulador-inss", methods=["GET", "POST"])
 def simulador_inss():
     dados = {
         "nome": "", "cpf": "", "telefone": "", "nb_matricula": "", "banco_digitado": "", "promotora": "",
-        "tipo_operacao": "novo_valor", "prazo": INSS_PRAZO_PADRAO, "faixa_cartao": "ate_74", "valor_base": 0,
-        "margem": 0, "observacoes": "",
+        "modo_simulacao": "novo", "tipo_operacao": "novo_valor", "prazo": INSS_PRAZO_PADRAO,
+        "faixa_cartao": "ate_74", "valor_base": 0, "margem": 0, "banco_atual": "",
+        "numero_contrato": "", "parcela_atual": 0, "saldo_quitacao": 0, "prazo_contrato": 0,
+        "parcelas_pagas": 0, "banco_destino": "QUALI", "tabela_port_refin": "", "novo_prazo": 84, "nova_parcela": 0,
+        "taxa_nova": 0, "coeficiente_port_refin": 0, "observacoes": "",
     }
     resultado = None
     if request.method == "POST":
@@ -2899,13 +3088,17 @@ def simulador_inss():
         "simulador_inss.html",
         dados=dados,
         resultado=resultado,
-        prazos=prazos
+        prazos=prazos,
+        tabelas_port_refin=INSS_PORT_REFIN_TABELAS,
     )
 
 
 @app.route("/simulador-inss/criar-proposta", methods=["POST"])
 def simulador_inss_criar_proposta():
     dados_sim = dados_simulador_inss()
+    if dados_sim.get("modo_simulacao") == "port_refin":
+        flash("Por enquanto, a portabilidade com refinanciamento fica somente na simulação.", "aviso")
+        return redirect(url_for("simulador_inss"))
     resultado = calcular_simulador_inss(dados_sim)
     if not dados_sim["nome"]:
         flash("Informe o nome do cliente antes de criar a proposta.", "erro")
@@ -4799,10 +4992,8 @@ def excluir_proposta(proposta_id: int):
 def renderizar_funil(status_visiveis: list[str], titulo: str, subtitulo: str, modulo: str):
     if not status_visiveis:
         status_visiveis = status_ativos()
-    placeholders = ",".join("?" for _ in status_visiveis)
     propostas = get_db().execute(
-        f"SELECT * FROM propostas WHERE status IN ({placeholders}) ORDER BY data_retorno ASC, id DESC",
-        status_visiveis,
+        "SELECT * FROM propostas ORDER BY data_retorno ASC, id DESC",
     ).fetchall()
     por_status, totais_status = agrupar_cards_funil(propostas, status_visiveis)
     return render_template(

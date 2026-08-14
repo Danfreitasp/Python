@@ -1,4 +1,26 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    if (sidebarToggle) {
+        const atualizarSidebar = (recolhida) => {
+            document.documentElement.classList.toggle('sidebar-collapsed', recolhida);
+            sidebarToggle.setAttribute('aria-expanded', String(!recolhida));
+            sidebarToggle.setAttribute('aria-label', recolhida ? 'Expandir menu' : 'Minimizar menu');
+            sidebarToggle.title = recolhida ? 'Expandir menu' : 'Minimizar menu';
+            const texto = sidebarToggle.querySelector('span');
+            if (texto) texto.textContent = recolhida ? 'Expandir menu' : 'Minimizar menu';
+        };
+        atualizarSidebar(document.documentElement.classList.contains('sidebar-collapsed'));
+        sidebarToggle.addEventListener('click', () => {
+            const recolhida = !document.documentElement.classList.contains('sidebar-collapsed');
+            atualizarSidebar(recolhida);
+            try {
+                localStorage.setItem('crmSidebarRecolhida', String(recolhida));
+            } catch (error) {
+                // A alternância continua funcionando durante a sessão atual.
+            }
+        });
+    }
+
     const propostaFormGrid = document.getElementById('propostaFormGrid');
     if (propostaFormGrid) {
         const labels = Array.from(propostaFormGrid.children).filter((item) => item.tagName === 'LABEL');
@@ -1927,6 +1949,113 @@ document.addEventListener('DOMContentLoaded', () => {
     try { localStorage.removeItem('crmSimuladorInssPrazos'); } catch (e) {}
     atualizarOpcoesPrazo(prazo ? prazo.value : null);
     calcular(tipo && tipo.value === 'novo_margem' ? margem : valorBase);
+
+    const modeInputs = Array.from(form.querySelectorAll('input[name="modo_simulacao"]'));
+    const modePanels = Array.from(form.querySelectorAll('[data-simulator-panel]'));
+    const portFields = {
+        tabela: document.getElementById('portTabela'),
+        parcelaAtual: document.getElementById('portParcelaAtual'),
+        saldo: document.getElementById('portSaldoQuitacao'),
+        novoPrazo: document.getElementById('portNovoPrazo'),
+        novaParcela: document.getElementById('portNovaParcela'),
+        taxa: document.getElementById('portTaxaNova'),
+        coeficiente: document.getElementById('portCoeficiente'),
+    };
+    const portOutputs = {
+        valorContrato: document.getElementById('portValorContrato'),
+        troco: document.getElementById('portTroco'),
+        coeficiente: document.getElementById('portCoeficienteUsado'),
+        origem: document.getElementById('portOrigemCoeficiente'),
+        viabilidade: document.getElementById('portViabilidade'),
+    };
+
+    function modoAtual() {
+        return modeInputs.find((input) => input.checked)?.value || 'novo';
+    }
+
+    function calcularPortRefin() {
+        const parcelaAtual = parseBR(portFields.parcelaAtual?.value);
+        const saldo = parseBR(portFields.saldo?.value);
+        const prazoNovo = Math.max(0, Number(portFields.novoPrazo?.value || 0));
+        const novaParcelaInformada = parseBR(portFields.novaParcela?.value);
+        const novaParcela = novaParcelaInformada || parcelaAtual;
+        const taxaMensal = parseCoeficiente(portFields.taxa?.value);
+        const coeficienteInformado = parseCoeficiente(portFields.coeficiente?.value);
+        const fatorSaldo = Number(portFields.tabela?.selectedOptions?.[0]?.dataset.fatorSaldo || 1);
+        let coeficiente = coeficienteInformado;
+        let origem = portFields.tabela?.value ? `Tabela Quali ${portFields.tabela.value}` : 'Coeficiente informado';
+
+        if (!coeficiente && taxaMensal > 0 && prazoNovo > 0) {
+            const taxa = taxaMensal / 100;
+            coeficiente = taxa / (1 - Math.pow(1 + taxa, -prazoNovo));
+            origem = 'Calculado pela taxa mensal';
+        }
+
+        const valorContrato = coeficiente > 0 && coeficiente <= 1 ? novaParcela / coeficiente : 0;
+        const saldoConsiderado = saldo * fatorSaldo;
+        const troco = valorContrato - saldoConsiderado;
+        const erros = [];
+        if (parcelaAtual <= 0) erros.push('Informe a parcela atual.');
+        if (saldo <= 0) erros.push('Informe o saldo para quitação.');
+        if (prazoNovo <= 0) erros.push('Informe o novo prazo.');
+        if (coeficiente <= 0) erros.push('Informe a taxa ou o coeficiente.');
+        if (coeficiente > 1) erros.push('O coeficiente precisa ser menor ou igual a 1.');
+
+        if (portOutputs.valorContrato) portOutputs.valorContrato.textContent = brl(valorContrato);
+        if (portOutputs.troco) portOutputs.troco.textContent = brl(troco);
+        if (portOutputs.coeficiente) portOutputs.coeficiente.textContent = coeficiente ? coeficiente.toFixed(8) : '-';
+        if (portOutputs.origem) portOutputs.origem.textContent = coeficiente ? origem : 'Informe taxa ou coeficiente';
+
+        let aviso = erros.join(' ');
+        let estado = 'attention';
+        if (!erros.length && troco >= 0) {
+            aviso = 'Operação com troco positivo.';
+            estado = 'ok';
+        } else if (!erros.length) {
+            aviso = 'O novo contrato não cobre o saldo para quitação.';
+        }
+        if (portOutputs.viabilidade) {
+            portOutputs.viabilidade.dataset.state = estado;
+            const texto = portOutputs.viabilidade.querySelector('span');
+            if (texto) texto.textContent = aviso;
+        }
+
+        const mensagem = 'Simulação INSS - Portabilidade com Refinanciamento\n\n' +
+            `Saldo para quitação: ${brl(saldo)}\n` +
+            `Novo contrato: ${brl(valorContrato)}\n` +
+            `Troco estimado: ${brl(troco)}\n` +
+            `Nova parcela: ${brl(novaParcela)} em ${prazoNovo}x\n\n` +
+            'Valores sujeitos à confirmação da tabela e do banco.';
+        atualizarResumo(mensagem);
+    }
+
+    function aplicarTabelaPortRefin() {
+        const option = portFields.tabela?.selectedOptions?.[0];
+        if (!option?.value) {
+            calcularPortRefin();
+            return;
+        }
+        if (portFields.taxa) portFields.taxa.value = String(option.dataset.taxa || '').replace('.', ',');
+        if (portFields.novoPrazo) portFields.novoPrazo.value = option.dataset.prazo || '';
+        if (portFields.coeficiente) portFields.coeficiente.value = option.dataset.coeficiente || '';
+        calcularPortRefin();
+    }
+
+    function atualizarModo() {
+        const atual = modoAtual();
+        modePanels.forEach((panel) => { panel.hidden = panel.dataset.simulatorPanel !== atual; });
+        if (atual === 'port_refin') calcularPortRefin();
+        else calcular(tipo && tipo.value === 'novo_margem' ? margem : valorBase);
+    }
+
+    modeInputs.forEach((input) => input.addEventListener('change', atualizarModo));
+    if (portFields.tabela) portFields.tabela.addEventListener('change', aplicarTabelaPortRefin);
+    Object.values(portFields).forEach((field) => {
+        if (!field) return;
+        field.addEventListener('input', calcularPortRefin);
+        field.addEventListener('change', calcularPortRefin);
+    });
+    atualizarModo();
 });
 
 // v42 - Seleção de modelos de mensagem na aba Mensagens.

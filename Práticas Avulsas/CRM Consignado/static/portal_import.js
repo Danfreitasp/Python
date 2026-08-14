@@ -2,8 +2,13 @@
     'use strict';
 
     const formGrid = document.getElementById('propostaFormGrid');
+    const simulatorForm = document.getElementById('simuladorInssForm');
     const status = document.getElementById('portalImportStatus');
-    if (!formGrid || !status) return;
+    if ((!formGrid && !simulatorForm) || !status) return;
+
+    const contractPicker = document.getElementById('portalContractPicker');
+    const contractSelect = document.getElementById('portalContractSelect');
+    let importedData = {};
 
     let aguardando = false;
 
@@ -16,6 +21,69 @@
     window.crmImportacaoPortal = {
         estaAguardando: () => aguardando,
     };
+
+    function setField(name, value, highlighted = []) {
+        if (value === undefined || value === null || String(value).trim() === '') return;
+        const field = document.querySelector(`[name="${name}"]`);
+        if (!field) return;
+        field.value = String(value);
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+        field.classList.add('portal-import-highlight');
+        highlighted.push(field);
+    }
+
+    function parseMoney(value) {
+        let text = String(value ?? '').replace(/R\$/gi, '').replace(/\s+/g, '').trim();
+        const negative = text.startsWith('-') || /^\(.*\)$/.test(text);
+        text = text.replace(/[()\-+]/g, '');
+        const number = Number(text.replace(/\./g, '').replace(',', '.')) || 0;
+        return negative ? -number : number;
+    }
+
+    function formatMoneyInput(value) {
+        return Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function applyContract(contract) {
+        if (!contract) return;
+        const highlighted = [];
+        document.querySelector('input[name="modo_simulacao"][value="port_refin"]')?.click();
+        setField('nome', importedData.nome, highlighted);
+        setField('cpf', importedData.cpf, highlighted);
+        setField('nb_matricula', importedData.nb, highlighted);
+        setField('banco_atual', contract.banco, highlighted);
+        setField('numero_contrato', contract.numero, highlighted);
+        setField('parcela_atual', contract.parcela, highlighted);
+        setField('saldo_quitacao', contract.saldo_devedor, highlighted);
+        setField('prazo_contrato', contract.prazo_total, highlighted);
+        setField('parcelas_pagas', contract.parcelas_pagas, highlighted);
+        setField('banco_destino', 'QUALI', highlighted);
+        const margin = parseMoney(importedData.margem_disponivel);
+        if (margin < 0) {
+            const adjustedInstallment = Math.max(0, parseMoney(contract.parcela) + margin);
+            setField('nova_parcela', formatMoneyInput(adjustedInstallment), highlighted);
+        } else {
+            const newInstallment = document.querySelector('[name="nova_parcela"]');
+            if (newInstallment) {
+                newInstallment.value = '';
+                newInstallment.dispatchEvent(new Event('input', { bubbles: true }));
+                newInstallment.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }
+        const marginMessage = margin < 0
+            ? ` Margem negativa de ${formatMoneyInput(margin)} deduzida da nova parcela.`
+            : ' Margem positiva ou zerada: será usada a parcela atual.';
+        atualizarEstado(true, `Contrato ${contract.numero} selecionado.${marginMessage} Escolha a tabela Quali e revise os valores.`);
+        window.setTimeout(() => highlighted.forEach((field) => field.classList.remove('portal-import-highlight')), 3500);
+    }
+
+    if (contractSelect) {
+        contractSelect.addEventListener('change', () => {
+            const contract = (importedData.contratos || []).find((item) => item.numero === contractSelect.value);
+            applyContract(contract);
+        });
+    }
 
     document.addEventListener('crm:cliente-reaproveitado', (event) => {
         const novaMatricula = Boolean(event.detail?.novaMatricula);
@@ -41,6 +109,25 @@
     window.aplicarDadosConsultaINSS = function (dados = {}) {
         if (!aguardando) {
             return { sucesso: false, motivo: 'Esta tela do CRM não está aguardando importação.' };
+        }
+
+        if (simulatorForm) {
+            importedData = dados;
+            const contracts = Array.isArray(dados.contratos) ? dados.contratos : [];
+            if (!contractPicker || !contractSelect || !contracts.length) {
+                atualizarEstado(true, 'Nenhum contrato bancário foi encontrado no benefício aberto no Corban.');
+                return { sucesso: false, motivo: 'Nenhum contrato bancário encontrado.' };
+            }
+            contractSelect.innerHTML = '<option value="">Selecione um contrato</option>';
+            contracts.forEach((contract) => {
+                const option = document.createElement('option');
+                option.value = contract.numero;
+                option.textContent = `${contract.banco} · Contrato ${contract.numero} · Parcela ${contract.parcela} · Saldo ${contract.saldo_devedor}`;
+                contractSelect.appendChild(option);
+            });
+            contractPicker.hidden = false;
+            atualizarEstado(true, `${contracts.length} contrato(s) importado(s). Escolha qual deseja simular.`);
+            return { sucesso: true, mensagem: 'Contratos enviados ao CRM. Escolha no simulador qual deseja utilizar.', contratosImportados: contracts.length };
         }
 
         const mapa = {

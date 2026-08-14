@@ -27,13 +27,19 @@ async function enviarParaCrm(dados) {
   const candidatas = abas.filter((aba) => {
     try {
       const caminho = new URL(aba.url).pathname.replace(/\/$/, '');
-      return caminho === '/nova' || /^\/cliente\/\d+\/editar$/.test(caminho);
+      return caminho === '/nova' || caminho === '/simulador-inss' || /^\/cliente\/\d+\/editar$/.test(caminho);
     } catch (_) {
       return false;
     }
-  }).sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+  }).sort((a, b) => {
+    const caminhoA = new URL(a.url).pathname.replace(/\/$/, '');
+    const caminhoB = new URL(b.url).pathname.replace(/\/$/, '');
+    const prioridadeA = Array.isArray(dados?.contratos) && dados.contratos.length && caminhoA === '/simulador-inss' ? 1 : 0;
+    const prioridadeB = Array.isArray(dados?.contratos) && dados.contratos.length && caminhoB === '/simulador-inss' ? 1 : 0;
+    return prioridadeB - prioridadeA || (b.lastAccessed || 0) - (a.lastAccessed || 0);
+  });
   if (!candidatas.length) {
-    return { sucesso: false, mensagem: 'Abra a Nova Proposta ou a edição de um cliente no CRM configurado.' };
+    return { sucesso: false, mensagem: 'Abra o Simulador INSS, a Nova Proposta ou a edição de um cliente no CRM configurado.' };
   }
 
   for (const aba of candidatas) {
@@ -53,10 +59,10 @@ async function enviarParaCrm(dados) {
     });
     const retorno = resultados?.[0]?.result;
     if (retorno?.sucesso) {
-      return { sucesso: true, mensagem: 'Dados enviados ao CRM. Revise os dados antes de salvar.' };
+      return { sucesso: true, mensagem: retorno.mensagem || 'Dados enviados ao CRM. Revise os dados antes de salvar.' };
     }
   }
-  return { sucesso: false, mensagem: 'Deixe a Nova Proposta ou a edição do cliente aberta e aguardando a importação.' };
+  return { sucesso: false, mensagem: 'Deixe o Simulador INSS, a Nova Proposta ou a edição do cliente aberta e aguardando a importação.' };
 }
 
 chrome.runtime.onMessage.addListener((mensagem, sender, responder) => {

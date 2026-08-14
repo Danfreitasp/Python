@@ -84,8 +84,7 @@ body::after {
 .brand-mark,
 .brand-icon {
     border-radius: 17px;
-    background: linear-gradient(145deg, #3b82f6, #1d4ed8);
-    color: #ffffff;
+    background: transparent;
     box-shadow: 0 12px 28px rgba(37, 99, 235, .24);
     transition: transform .42s cubic-bezier(.16, 1, .3, 1), border-radius .42s cubic-bezier(.16, 1, .3, 1);
 }
@@ -501,8 +500,7 @@ html[data-theme="escuro"] .topbar {
 
 html[data-theme="escuro"] .brand-mark,
 html[data-theme="escuro"] .brand-icon {
-    color: #ffffff;
-    background: linear-gradient(145deg, #60a5fa, #2563eb);
+    background: transparent;
 }
 
 html[data-theme="escuro"] .brand p { color: #f4f5f6; }
@@ -512,6 +510,18 @@ html[data-theme="escuro"] .nav-link.active {
     color: #ffffff;
     border-color: #60a5fa;
     background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+html[data-theme="escuro"] .sidebar-toggle {
+    color: #c7d4e5;
+    border-color: rgba(255, 255, 255, .12);
+    background: rgba(35, 48, 67, .7);
+}
+
+html[data-theme="escuro"] .sidebar-toggle:hover {
+    color: #ffffff;
+    border-color: rgba(96, 165, 250, .36);
+    background: rgba(48, 65, 89, .9);
 }
 
 html[data-theme="escuro"] .btn,
@@ -636,6 +646,24 @@ html[data-theme="escuro"] .kanban[data-modulo="funil"] .kanban-card::before {
 html[data-theme="escuro"] .card-values span {
     border-color: rgba(255, 255, 255, .08);
     background: rgba(255, 255, 255, .045);
+}
+
+html[data-theme="escuro"] .kanban[data-modulo="funil"] .port-refin-values {
+    border-color: rgba(147, 197, 253, .18);
+    background: rgba(10, 31, 58, .78);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045);
+}
+
+html[data-theme="escuro"] .kanban[data-modulo="funil"] .card-values.port-refin-values span + span {
+    border-left-color: rgba(147, 197, 253, .16);
+}
+
+html[data-theme="escuro"] .kanban[data-modulo="funil"] .port-refin-values small {
+    color: #9fb4cc;
+}
+
+html[data-theme="escuro"] .kanban[data-modulo="funil"] .port-refin-values strong {
+    color: #f4f8ff;
 }
 
 @media (max-width: 980px) {
