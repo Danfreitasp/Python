@@ -4,7 +4,10 @@
 {% block content %}
 <section class="card proposal-entry-card">
     {% include '_portal_import_panel.html' %}
-    <form method="post" enctype="multipart/form-data" class="stack proposal-entry-form">
+    <form method="post" action="{{ url_for('nova_proposta') }}" enctype="multipart/form-data" class="stack proposal-entry-form">
+        {% if origem_simulador %}
+        <p class="simulator-parameter-note"><i class="bi bi-info-circle" aria-hidden="true"></i>Dados trazidos do Simulador INSS. Revise a operação, informe as comissões e anexe os documentos antes de salvar.</p>
+        {% endif %}
         {% set modo_nova = true %}
         {% include '_form.html' %}
 

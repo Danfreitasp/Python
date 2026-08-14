@@ -306,31 +306,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const matriculaSelect = document.getElementById('cliente-matricula-select');
     const clienteAjuda = document.querySelector('.cliente-sugestao-ajuda');
 
-    function setFieldValue(name, value) {
+    function setFieldValue(name, value, preservarPreenchido = false) {
         const field = document.querySelector(`[name="${name}"]`);
         if (field && value !== undefined && value !== null) {
+            if (preservarPreenchido && String(field.value || '').trim()) return;
             field.value = value;
         }
     }
 
-    function preencherDadosCliente(cliente, novaMatricula = false) {
+    function preencherDadosCliente(cliente, novaMatricula = false, preservarMatricula = false, preenchimentoAutomatico = false) {
         if (!cliente) return;
-        setFieldValue('nome', cliente.nome || '');
-        setFieldValue('nascimento', cliente.nascimento || '');
-        setFieldValue('telefone', cliente.telefone || '');
-        setFieldValue('especie', cliente.especie || '');
-        setFieldValue('tipo_cliente', cliente.tipo_cliente || '');
-        setFieldValue('endereco', cliente.endereco || '');
-        setFieldValue('dados_bancarios', cliente.dados_bancarios || '');
+        setFieldValue('nome', cliente.nome || '', preenchimentoAutomatico);
+        setFieldValue('nascimento', cliente.nascimento || '', preenchimentoAutomatico);
+        // Nunca substitui um telefone que já foi digitado nesta proposta.
+        setFieldValue('telefone', cliente.telefone || '', true);
+        if (!novaMatricula) setFieldValue('especie', cliente.especie || '', preenchimentoAutomatico);
+        setFieldValue('tipo_cliente', cliente.tipo_cliente || '', preenchimentoAutomatico);
+        setFieldValue('endereco', cliente.endereco || '', preenchimentoAutomatico);
+        setFieldValue('dados_bancarios', cliente.dados_bancarios || '', preenchimentoAutomatico);
         if (!novaMatricula) {
             setFieldValue('nb_matricula', cliente.nb_matricula || '');
             setFieldValue('beneficio_bloqueado', cliente.beneficio_bloqueado || 'NÃO');
-        } else if (matriculaField) {
+        } else if (matriculaField && !preservarMatricula) {
             matriculaField.value = '';
             matriculaField.focus();
         }
         document.dispatchEvent(new CustomEvent('crm:cliente-reaproveitado', {
-            detail: { cliente, novaMatricula },
+            detail: { cliente, novaMatricula, matriculaPreservada: preservarMatricula },
         }));
     }
 
@@ -345,6 +347,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 (cliente) => normalizarMatricula(cliente.nb_matricula) === matriculaInformada,
             );
             if (correspondencia) return correspondencia;
+            // Um NB informado que não existe é uma nova matrícula. Nunca o
+            // substitui automaticamente pelo único benefício antigo do CPF.
+            return null;
         }
         return clientes.length === 1 ? clientes[0] : null;
     }
@@ -404,8 +409,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (cliente) {
                 const index = clientesCPFCache.indexOf(cliente);
                 matriculaSelect.value = String(index);
-                preencherDadosCliente(cliente, false);
+                preencherDadosCliente(cliente, false, false, true);
                 if (clienteAjuda) clienteAjuda.textContent = 'Cliente encontrado · cadastro reaproveitado automaticamente.';
+            } else if (normalizarMatricula(matriculaField?.value)) {
+                // Reaproveita somente dados compartilhados, mantendo o novo NB e
+                // os dados do benefício/proposta que já chegaram da importação.
+                matriculaSelect.value = 'nova';
+                preencherDadosCliente(clientesCPFCache[0], true, true, true);
+                if (clienteAjuda) clienteAjuda.textContent = 'Cliente encontrado · nova matrícula mantida.';
             } else {
                 if (clienteAjuda) clienteAjuda.textContent = 'Cliente encontrado · selecione a matrícula para reaproveitar o cadastro.';
                 document.dispatchEvent(new CustomEvent('crm:clientes-localizados', {
@@ -429,7 +440,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const value = matriculaSelect.value;
             if (value === 'nova') {
                 const base = clientesCPFCache[0];
-                preencherDadosCliente(base, true);
+                const manterMatricula = Boolean(normalizarMatricula(matriculaField?.value))
+                    && !clientesCPFCache.some(
+                        (cliente) => normalizarMatricula(cliente.nb_matricula) === normalizarMatricula(matriculaField.value),
+                    );
+                preencherDadosCliente(base, true, manterMatricula, false);
                 if (clienteAjuda) clienteAjuda.textContent = 'Cliente encontrado · nova matrícula';
                 return;
             }
@@ -1790,6 +1805,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     }
 
+    function valorBR(value) {
+        return Number(value || 0).toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    }
+
     function parseCoeficiente(value) {
         return Number(String(value || '').trim().replace(',', '.')) || 0;
     }
@@ -1967,6 +1989,7 @@ document.addEventListener('DOMContentLoaded', () => {
         coeficiente: document.getElementById('portCoeficienteUsado'),
         origem: document.getElementById('portOrigemCoeficiente'),
         viabilidade: document.getElementById('portViabilidade'),
+        inserirProposta: document.getElementById('portInserirProposta'),
     };
 
     function modoAtual() {
@@ -2019,13 +2042,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const texto = portOutputs.viabilidade.querySelector('span');
             if (texto) texto.textContent = aviso;
         }
+        if (portOutputs.inserirProposta) {
+            portOutputs.inserirProposta.hidden = modoAtual() !== 'port_refin' || Boolean(erros.length) || troco < 0;
+        }
 
-        const mensagem = 'Simulação INSS - Portabilidade com Refinanciamento\n\n' +
-            `Saldo para quitação: ${brl(saldo)}\n` +
-            `Novo contrato: ${brl(valorContrato)}\n` +
-            `Troco estimado: ${brl(troco)}\n` +
-            `Nova parcela: ${brl(novaParcela)} em ${prazoNovo}x\n\n` +
-            'Valores sujeitos à confirmação da tabela e do banco.';
+        const bancoAtual = form.elements.namedItem('banco_atual')?.value.trim() || 'não informado';
+        const saudacao = new Date().getHours() < 12 ? 'Bom dia' : 'Boa tarde';
+        const mensagem = `${saudacao}! Meu nome é Poliana e falo da Facilita Brasil.\n\n` +
+            `Conseguimos fazer a portabilidade dos seus contratos: ${bancoAtual}\n\n` +
+            `Além disso, a parcela será reduzida: ${valorBR(parcelaAtual)} para ${valorBR(novaParcela)}\n\n` +
+            `Troco disponível: ${valorBR(troco)}\n\n` +
+            '*Atenção, esse processo NÃO é um empréstimo novo, estamos reduzindo a parcela que você já paga.*\n\n' +
+            'Essa oferta é interessante para você hoje?\n\n' +
+            'https://www.facilitabrasiloficial.com.br';
         atualizarResumo(mensagem);
     }
 
@@ -2045,7 +2074,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const atual = modoAtual();
         modePanels.forEach((panel) => { panel.hidden = panel.dataset.simulatorPanel !== atual; });
         if (atual === 'port_refin') calcularPortRefin();
-        else calcular(tipo && tipo.value === 'novo_margem' ? margem : valorBase);
+        else {
+            if (portOutputs.inserirProposta) portOutputs.inserirProposta.hidden = true;
+            calcular(tipo && tipo.value === 'novo_margem' ? margem : valorBase);
+        }
     }
 
     modeInputs.forEach((input) => input.addEventListener('change', atualizarModo));

@@ -51,7 +51,11 @@
         document.querySelector('input[name="modo_simulacao"][value="port_refin"]')?.click();
         setField('nome', importedData.nome, highlighted);
         setField('cpf', importedData.cpf, highlighted);
+        setField('nascimento', importedData.nascimento, highlighted);
         setField('nb_matricula', importedData.nb, highlighted);
+        setField('especie', importedData.especie, highlighted);
+        setField('endereco', importedData.endereco, highlighted);
+        setField('dados_bancarios', importedData.dados_bancarios, highlighted);
         setField('banco_atual', contract.banco, highlighted);
         setField('numero_contrato', contract.numero, highlighted);
         setField('parcela_atual', contract.parcela, highlighted);

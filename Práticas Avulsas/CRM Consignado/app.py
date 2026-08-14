@@ -1977,6 +1977,10 @@ def reaproveitar_cadastro_cliente(dados: dict[str, Any]) -> dict[str, Any]:
         "nome", "cpf", "nascimento", "nb_matricula", "especie", "telefone",
         "tipo_cliente", "endereco", "dados_bancarios",
     ):
+        # O telefone informado nesta nova proposta é mais recente que o cadastro
+        # reaproveitado. O cadastro antigo entra somente quando o campo está vazio.
+        if campo == "telefone" and limpar_texto(resultado.get("telefone")):
+            continue
         valor_cadastrado = cliente[campo]
         if limpar_texto(valor_cadastrado):
             resultado[campo] = valor_cadastrado
@@ -2830,8 +2834,12 @@ def dados_simulador_inss() -> dict[str, Any]:
     return {
         "nome": limpar_texto(request.form.get("nome")),
         "cpf": formatar_cpf(limpar_texto(request.form.get("cpf"))),
+        "nascimento": limpar_texto(request.form.get("nascimento")),
         "telefone": limpar_texto(request.form.get("telefone")),
         "nb_matricula": limpar_texto(request.form.get("nb_matricula")),
+        "especie": limpar_texto(request.form.get("especie")),
+        "endereco": limpar_texto(request.form.get("endereco")),
+        "dados_bancarios": limpar_texto(request.form.get("dados_bancarios")),
         "banco_digitado": limpar_texto(request.form.get("banco_digitado")),
         "promotora": limpar_texto(request.form.get("promotora")),
         "modo_simulacao": modo_simulacao,
@@ -2972,25 +2980,18 @@ def calcular_simulador_port_refin(dados: dict[str, Any]) -> dict[str, Any]:
 
 def montar_mensagem_simulador_port_refin(dados: dict[str, Any], resultado: dict[str, Any]) -> str:
     banco_atual = dados.get("banco_atual") or "não informado"
-    banco_destino = dados.get("banco_destino") or "não informado"
-    contrato = dados.get("numero_contrato") or "não informado"
-    situacao = "Operação viável" if resultado["operacao_viavel"] else "Revisar os dados da operação"
-    tabela_linha = (
-        f"Tabela Quali: {resultado['tabela_codigo']} - {resultado['tabela_nome']}\n"
-        if resultado.get("tabela_codigo") else ""
-    )
+    saudacao = "Bom dia" if datetime.now().hour < 12 else "Boa tarde"
+    parcela_atual = br_moeda(resultado["parcela_atual"]).replace("R$ ", "", 1)
+    nova_parcela = br_moeda(resultado["nova_parcela"]).replace("R$ ", "", 1)
+    troco = br_moeda(resultado["troco"]).replace("R$ ", "", 1)
     return (
-        "Simulação INSS - Portabilidade com Refinanciamento\n\n"
-        f"Banco atual: {banco_atual}\n"
-        f"Contrato: {contrato}\n"
-        f"Banco destino: {banco_destino}\n"
-        f"{tabela_linha}"
-        f"Saldo para quitação: {br_moeda(resultado['saldo_quitacao'])}\n"
-        f"Novo contrato: {br_moeda(resultado['valor_contrato'])}\n"
-        f"Troco estimado: {br_moeda(resultado['troco'])}\n"
-        f"Nova parcela: {br_moeda(resultado['nova_parcela'])} em {resultado['novo_prazo']}x\n"
-        "\n"
-        f"{situacao}. Valores sujeitos à confirmação da tabela e do banco."
+        f"{saudacao}! Meu nome é Poliana e falo da Facilita Brasil.\n\n"
+        f"Conseguimos fazer a portabilidade dos seus contratos: {banco_atual}\n\n"
+        f"Além disso, a parcela será reduzida: {parcela_atual} para {nova_parcela}\n\n"
+        f"Troco disponível: {troco}\n\n"
+        "*Atenção, esse processo NÃO é um empréstimo novo, estamos reduzindo a parcela que você já paga.*\n\n"
+        "Essa oferta é interessante para você hoje?\n\n"
+        "https://www.facilitabrasiloficial.com.br"
     )
 
 
@@ -3072,7 +3073,8 @@ def baixar_extensao_corban():
 @app.route("/simulador-inss", methods=["GET", "POST"])
 def simulador_inss():
     dados = {
-        "nome": "", "cpf": "", "telefone": "", "nb_matricula": "", "banco_digitado": "", "promotora": "",
+        "nome": "", "cpf": "", "nascimento": "", "telefone": "", "nb_matricula": "", "especie": "",
+        "endereco": "", "dados_bancarios": "", "banco_digitado": "", "promotora": "",
         "modo_simulacao": "novo", "tipo_operacao": "novo_valor", "prazo": INSS_PRAZO_PADRAO,
         "faixa_cartao": "ate_74", "valor_base": 0, "margem": 0, "banco_atual": "",
         "numero_contrato": "", "parcela_atual": 0, "saldo_quitacao": 0, "prazo_contrato": 0,
@@ -3097,8 +3099,61 @@ def simulador_inss():
 def simulador_inss_criar_proposta():
     dados_sim = dados_simulador_inss()
     if dados_sim.get("modo_simulacao") == "port_refin":
-        flash("Por enquanto, a portabilidade com refinanciamento fica somente na simulação.", "aviso")
-        return redirect(url_for("simulador_inss"))
+        resultado = calcular_simulador_port_refin(dados_sim)
+        if resultado["erros"] or not resultado["operacao_viavel"]:
+            flash("Revise os dados da simulação antes de inserir a proposta.", "erro")
+            return render_template(
+                "simulador_inss.html",
+                dados=dados_sim,
+                resultado=resultado,
+                prazos=prazos_simulador_inss(),
+                tabelas_port_refin=INSS_PORT_REFIN_TABELAS,
+            )
+
+        tabela = resultado.get("tabela_nome") or "Cálculo livre"
+        observacoes = [
+            "Dados preparados pelo Simulador INSS - Portabilidade com Refinanciamento.",
+            f"Contrato portado: {dados_sim['numero_contrato'] or 'não informado'}.",
+            f"Saldo devedor informado: {br_moeda(resultado['saldo_quitacao'])}.",
+            f"Prazo original: {dados_sim['prazo_contrato'] or 'não informado'}; parcelas pagas: {dados_sim['parcelas_pagas'] or 'não informado'}.",
+            f"Tabela: {resultado.get('tabela_codigo') or 'livre'} - {tabela}.",
+            f"Novo contrato estimado: {br_moeda(resultado['valor_contrato'])}; troco estimado: {br_moeda(resultado['troco'])}.",
+            f"Coeficiente usado: {resultado['coeficiente']:.8f} ({resultado['origem_coeficiente']}).",
+        ]
+        if dados_sim["observacoes"]:
+            observacoes.append(dados_sim["observacoes"])
+
+        proposta = proposta_vazia()
+        proposta.update(
+            {
+                "nome": dados_sim["nome"],
+                "cpf": dados_sim["cpf"],
+                "nascimento": dados_sim["nascimento"],
+                "nb_matricula": dados_sim["nb_matricula"],
+                "especie": dados_sim["especie"],
+                "tipo_cliente": "INSS",
+                "banco_atual": dados_sim["banco_atual"],
+                "banco_digitado": dados_sim["banco_destino"] or "QUALI",
+                "produto": "Portabilidade com Refinanciamento",
+                "promotora": dados_sim["promotora"],
+                "beneficio_bloqueado": beneficio_bloqueado_global(dados_sim["nb_matricula"]),
+                "parcela_atual": dados_sim["parcela_atual"],
+                "nova_parcela": resultado["nova_parcela"],
+                "troco": resultado["saldo_quitacao"],
+                "comissao_percentual": 0,
+                "comissao": 0,
+                "refin_troco": resultado["troco"],
+                "refin_comissao_percentual": 0,
+                "refin_comissao": 0,
+                "telefone": dados_sim["telefone"],
+                "endereco": dados_sim["endereco"],
+                "dados_bancarios": dados_sim["dados_bancarios"],
+                "observacoes": "\n".join(observacoes),
+            }
+        )
+        proposta = reaproveitar_cadastro_cliente(proposta)
+        return render_template("nova_proposta.html", proposta=proposta, origem_simulador=True)
+
     resultado = calcular_simulador_inss(dados_sim)
     if not dados_sim["nome"]:
         flash("Informe o nome do cliente antes de criar a proposta.", "erro")
