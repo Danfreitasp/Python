@@ -35,3 +35,6 @@ instance/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Projetos mantidos em repositórios próprios
+/CRM Consignado/
